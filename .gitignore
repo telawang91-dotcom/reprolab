@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.env
+backend/storage/*
+!backend/storage/.gitkeep
+frontend/node_modules/
+frontend/.next/
+*.log
+

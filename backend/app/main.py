@@ -1,0 +1,59 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
+from app.api.documents import router as documents_router
+from app.core.config import settings
+from app.services.rag.embedder import preheat
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    settings.storage_dir.mkdir(parents=True, exist_ok=True)
+    if settings.embedding_preload:
+        preheat()
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(documents_router, prefix=settings.api_prefix)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception(_: Request, exc: HTTPException) -> JSONResponse:
+    message = exc.detail if isinstance(exc.detail, str) else "request failed"
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"code": f"http_{exc.status_code}", "message": message}},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception(_: Request, exc: RequestValidationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={"error": {"code": "validation_error", "message": str(exc)}},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception(_: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={"error": {"code": "internal_error", "message": str(exc)}},
+    )
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
