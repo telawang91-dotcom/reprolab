@@ -22,6 +22,8 @@ class CapturedOutput:
     mime_type: str
     value: Any | None = None
     data: bytes | None = None
+    title: str | None = None
+    tol: float | None = None
 
 
 @dataclass(slots=True)
@@ -52,6 +54,17 @@ def _new_handle() -> KernelHandle:
 
 def _as_artifacts(data: dict[str, Any]) -> list[CapturedOutput]:
     artifacts: list[CapturedOutput] = []
+    if "application/vnd.reprolab.artifact+json" in data:
+        payload = data["application/vnd.reprolab.artifact+json"]
+        return [
+            CapturedOutput(
+                payload["kind"],
+                "application/vnd.reprolab.artifact+json",
+                value=payload.get("value"),
+                title=payload.get("title"),
+                tol=payload.get("tol"),
+            )
+        ]
     if "image/png" in data:
         artifacts.append(CapturedOutput("figure", "image/png", data=base64.b64decode(data["image/png"])))
     if "text/html" in data:
@@ -83,8 +96,14 @@ def _wait_for_idle(handle: KernelHandle, message_id: str, timeout: float = 5) ->
     handle.client.wait_for_ready(timeout=30)
 
 
-def execute(handle: KernelHandle, code: str, seed: int = 42, timeout: float = 30) -> ExecResult:
-    full_code = seed_prefix(seed) + "\n" + code
+def execute(
+    handle: KernelHandle,
+    code: str,
+    seed: int = 42,
+    timeout: float = 30,
+    dataset_paths: list[str] | None = None,
+) -> ExecResult:
+    full_code = seed_prefix(seed, dataset_paths) + "\n" + code
     stdout: list[str] = []
     artifacts: list[CapturedOutput] = []
     status = "success"
@@ -151,11 +170,17 @@ def close_handle(handle: KernelHandle) -> None:
 kernel_registry = KernelRegistry()
 
 
-def execute_code(code: str, seed: int = 42, timeout: float = 30, conversation_id: uuid.UUID | None = None) -> ExecResult:
+def execute_code(
+    code: str,
+    seed: int = 42,
+    timeout: float = 30,
+    conversation_id: uuid.UUID | None = None,
+    dataset_paths: list[str] | None = None,
+) -> ExecResult:
     if conversation_id is not None:
-        return execute(kernel_registry.get_or_create(conversation_id), code, seed, timeout)
+        return execute(kernel_registry.get_or_create(conversation_id), code, seed, timeout, dataset_paths)
     handle = _new_handle()
     try:
-        return execute(handle, code, seed, timeout)
+        return execute(handle, code, seed, timeout, dataset_paths)
     finally:
         close_handle(handle)

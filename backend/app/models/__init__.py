@@ -1,3 +1,3 @@
-from app.models.knowledge import Chunk, Dataset, Document, EnvSnapshot, Project, Run, User
+from app.models.knowledge import Artifact, Chunk, Dataset, Document, Edge, EnvSnapshot, Project, Run, User
 
-__all__ = ["Chunk", "Dataset", "Document", "EnvSnapshot", "Project", "Run", "User"]
+__all__ = ["Artifact", "Chunk", "Dataset", "Document", "Edge", "EnvSnapshot", "Project", "Run", "User"]

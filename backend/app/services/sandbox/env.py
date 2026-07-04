@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.knowledge import EnvSnapshot
-from app.services.sandbox.hashing import environment_hash
+from app.services.lineage.hashing import environment_hash
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,4 +44,3 @@ def get_or_create_snapshot(db: Session, info: EnvironmentInfo) -> EnvSnapshot:
     db.add(snapshot)
     db.flush()
     return snapshot
-

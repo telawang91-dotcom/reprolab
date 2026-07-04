@@ -16,10 +16,12 @@ class RunRequest(BaseModel):
 
 class ArtifactCapture(BaseModel):
     artifact_id: uuid.UUID | None = None
-    kind: Literal["number", "table", "figure", "text"]
+    kind: Literal["number", "coefficient", "table", "figure", "text", "conclusion"]
     mime_type: str
     value: Any | None = None
     storage_hash: str | None = None
+    title: str | None = None
+    tol: float | None = None
 
 
 class RunResponse(BaseModel):
@@ -28,4 +30,3 @@ class RunResponse(BaseModel):
     stdout: str
     artifacts: list[ArtifactCapture]
     code_hash: str
-

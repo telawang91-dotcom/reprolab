@@ -93,3 +93,38 @@ class Run(Base):
     status: Mapped[str] = mapped_column(Text)
     stdout: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Artifact(Base):
+    __tablename__ = "artifacts"
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('number','coefficient','table','figure','conclusion')",
+            name="ck_artifacts_kind",
+        ),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"))
+    run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("runs.id"), index=True)
+    kind: Mapped[str] = mapped_column(Text)
+    title: Mapped[str | None] = mapped_column(Text)
+    value_json: Mapped[dict[str, Any] | list[Any] | float | int | str | None] = mapped_column(JSONB)
+    content_hash: Mapped[str | None] = mapped_column(Text)
+    tol: Mapped[float | None]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Edge(Base):
+    __tablename__ = "edges"
+    __table_args__ = (
+        CheckConstraint(
+            "relation IN ('reads','produces','supports','cites')",
+            name="ck_edges_relation",
+        ),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    from_type: Mapped[str] = mapped_column(Text)
+    from_id: Mapped[uuid.UUID]
+    to_type: Mapped[str] = mapped_column(Text)
+    to_id: Mapped[uuid.UUID]
+    relation: Mapped[str] = mapped_column(Text)

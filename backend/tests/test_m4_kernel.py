@@ -40,3 +40,26 @@ def test_clean_kernel_captures_numeric_and_figure_outputs():
     )
     assert figure.status == "success"
     assert any(item.kind == "figure" and item.data for item in figure.artifacts)
+
+
+def test_dataset_paths_are_real_execution_inputs(tmp_path):
+    dataset = tmp_path / "input.txt"
+    dataset.write_text("original", encoding="utf-8")
+    result = execute_code(
+        "print(open(DATASET_PATHS[0], encoding='utf-8').read())",
+        dataset_paths=[str(dataset)],
+        timeout=15,
+    )
+    assert result.status == "success"
+    assert result.stdout == "original"
+
+
+def test_explicit_coefficient_artifact_is_structured():
+    result = execute_code("emit_artifact('coefficient', 0.083, title='mass effect', tol=1e-5)", timeout=15)
+    assert result.status == "success"
+    assert len(result.artifacts) == 1
+    artifact = result.artifacts[0]
+    assert artifact.kind == "coefficient"
+    assert artifact.value == 0.083
+    assert artifact.title == "mass effect"
+    assert artifact.tol == 1e-5

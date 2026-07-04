@@ -1,4 +1,4 @@
-from app.services.sandbox.hashing import environment_hash, merged_input_hash, trusted_code_hash
+from app.services.lineage.hashing import environment_hash, merged_input_hash, trusted_code_hash
 
 
 def test_hashes_are_order_stable_and_environment_bound():
@@ -14,4 +14,3 @@ def test_hashes_are_order_stable_and_environment_bound():
     assert trusted_code_hash("print(1)", "python", inputs, env_a) != trusted_code_hash(
         "print(1)", "python", inputs, env_b
     )
-
