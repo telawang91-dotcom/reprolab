@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     storage_dir: Path = BACKEND_DIR / "storage"
     embedding_model: str = "BAAI/bge-m3"
     embedding_preload: bool = True
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    llm_base_url: str = "https://api.deepseek.com/v1"
+    llm_api_key: str = ""
+    llm_model: str = "deepseek-chat"
     cors_origins: str = "http://localhost:3000"
 
     @property
@@ -26,4 +30,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

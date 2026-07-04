@@ -1,4 +1,6 @@
 .venv/
+.models/
+.downloads/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -10,4 +12,3 @@ backend/storage/*
 frontend/node_modules/
 frontend/.next/
 *.log
-
