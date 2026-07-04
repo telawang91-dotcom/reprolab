@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.documents import router as documents_router
 from app.api.search import router as search_router
+from app.api.runs import router as runs_router
 from app.core.config import settings
 from app.services.rag.embedder import preheat
 
@@ -29,6 +30,7 @@ app.add_middleware(
 )
 app.include_router(documents_router, prefix=settings.api_prefix)
 app.include_router(search_router, prefix=settings.api_prefix)
+app.include_router(runs_router, prefix=settings.api_prefix)
 
 
 @app.exception_handler(HTTPException)

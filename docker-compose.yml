@@ -15,6 +15,21 @@ services:
       timeout: 5s
       retries: 20
 
+  sandbox:
+    profiles: ["sandbox"]
+    build:
+      context: .
+      dockerfile: docker/sandbox.Dockerfile
+    network_mode: none
+    mem_limit: 512m
+    cpus: 1.0
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    volumes:
+      - ./backend/storage:/data:ro
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   postgres_data:
-
