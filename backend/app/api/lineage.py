@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.schemas.lineage import LineageResponse, ReproduceRequest, ReproduceResponse
+from app.schemas.attribution import AttributeRequest, AttributeResponse
+from app.services.lineage.attribution import attribute_drift
 from app.services.lineage.ledger import get_lineage
 from app.services.lineage.reproduce import reproduce
 from app.models.knowledge import Artifact
@@ -37,4 +39,23 @@ def reproduce_run(run_id: uuid.UUID, request: ReproduceRequest, db: Session = De
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/runs/{run_id}/attribute-drift", response_model=AttributeResponse)
+def attribute_run_drift(
+    run_id: uuid.UUID, request: AttributeRequest, db: Session = Depends(get_db)
+) -> AttributeResponse:
+    try:
+        return attribute_drift(
+            db,
+            run_id,
+            request.dataset_overrides,
+            request.target_artifact_id,
+            request.granularity,
+            request.top_k,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

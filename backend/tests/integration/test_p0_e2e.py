@@ -252,6 +252,45 @@ def test_m4_m5_real_ledger_match_and_drift(client: TestClient, project_id: uuid.
         assert network["status"] == "error"
 
 
+def test_m5b_real_column_attribution_and_match_guard(client: TestClient, project_id: uuid.UUID):
+    original_raw = pd.DataFrame({"group": ["a", "b", "c"], "value": [1.0, 2.0, 3.0]}).to_csv(index=False).encode()
+    modified_raw = pd.DataFrame({"group": ["a", "b", "c"], "value": [0.1, 0.2, 0.3]}).to_csv(index=False).encode()
+    original = upload(client, project_id, "attribution-original.csv", original_raw)
+    modified = upload(client, project_id, "attribution-modified.csv", modified_raw)
+    run = client.post("/api/v1/runs", json={
+        "project_id": str(project_id),
+        "code": (
+            "import pandas as pd\n"
+            "df = pd.read_csv(DATASET_PATHS[0])\n"
+            "emit_artifact('coefficient', float(df['value'].mean()), title='attribution mean', tol=1e-9)"
+        ),
+        "dataset_ids": [original["dataset_id"]], "seed": 42,
+    }).json()
+    with SessionLocal() as db:
+        runs_before = db.scalar(select(func.count(Run.id)).where(Run.project_id == project_id))
+    old_hash, new_hash = hashlib.sha256(original_raw).hexdigest(), hashlib.sha256(modified_raw).hexdigest()
+    response = client.post(f"/api/v1/runs/{run['run_id']}/attribute-drift", json={
+        "dataset_overrides": {old_hash: new_hash},
+        "target_artifact_id": run["artifacts"][0]["artifact_id"],
+        "granularity": "column", "top_k": 5,
+    })
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["drifted"] < result["baseline"]
+    assert result["attributions"] and result["attributions"][0]["dimension"].endswith(":value")
+    assert result["attributions"][0]["contribution"] > 0.95
+    assert result["attributions"][0]["direction"] == "down"
+    assert abs(sum(item["contribution"] for item in result["attributions"]) - 1) <= 0.05
+    with SessionLocal() as db:
+        runs_after = db.scalar(select(func.count(Run.id)).where(Run.project_id == project_id))
+        assert runs_after >= runs_before + 2  # drift replay + persisted ablation replay
+
+    no_drift = client.post(f"/api/v1/runs/{run['run_id']}/attribute-drift", json={
+        "dataset_overrides": {}, "granularity": "column",
+    })
+    assert no_drift.status_code == 200 and no_drift.json()["attributions"] == []
+
+
 def test_m7_real_adversarial_verification(client: TestClient, project_id: uuid.UUID):
     raw = pd.DataFrame({"value": [1.0, 2.0, 3.0]}).to_csv(index=False).encode()
     dataset = upload(client, project_id, "verify-source.csv", raw)

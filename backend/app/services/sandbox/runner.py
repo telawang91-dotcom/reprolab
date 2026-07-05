@@ -74,7 +74,10 @@ def run_code(
     environment = capture_environment()
     snapshot = get_or_create_snapshot(db, environment)
     code_hash = trusted_code_hash(code, lang, input_hash, environment.env_hash)
-    execution = execute_code(code, seed, timeout, conversation_id, dataset_paths)
+    if conversation_id is None:
+        execution = sandbox_run(code, input_hashes, seed, environment, timeout)
+    else:
+        execution = execute_code(code, seed, timeout, conversation_id, dataset_paths)
     captured = [_capture_artifact(item) for item in execution.artifacts]
     artifacts = [item[0] for item in captured]
     output_hashes = [item[1] for item in captured]
@@ -129,7 +132,7 @@ def sandbox_run(
     if expected.env_hash != current.env_hash:
         raise RuntimeError("requested environment snapshot is not available in this sandbox")
     # input_hashes are part of caller-side trust validation; datasets are mounted by the Docker backend.
-    resolved_hashes = sorted(input_hashes or [])
+    resolved_hashes = list(input_hashes or [])
     merged_input_hash(resolved_hashes)
     for item in resolved_hashes:
         path_of(item)

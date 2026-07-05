@@ -18,6 +18,7 @@ export type ReproduceResult = {
   comparisons: { artifact_id: string; kind: string; old: unknown; new: unknown; within_tol: boolean; diff?: unknown }[];
   new_run_id: string;
 };
+export type AttributionResult = { target_artifact_id: string; baseline: unknown; drifted: unknown; attributions: { dimension: string; contribution: number; direction: "up" | "down"; detail: string }[] };
 export type VerifyItem = { check: "citation" | "number" | "figure"; target_anchor: string | null; verdict: "pass" | "fail"; severity: "warn" | "error"; reason: string; locate: string };
 export type VerifyResult = { verdict: "pass" | "fail"; items: VerifyItem[]; claim_status?: "verified" | "flagged" | null };
 export type MemoryItem = { id: string; layer: "episodic" | "semantic" | "skill"; content: string; tags: string[]; importance: number; written_at: string };
@@ -52,6 +53,10 @@ export const api = {
   reproduce: (runId: string, datasetOverrides: Record<string, string> = {}) => request<ReproduceResult>(`/runs/${runId}/reproduce`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dataset_overrides: datasetOverrides })
+  }),
+  attributeDrift: (runId: string, datasetOverrides: Record<string, string>, targetArtifactId?: string) => request<AttributionResult>(`/runs/${runId}/attribute-drift`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dataset_overrides: datasetOverrides, target_artifact_id: targetArtifactId, granularity: "column", top_k: 5 })
   }),
   verify: (text: string, checks: ("citation" | "number" | "figure")[] = ["citation", "number", "figure"]) => request<VerifyResult>("/verify", {
     method: "POST", headers: { "Content-Type": "application/json" },
