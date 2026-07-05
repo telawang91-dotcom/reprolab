@@ -31,6 +31,7 @@ from app.models.knowledge import (
     Project,
     Run,
 )
+from app.models.suggestions import Suggestion
 
 
 @pytest.fixture(scope="module")
@@ -55,6 +56,7 @@ def project_id():
         db.execute(delete(Conversation).where(Conversation.project_id == value))
         db.execute(delete(Claim).where(Claim.project_id == value))
         db.execute(delete(Memory).where(Memory.project_id == value))
+        db.execute(delete(Suggestion).where(Suggestion.project_id == value))
         db.execute(delete(Chunk).where(Chunk.document_id.in_(document_ids)))
         db.execute(delete(Document).where(Document.project_id == value))
         db.execute(delete(Dataset).where(Dataset.project_id == value))
@@ -403,6 +405,73 @@ def test_m9_real_dedup_recall_decay_and_reflection(client: TestClient, project_i
         written = reflect_conversation(db, conversation_id, adapter=FakeAdapter())
         assert any(item.layer == "episodic" and item.written_at for item in written)
         assert any(item.layer == "semantic" and item.written_at for item in written)
+
+
+def test_m10_real_evidence_whitelist_and_empty_project(client: TestClient, project_id: uuid.UUID):
+    paper = upload(
+        client, project_id, "suggestion-paper.md",
+        ("# Sensitivity study\nRobustness analysis supports the proposed method.\n" * 20).encode(),
+        "paper",
+    )
+    dataset = upload(client, project_id, "suggestion-data.csv", b"value\n1\n2\n3\n")
+    run = client.post("/api/v1/runs", json={
+        "project_id": str(project_id),
+        "code": (
+            "import pandas as pd\n"
+            "df = pd.read_csv(DATASET_PATHS[0])\n"
+            "emit_artifact('number', float(df['value'].mean()), title='suggestion mean', tol=1e-6)"
+        ),
+        "dataset_ids": [dataset["dataset_id"]], "seed": 42,
+    }).json()
+    artifact_id = run["artifacts"][0]["artifact_id"]
+
+    from app.services.suggest.generator import generate_suggestions
+
+    class FakeAdapter:
+        def chat(self, request):
+            from app.services.agents.model_adapter import ModelResponse
+            return ModelResponse(content=json.dumps([{
+                "type": "next_step",
+                "content": "对当前均值做敏感性分析，并与入库研究比较。",
+                "evidence": [
+                    {"kind": "artifact", "id": artifact_id},
+                    {"kind": "document", "id": paper["id"]},
+                ],
+            }], ensure_ascii=False))
+
+    with SessionLocal() as db:
+        generated = generate_suggestions(db, project_id, adapter=FakeAdapter())
+        assert len(generated) == 1
+        assert {item["id"] for item in generated[0].evidence} == {artifact_id, paper["id"]}
+        assert all(item["anchor"].startswith(("⟦art_", "⟦src_")) for item in generated[0].evidence)
+
+    listed = client.get("/api/v1/suggestions", params={"project_id": str(project_id)})
+    assert listed.status_code == 200 and listed.json()
+    assert listed.json()[0]["evidence"]
+    lineage = client.get(f"/api/v1/artifacts/{artifact_id}/lineage")
+    assert lineage.status_code == 200
+    assert {node["type"] for node in lineage.json()["nodes"]}.issuperset({"dataset", "run", "artifact"})
+
+    class HallucinatingAdapter:
+        def chat(self, request):
+            from app.services.agents.model_adapter import ModelResponse
+            return ModelResponse(content=json.dumps([{
+                "type": "hypothesis", "content": "幻觉建议",
+                "evidence": [{"kind": "artifact", "id": str(uuid.uuid4())}],
+            }]))
+
+    with SessionLocal() as db:
+        assert generate_suggestions(db, project_id, adapter=HallucinatingAdapter()) == []
+
+    empty_project = uuid.uuid4()
+    with SessionLocal() as db:
+        db.add(Project(id=empty_project, name="empty suggestions")); db.commit()
+    try:
+        empty = client.post("/api/v1/suggestions/refresh", json={"project_id": str(empty_project)})
+        assert empty.status_code == 200 and empty.json() == {"generated": 0, "items": []}
+    finally:
+        with SessionLocal() as db:
+            db.execute(delete(Project).where(Project.id == empty_project)); db.commit()
 
 
 @pytest.mark.skipif(not settings.llm_api_key, reason="LLM_API_KEY intentionally deferred")

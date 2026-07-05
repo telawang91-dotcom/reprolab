@@ -13,6 +13,7 @@ from app.api.chat import router as chat_router
 from app.api.verify import router as verify_router
 from app.api.conclusions import router as conclusions_router
 from app.api.memory import router as memory_router
+from app.api.suggest import router as suggest_router
 from app.core.config import settings
 from app.services.rag.embedder import preheat
 
@@ -41,6 +42,7 @@ app.include_router(chat_router, prefix=settings.api_prefix)
 app.include_router(verify_router, prefix=settings.api_prefix)
 app.include_router(conclusions_router, prefix=settings.api_prefix)
 app.include_router(memory_router, prefix=settings.api_prefix)
+app.include_router(suggest_router, prefix=settings.api_prefix)
 
 
 @app.exception_handler(HTTPException)

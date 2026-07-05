@@ -18,6 +18,10 @@ export default function KnowledgePage() {
 
   const load = useCallback(async () => { try { setLoading(true); setError(""); setDocuments(await api.documents()); } catch (e) { setError((e as Error).message); } finally { setLoading(false); } }, []);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const documentId = new URLSearchParams(window.location.search).get("document");
+    if (documentId) api.document(documentId).then(setPreview).catch((reason) => setError(reason instanceof Error ? reason.message : "文档加载失败"));
+  }, []);
   const visible = useMemo(() => documents.filter((doc) => !type || doc.type === type), [documents, type]);
 
   async function upload(files: FileList | File[]) {
@@ -54,4 +58,3 @@ export default function KnowledgePage() {
     {preview && <div className="fixed inset-0 z-50 bg-slate-950/25" onMouseDown={() => setPreview(null)}><aside className="absolute bottom-0 right-0 top-0 w-full max-w-lg overflow-y-auto border-l bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-950" onMouseDown={(e) => e.stopPropagation()}><div className="flex items-start gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-brand"><Braces size={20}/></span><div className="min-w-0 flex-1"><h2 className="truncate text-lg font-semibold">{preview.title || preview.filename}</h2><p className="mt-1 text-xs text-slate-400">{preview.filename}</p></div><button onClick={() => setPreview(null)} className="btn-secondary h-8 w-8 px-0" aria-label="关闭"><X size={15}/></button></div><dl className="mt-6 grid grid-cols-2 gap-4 text-sm"><div><dt className="label">类型</dt><dd className="mt-1">{preview.type}</dd></div><div><dt className="label">年份</dt><dd className="mt-1">{preview.year ?? "—"}</dd></div><div className="col-span-2"><dt className="label">SHA-256 内容指纹</dt><dd className="mt-1 break-all font-mono text-xs text-slate-500">{preview.storage_hash}</dd></div><div><dt className="label">文本切块</dt><dd className="mt-1">{preview.chunks_count}</dd></div><div><dt className="label">DOI</dt><dd className="mt-1 truncate">{preview.doi ?? "—"}</dd></div></dl>{preview.schema_json && <div className="mt-6"><div className="flex items-center justify-between"><h3 className="font-semibold">数据结构</h3><span className="text-xs text-slate-400">{preview.schema_json.row_count} 行</span></div><div className="mt-2 overflow-hidden rounded-lg border"><table className="w-full text-left text-xs"><thead className="bg-slate-50 text-slate-500 dark:bg-slate-900"><tr><th className="px-3 py-2">字段</th><th className="px-3 py-2">类型</th></tr></thead><tbody>{preview.schema_json.columns?.map((column) => <tr key={column.name} className="border-t"><td className="px-3 py-2 font-mono">{column.name}</td><td className="px-3 py-2 text-slate-500">{column.dtype}</td></tr>)}</tbody></table></div></div>}<div className="mt-8 flex gap-2"><button onClick={() => void remove(preview.id)} className="btn-secondary text-red-600"><Trash2 size={15}/>删除</button><button className="btn-primary ml-auto"><LocateFixed size={15}/>定位原文</button></div></aside></div>}
   </div>;
 }
-

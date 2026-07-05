@@ -1,10 +1,11 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Brain, Command, FlaskConical, Moon, Network, Search, Settings, Sun, Workflow } from "lucide-react";
+import { BookOpen, Brain, Command, FlaskConical, LayoutDashboard, Moon, Network, Search, Settings, Sun, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const links = [
+  { href: "/", label: "工作台", icon: LayoutDashboard },
   { href: "/knowledge", label: "知识库", icon: BookOpen },
   { href: "/analysis", label: "分析对话", icon: FlaskConical },
   { href: "/lineage", label: "溯源图谱", icon: Network, disabled: true },

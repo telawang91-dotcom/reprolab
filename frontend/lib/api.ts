@@ -21,6 +21,7 @@ export type ReproduceResult = {
 export type VerifyItem = { check: "citation" | "number" | "figure"; target_anchor: string | null; verdict: "pass" | "fail"; severity: "warn" | "error"; reason: string; locate: string };
 export type VerifyResult = { verdict: "pass" | "fail"; items: VerifyItem[]; claim_status?: "verified" | "flagged" | null };
 export type MemoryItem = { id: string; layer: "episodic" | "semantic" | "skill"; content: string; tags: string[]; importance: number; written_at: string };
+export type SuggestionItem = { id: string; type: "hypothesis" | "literature" | "next_step"; content: string; evidence: { kind: "document" | "artifact"; id: string; anchor: string }[] };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...init, cache: "no-store" });
@@ -66,6 +67,11 @@ export const api = {
   createMemory: (layer: MemoryItem["layer"], content: string, tags: string[]) => request<MemoryItem>("/memories", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ project_id: DEMO_PROJECT_ID, layer, content, tags })
+  }),
+  suggestions: () => request<SuggestionItem[]>(`/suggestions?project_id=${DEMO_PROJECT_ID}`),
+  refreshSuggestions: () => request<{ generated: number; items: SuggestionItem[] }>("/suggestions/refresh", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_id: DEMO_PROJECT_ID })
   })
 };
 
