@@ -100,12 +100,11 @@ def _wait_for_idle(handle: KernelHandle, message_id: str, timeout: float = 5) ->
             message = handle.client.get_iopub_msg(timeout=0.25)
         except queue.Empty:
             continue
-        if message.get("parent_header", {}).get("msg_id") != message_id:
-            continue
         if message["header"]["msg_type"] == "status" and message["content"].get("execution_state") == "idle":
             return
     # A kernel that cannot acknowledge an interrupt is unsafe to reuse.
-    handle.manager.restart_kernel(now=True)
+    # Choose new ports so a slow-to-exit process cannot collide with the replacement.
+    handle.manager.restart_kernel(now=True, newports=True)
     handle.client.wait_for_ready(timeout=30)
 
 
