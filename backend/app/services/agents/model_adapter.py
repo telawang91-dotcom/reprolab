@@ -70,10 +70,21 @@ class ModelAdapter:
         last_error: Exception | None = None
         for attempt in range(settings.model_max_retries + 1):
             try:
+                options: dict[str, Any] = {
+                    "temperature": request.get("temperature", settings.llm_temperature),
+                    "max_tokens": request.get("max_tokens", settings.llm_max_tokens),
+                }
+                if "siliconflow.cn" in base_url:
+                    options["extra_body"] = {
+                        "enable_thinking": request.get(
+                            "enable_thinking", settings.siliconflow_enable_thinking
+                        )
+                    }
                 response = client.chat.completions.create(
                     model=model,
                     messages=request["messages"],
                     tools=request.get("tools") or None,
+                    **options,
                 )
                 message = response.choices[0].message
                 calls: list[ToolCall] = []

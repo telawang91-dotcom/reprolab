@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     critic_model: str = "deepseek:deepseek-chat"
     model_max_retries: int = Field(default=2, ge=0, le=5)
     agent_max_steps: int = Field(default=10, ge=1, le=30)
+    llm_temperature: float = Field(default=0.2, ge=0, le=2)
+    llm_max_tokens: int = Field(default=4096, ge=64, le=32768)
+    siliconflow_enable_thinking: bool = False
     nli_support_threshold: float = Field(default=0.6, ge=0, le=1)
     repair_max_iterations: int = Field(default=2, ge=1, le=5)
     sandbox_backend: str = "docker"
