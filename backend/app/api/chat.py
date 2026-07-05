@@ -2,6 +2,7 @@ import json
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
@@ -18,6 +19,11 @@ def chat(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> StreamingResponse:
+    # Establish the database connection before SSE headers are sent. Otherwise a
+    # connection failure tears down an already-200 stream and the browser can only
+    # report an opaque "network error".
+    db.execute(text("SELECT 1"))
+
     async def stream():
         async for item in run_chat(db, request):
             payload = json.dumps(item.data, ensure_ascii=False, default=str)

@@ -20,6 +20,7 @@ from app.core.db import SessionLocal
 from app.core.config import settings
 from app.services.rag.embedder import preheat
 from app.services.skills.store import ensure_builtins
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 
@@ -75,6 +76,14 @@ async def validation_exception(_: Request, exc: RequestValidationError) -> JSONR
     )
 
 
+@app.exception_handler(SQLAlchemyError)
+async def database_exception(_: Request, __: SQLAlchemyError) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={"error": {"code": "database_unavailable", "message": "数据库暂不可用，请启动 PostgreSQL 后重试。"}},
+    )
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception(_: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(
@@ -85,4 +94,9 @@ async def unhandled_exception(_: Request, exc: Exception) -> JSONResponse:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    try:
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+        return {"status": "ok", "database": "online"}
+    except SQLAlchemyError:
+        return {"status": "degraded", "database": "offline"}
