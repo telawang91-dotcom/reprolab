@@ -23,6 +23,7 @@ export type VerifyItem = { check: "citation" | "number" | "figure"; target_ancho
 export type VerifyResult = { verdict: "pass" | "fail"; items: VerifyItem[]; claim_status?: "verified" | "flagged" | null; repaired_text?: string | null; iterations?: { round: number; fails: number; repair_action: string }[] | null };
 export type MemoryItem = { id: string; layer: "episodic" | "semantic" | "skill"; content: string; tags: string[]; importance: number; written_at: string };
 export type SuggestionItem = { id: string; type: "hypothesis" | "literature" | "next_step"; content: string; evidence: { kind: "document" | "artifact"; id: string; anchor: string }[] };
+export type SkillItem = { id: string; project_id: string | null; name: string; discipline: string | null; template: string; meta: Record<string, unknown> | null; created_at: string };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...init, cache: "no-store" });
@@ -77,13 +78,17 @@ export const api = {
   refreshSuggestions: () => request<{ generated: number; items: SuggestionItem[] }>("/suggestions/refresh", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ project_id: DEMO_PROJECT_ID })
+  }),
+  skills: (discipline?: string) => request<SkillItem[]>(`/skills?project_id=${DEMO_PROJECT_ID}${discipline ? `&discipline=${encodeURIComponent(discipline)}` : ""}`),
+  createSkill: (payload: Omit<SkillItem, "id" | "created_at">) => request<SkillItem>("/skills", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
   })
 };
 
 export type ChatEvent = { event: "plan" | "thinking" | "code" | "run" | "artifact" | "message" | "done"; data: Record<string, any> };
 
 export async function streamChat(
-  payload: { conversation_id?: string; message: string; dataset_ids: string[] },
+  payload: { conversation_id?: string; message: string; dataset_ids: string[]; skill_id?: string },
   onEvent: (event: ChatEvent) => void,
   signal?: AbortSignal
 ) {

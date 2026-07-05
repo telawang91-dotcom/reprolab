@@ -14,8 +14,12 @@ from app.api.verify import router as verify_router
 from app.api.conclusions import router as conclusions_router
 from app.api.memory import router as memory_router
 from app.api.suggest import router as suggest_router
+from app.api.skills import router as skills_router
+from app.core.db import SessionLocal
 from app.core.config import settings
 from app.services.rag.embedder import preheat
+from app.services.skills.store import ensure_builtins
+from sqlalchemy.exc import SQLAlchemyError
 
 
 @asynccontextmanager
@@ -23,6 +27,12 @@ async def lifespan(_: FastAPI):
     settings.storage_dir.mkdir(parents=True, exist_ok=True)
     if settings.embedding_preload:
         preheat()
+    try:
+        with SessionLocal() as db:
+            ensure_builtins(db)
+    except SQLAlchemyError:
+        # The health endpoint remains usable while the explicitly configured database is offline.
+        pass
     yield
 
 
@@ -43,6 +53,7 @@ app.include_router(verify_router, prefix=settings.api_prefix)
 app.include_router(conclusions_router, prefix=settings.api_prefix)
 app.include_router(memory_router, prefix=settings.api_prefix)
 app.include_router(suggest_router, prefix=settings.api_prefix)
+app.include_router(skills_router, prefix=settings.api_prefix)
 
 
 @app.exception_handler(HTTPException)

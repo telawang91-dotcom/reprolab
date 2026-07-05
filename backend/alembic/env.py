@@ -7,6 +7,7 @@ from app.core.config import settings
 from app.models.base import Base
 from app.models import knowledge  # noqa: F401
 from app.models import suggestions  # noqa: F401
+from app.models import skills  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

@@ -4,14 +4,16 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.knowledge import Artifact, Conversation, Dataset, Message
+from app.models.skills import Skill
 from app.schemas.chat import ChatRequest, PlanStep, SSEEvent
 from app.services.agents.runtime import run_agent
 from app.services.sandbox.runner import run_with_retry
 from app.services.memory.recall import memory_context, recall_memories
+from app.services.skills.store import ensure_builtins
 
 
 def _json_object(text: str) -> dict[str, Any]:
@@ -75,14 +77,35 @@ def _dataset_context(db: Session, request: ChatRequest) -> str:
     )
 
 
+def _skill_context(db: Session, request: ChatRequest) -> str:
+    if request.skill_id is None:
+        return "未选择技能包；继续按用户请求动态规划，不限制分析类型。"
+    ensure_builtins(db)
+    skill = db.scalar(select(Skill).where(
+        Skill.id == request.skill_id,
+        or_(Skill.project_id.is_(None), Skill.project_id == request.project_id),
+    ))
+    if skill is None:
+        raise ValueError("skill not found or unavailable to project")
+    return json.dumps({
+        "id": str(skill.id),
+        "name": skill.name,
+        "discipline": skill.discipline,
+        "template": skill.template,
+        "meta": skill.meta or {},
+        "constraint": "可选加速模板；允许按用户请求调整，不得把它当作固定分析菜单。",
+    }, ensure_ascii=False)
+
+
 def _plan(
-    history: list[dict[str, str]], request: ChatRequest, datasets: str, memories: str
+    history: list[dict[str, str]], request: ChatRequest, datasets: str, memories: str, skill: str
 ) -> list[PlanStep]:
     response = run_agent(
         "你是科研数据分析规划者。将请求拆成1到3个可执行步骤。只返回JSON。",
         (
             f"历史：{json.dumps(history, ensure_ascii=False)}\n"
             f"已核验长期记忆：{memories}\n"
+            f"可选技能上下文：{skill}\n"
             f"当前请求：{request.message}\n数据集：{datasets}\n"
             '返回格式：{"steps":[{"title":"...","rationale":"..."}]}。'
         ),
@@ -100,6 +123,7 @@ def _generate_code(
     datasets: str,
     step: PlanStep,
     memories: str,
+    skill: str,
     previous_error: str | None = None,
 ) -> str:
     error_context = f"\n上次执行错误，请修复：\n{previous_error}" if previous_error else ""
@@ -109,6 +133,7 @@ def _generate_code(
             (
                 f"历史：{json.dumps(history, ensure_ascii=False)}\n当前请求：{request.message}\n"
                 f"已核验长期记忆：{memories}\n"
+                f"可选技能上下文：{skill}\n"
                 f"当前步骤：{step.model_dump_json()}\n数据集：{datasets}\n"
                 "数据文件路径按数据集 index 对应 DATASET_PATHS[index]，不得硬编码路径。"
                 "使用 pandas/numpy/scipy/statsmodels/sklearn/matplotlib。"
@@ -139,10 +164,16 @@ async def run_chat(db: Session, request: ChatRequest) -> AsyncIterator[SSEEvent]
     history = _history(db, conversation.id)
     recalled = recall_memories(db, request.project_id, request.message) if request.conversation_id is None else []
     memories = memory_context(recalled)
-    db.add(Message(conversation_id=conversation.id, role="user", content=request.message, extra_metadata={}))
+    skill = _skill_context(db, request)
+    db.add(Message(
+        conversation_id=conversation.id,
+        role="user",
+        content=request.message,
+        extra_metadata={"skill_id": str(request.skill_id) if request.skill_id else None},
+    ))
     db.commit()
     datasets = _dataset_context(db, request)
-    steps = _plan(history, request, datasets, memories)
+    steps = _plan(history, request, datasets, memories, skill)
     yield _event("plan", {"steps": [item.model_dump() for item in steps]})
 
     run_ids: list[str] = []
@@ -153,7 +184,7 @@ async def run_chat(db: Session, request: ChatRequest) -> AsyncIterator[SSEEvent]
         yield _event("thinking", {"text": step.rationale})
         previous_error: str | None = None
         for attempt in range(2):
-            code = _generate_code(history, request, datasets, step, memories, previous_error)
+            code = _generate_code(history, request, datasets, step, memories, skill, previous_error)
             yield _event("code", {"code": code, "lang": "python"})
             run = run_with_retry(
                 db,

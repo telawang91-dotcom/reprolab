@@ -32,6 +32,7 @@ from app.models.knowledge import (
     Run,
 )
 from app.models.suggestions import Suggestion
+from app.models.skills import Skill
 
 
 @pytest.fixture(scope="module")
@@ -57,6 +58,7 @@ def project_id():
         db.execute(delete(Claim).where(Claim.project_id == value))
         db.execute(delete(Memory).where(Memory.project_id == value))
         db.execute(delete(Suggestion).where(Suggestion.project_id == value))
+        db.execute(delete(Skill).where(Skill.project_id == value))
         db.execute(delete(Chunk).where(Chunk.document_id.in_(document_ids)))
         db.execute(delete(Document).where(Document.project_id == value))
         db.execute(delete(Dataset).where(Dataset.project_id == value))
@@ -614,6 +616,48 @@ def test_m10_real_evidence_whitelist_and_empty_project(client: TestClient, proje
     finally:
         with SessionLocal() as db:
             db.execute(delete(Project).where(Project.id == empty_project)); db.commit()
+
+
+def test_m11_real_builtin_registration_harvest_filter_and_lineage(client: TestClient, project_id: uuid.UUID):
+    builtins = client.get("/api/v1/skills", params={"project_id": str(project_id)})
+    assert builtins.status_code == 200, builtins.text
+    assert any(item["discipline"] == "general" and item["template"] for item in builtins.json())
+
+    biology = client.post("/api/v1/skills", json={
+        "project_id": str(project_id), "name": "生物重复测量模板",
+        "discipline": "biology", "template": "print('biology template')",
+        "meta": {"tools": ["pandas"], "renderer": "table"},
+    })
+    assert biology.status_code == 201, biology.text
+    filtered = client.get("/api/v1/skills", params={
+        "project_id": str(project_id), "discipline": "biology",
+    }).json()
+    assert len(filtered) == 1 and filtered[0]["id"] == biology.json()["id"]
+
+    dataset = upload(
+        client, project_id, "skill-demo.csv",
+        pd.DataFrame({"group": ["a", "a", "b", "b"], "value": [1.0, 2.0, 4.0, 5.0]}).to_csv(index=False).encode(),
+    )
+    general = next(item for item in builtins.json() if item["discipline"] == "general")
+    run = client.post("/api/v1/runs", json={
+        "project_id": str(project_id), "code": general["template"],
+        "dataset_ids": [dataset["dataset_id"]], "seed": 42,
+    })
+    assert run.status_code == 200, run.text
+    run_data = run.json()
+    assert run_data["status"] == "success" and run_data["artifacts"]
+    artifact_id = run_data["artifacts"][0]["artifact_id"]
+    lineage = client.get(f"/api/v1/artifacts/{artifact_id}/lineage").json()
+    assert {node["type"] for node in lineage["nodes"]}.issuperset({"dataset", "run", "artifact"})
+
+    from app.services.skills.harvest import from_run
+    from app.services.skills.store import create_skill
+    with SessionLocal() as db:
+        harvested_request = from_run(db, uuid.UUID(run_data["run_id"]), name="已跑通技能")
+        harvested = create_skill(db, harvested_request)
+        assert harvested.meta["source_run_id"] == run_data["run_id"]
+    listed = client.get("/api/v1/skills", params={"project_id": str(project_id)}).json()
+    assert any(item["name"] == "已跑通技能" and item["meta"]["source_run_id"] == run_data["run_id"] for item in listed)
 
 
 @pytest.mark.skipif(not settings.llm_api_key, reason="LLM_API_KEY intentionally deferred")

@@ -1,4 +1,5 @@
 from app.models.knowledge import Artifact, Chunk, Claim, Conversation, Dataset, Document, Edge, EnvSnapshot, Memory, Message, Project, Run, User
 from app.models.suggestions import Suggestion
+from app.models.skills import Skill
 
-__all__ = ["Artifact", "Chunk", "Claim", "Conversation", "Dataset", "Document", "Edge", "EnvSnapshot", "Memory", "Message", "Project", "Run", "Suggestion", "User"]
+__all__ = ["Artifact", "Chunk", "Claim", "Conversation", "Dataset", "Document", "Edge", "EnvSnapshot", "Memory", "Message", "Project", "Run", "Skill", "Suggestion", "User"]

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { AlertTriangle, BarChart3, Check, ChevronDown, ChevronRight, Code2, Database, ExternalLink, FileSpreadsheet, Play, RotateCcw, Send, Sparkles, Terminal, X } from "lucide-react";
 import { AnchoredMarkdown } from "@/components/anchor/AnchoredMarkdown";
-import { API_BASE, api, streamChat, type ChatEvent, type DocumentDetail, type Lineage } from "@/lib/api";
+import { SkillPanel } from "@/components/skills/SkillPanel";
+import { API_BASE, api, streamChat, type ChatEvent, type DocumentDetail, type Lineage, type SkillItem } from "@/lib/api";
 
 type EventItem = ChatEvent & { id: string };
 type ArtifactData = { artifact_id: string; kind: string; value_json: any; figure_url?: string | null; anchor: string };
@@ -15,6 +16,7 @@ export default function AnalysisPage() {
   const [events, setEvents] = useState<EventItem[]>([]); const [message, setMessage] = useState(""); const [running, setRunning] = useState(false);
   const [error, setError] = useState(""); const [conversation, setConversation] = useState<string>(); const [activeArtifact, setActiveArtifact] = useState<ArtifactData>();
   const [lineage, setLineage] = useState<Lineage>(); const [lineageLoading, setLineageLoading] = useState(false); const endRef = useRef<HTMLDivElement>(null); const abortRef = useRef<AbortController>();
+  const [skill, setSkill] = useState<SkillItem>();
 
   useEffect(() => { void (async () => { try { const docs = await api.documents("other"); const details = await Promise.all(docs.map((doc) => api.document(doc.id))); setDatasets(details.filter((doc) => doc.dataset_id)); } catch (e) { setError((e as Error).message); } })(); }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [events]);
@@ -25,14 +27,14 @@ export default function AnalysisPage() {
     setEvents((items) => [...items, { id: crypto.randomUUID(), event: "message", data: { text: text.trim(), citations: [], user: true } }]);
     const controller = new AbortController(); abortRef.current = controller;
     try {
-      await streamChat({ conversation_id: conversation, message: text.trim(), dataset_ids: selected }, (incoming) => {
+      await streamChat({ conversation_id: conversation, message: text.trim(), dataset_ids: selected, skill_id: skill?.id }, (incoming) => {
         setEvents((items) => [...items, { ...incoming, id: crypto.randomUUID() }]);
         if (incoming.event === "artifact") setActiveArtifact(incoming.data as ArtifactData);
         if (incoming.event === "done") setConversation(incoming.data.conversation_id);
       }, controller.signal);
     } catch (e) { if ((e as Error).name !== "AbortError") setError((e as Error).message); }
     finally { setRunning(false); abortRef.current = undefined; }
-  }, [conversation, message, running, selected]);
+  }, [conversation, message, running, selected, skill]);
 
   async function showLineage(id: string) { setLineageLoading(true); try { setLineage(await api.lineage(id)); } catch (e) { setError((e as Error).message); } finally { setLineageLoading(false); } }
   function toggleDataset(id: string) { setSelected((items) => items.includes(id) ? items.filter((item) => item !== id) : [...items, id]); }
@@ -44,6 +46,7 @@ export default function AnalysisPage() {
       <div className="mt-6 flex items-center gap-2 text-sm font-medium"><Database size={15} className="text-brand"/>数据集 <span className="ml-auto text-xs text-slate-400">{selected.length} 已选</span></div>
       <div className="mt-2 space-y-2">{datasets.length === 0 ? <div className="rounded-lg border border-dashed p-3 text-xs leading-5 text-slate-400">请先在知识库上传 CSV/XLSX 数据集。</div> : datasets.map((dataset) => <button key={dataset.id} onClick={() => dataset.dataset_id && toggleDataset(dataset.dataset_id)} className={`w-full rounded-lg border p-3 text-left transition ${dataset.dataset_id && selected.includes(dataset.dataset_id) ? "border-blue-300 bg-blue-50 dark:bg-blue-950/30" : "hover:bg-slate-50 dark:hover:bg-slate-900"}`}><div className="flex items-center gap-2"><FileSpreadsheet size={15} className="text-emerald-600"/><span className="min-w-0 flex-1 truncate text-sm font-medium">{dataset.filename}</span>{dataset.dataset_id && selected.includes(dataset.dataset_id) && <Check size={14} className="text-brand"/>}</div><div className="mt-2 text-[11px] text-slate-400">{dataset.schema_json?.row_count ?? 0} 行 · {dataset.schema_json?.column_count ?? 0} 列</div></button>)}</div>
       <div className="mt-7 flex items-center gap-2 text-sm font-medium"><ChevronDown size={14}/>会话状态</div><div className="mt-2 rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-900"><div className="text-slate-400">Conversation ID</div><div className="mt-1 truncate font-mono">{conversation ?? "新会话"}</div><div className="mt-3 flex items-center gap-2"><span className={`h-2 w-2 rounded-full ${running ? "animate-pulse bg-amber-500" : "bg-emerald-500"}`}/>{running ? "Agent 正在执行" : "准备就绪"}</div></div>
+      <SkillPanel selected={skill?.id} onSelect={setSkill}/>
     </aside>
     <main className="relative flex min-w-0 flex-1 flex-col bg-[#F8FAFC] dark:bg-[#0B0F17]">
       <div className="flex h-14 shrink-0 items-center border-b bg-white px-5 dark:border-slate-800 dark:bg-slate-950"><div><div className="font-semibold">分析对话</div><div className="text-xs text-slate-400">规划 → 代码 → 执行 → 可溯源结论</div></div><div className="ml-auto flex items-center gap-2 text-xs text-slate-400"><span className="h-2 w-2 rounded-full bg-emerald-500"/>持久 Python 3.11 kernel</div></div>
