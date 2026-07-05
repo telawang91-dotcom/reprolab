@@ -3,6 +3,7 @@ import io
 import json
 import os
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import fitz
 import pandas as pd
@@ -25,6 +26,7 @@ from app.models.knowledge import (
     Document,
     Edge,
     EnvSnapshot,
+    Memory,
     Message,
     Project,
     Run,
@@ -52,6 +54,7 @@ def project_id():
         db.execute(delete(Message).where(Message.conversation_id.in_(conversation_ids)))
         db.execute(delete(Conversation).where(Conversation.project_id == value))
         db.execute(delete(Claim).where(Claim.project_id == value))
+        db.execute(delete(Memory).where(Memory.project_id == value))
         db.execute(delete(Chunk).where(Chunk.document_id.in_(document_ids)))
         db.execute(delete(Document).where(Document.project_id == value))
         db.execute(delete(Dataset).where(Dataset.project_id == value))
@@ -331,6 +334,75 @@ def test_m8_real_writeback_is_searchable_and_linked(client: TestClient, project_
     })
     assert search.status_code == 200, search.text
     assert str(document_id) in {item["document_id"] for item in search.json()["hits"]}
+
+
+def test_m9_real_dedup_recall_decay_and_reflection(client: TestClient, project_id: uuid.UUID):
+    payload = {
+        "project_id": str(project_id), "layer": "semantic",
+        "content": "差异检验优先使用配对 t 检验", "tags": ["统计"], "importance": 0.7,
+    }
+    first = client.post("/api/v1/memories", json=payload)
+    second = client.post("/api/v1/memories", json=payload)
+    assert first.status_code == 201 and second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+    with SessionLocal() as db:
+        count = db.scalar(select(func.count(Memory.id)).where(
+            Memory.project_id == project_id,
+            Memory.layer == "semantic",
+            Memory.content == payload["content"],
+        ))
+        assert count == 1
+
+        from app.services.memory.embed import embed_memory
+        vector = embed_memory("差异检验方法")
+        now = datetime.now(timezone.utc)
+        old = Memory(
+            project_id=project_id, layer="semantic", content="旧的差异检验方法",
+            embedding=vector, tags=["decay"], importance=0.8,
+            written_at=now - timedelta(days=60),
+        )
+        new = Memory(
+            project_id=project_id, layer="semantic", content="新的差异检验方法",
+            embedding=vector, tags=["decay"], importance=0.8, written_at=now,
+        )
+        stale = Memory(
+            project_id=project_id, layer="semantic", content="过期低权重差异检验",
+            embedding=vector, tags=["stale"], importance=0.1,
+            written_at=now - timedelta(days=365),
+        )
+        db.add_all([old, new, stale]); db.commit()
+        old_id, new_id, stale_id = str(old.id), str(new.id), str(stale.id)
+
+    recalled = client.get("/api/v1/memories", params={
+        "project_id": str(project_id), "q": "差异检验方法", "k": 10,
+    })
+    assert recalled.status_code == 200, recalled.text
+    ids = [item["id"] for item in recalled.json()]
+    assert new_id in ids and old_id in ids and ids.index(new_id) < ids.index(old_id)
+    assert stale_id not in ids
+
+    conversation_id = uuid.uuid4()
+    with SessionLocal() as db:
+        db.add(Conversation(id=conversation_id, project_id=project_id, title="memory reflection"))
+        db.add(Message(
+            conversation_id=conversation_id, role="user",
+            content="以后优先使用中文文献", extra_metadata={},
+        ))
+        db.commit()
+
+        from app.services.memory.reflect import reflect_conversation
+
+        class FakeAdapter:
+            def chat(self, request):
+                from app.services.agents.model_adapter import ModelResponse
+                return ModelResponse(content=(
+                    '[{"layer":"semantic","content":"用户优先使用中文文献",'
+                    '"tags":["偏好"],"importance":0.8}]'
+                ))
+
+        written = reflect_conversation(db, conversation_id, adapter=FakeAdapter())
+        assert any(item.layer == "episodic" and item.written_at for item in written)
+        assert any(item.layer == "semantic" and item.written_at for item in written)
 
 
 @pytest.mark.skipif(not settings.llm_api_key, reason="LLM_API_KEY intentionally deferred")

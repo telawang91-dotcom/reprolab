@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Text, func
+from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Integer, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -162,3 +162,18 @@ class Claim(Base):
     doc_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
     status: Mapped[str] = mapped_column(Text, default="unverified")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Memory(Base):
+    __tablename__ = "memories"
+    __table_args__ = (
+        CheckConstraint("layer IN ('episodic','semantic','skill')", name="ck_memories_layer"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"), index=True)
+    layer: Mapped[str] = mapped_column(Text)
+    content: Mapped[str] = mapped_column(Text)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024))
+    tags: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    importance: Mapped[float] = mapped_column(Float, default=0.5)
+    written_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

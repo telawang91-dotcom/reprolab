@@ -20,6 +20,7 @@ export type ReproduceResult = {
 };
 export type VerifyItem = { check: "citation" | "number" | "figure"; target_anchor: string | null; verdict: "pass" | "fail"; severity: "warn" | "error"; reason: string; locate: string };
 export type VerifyResult = { verdict: "pass" | "fail"; items: VerifyItem[]; claim_status?: "verified" | "flagged" | null };
+export type MemoryItem = { id: string; layer: "episodic" | "semantic" | "skill"; content: string; tags: string[]; importance: number; written_at: string };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...init, cache: "no-store" });
@@ -58,6 +59,13 @@ export const api = {
   postConclusion: (claimText: string, anchors: string[]) => request<{ document_id: string }>("/conclusions", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ project_id: DEMO_PROJECT_ID, claim_text: claimText, anchors, status: "verified" })
+  }),
+  memories: (layer?: string, query?: string) => request<MemoryItem[]>(
+    `/memories?project_id=${DEMO_PROJECT_ID}${layer ? `&layer=${layer}` : ""}${query ? `&q=${encodeURIComponent(query)}` : ""}&k=20`
+  ),
+  createMemory: (layer: MemoryItem["layer"], content: string, tags: string[]) => request<MemoryItem>("/memories", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_id: DEMO_PROJECT_ID, layer, content, tags })
   })
 };
 

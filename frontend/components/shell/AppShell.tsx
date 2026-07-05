@@ -1,14 +1,15 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Command, FlaskConical, Moon, Network, Search, Settings, Sun, Workflow } from "lucide-react";
+import { BookOpen, Brain, Command, FlaskConical, Moon, Network, Search, Settings, Sun, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const links = [
   { href: "/knowledge", label: "知识库", icon: BookOpen },
   { href: "/analysis", label: "分析对话", icon: FlaskConical },
   { href: "/lineage", label: "溯源图谱", icon: Network, disabled: true },
-  { href: "/writing", label: "写作面板", icon: Workflow }
+  { href: "/writing", label: "写作面板", icon: Workflow },
+  { href: "/memory", label: "科研记忆", icon: Brain }
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
