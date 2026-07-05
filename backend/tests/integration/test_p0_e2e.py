@@ -660,6 +660,68 @@ def test_m11_real_builtin_registration_harvest_filter_and_lineage(client: TestCl
     assert any(item["name"] == "已跑通技能" and item["meta"]["source_run_id"] == run_data["run_id"] for item in listed)
 
 
+def test_platform_real_headless_endpoint_aggregates_lineage_and_verification(client: TestClient, project_id: uuid.UUID):
+    dataset = upload(client, project_id, "headless-data.csv", b"value\n1\n2\n3\n")
+    from app.services.agents.model_adapter import ModelResponse
+    from app.services.agents.headless import invoke_agent as real_invoke
+    import app.api.agent as agent_api
+
+    class ScriptedAnalysisAdapter:
+        def __init__(self):
+            self.models = []
+        def chat(self, request):
+            self.models.append(request.get("model"))
+            system = request["messages"][0]["content"]
+            if "规划者" in system:
+                return ModelResponse(content='{"steps":[{"title":"计算均值","rationale":"使用真实数据"}]}')
+            if "执行器" in system:
+                return ModelResponse(content=(
+                    "import pandas as pd\n"
+                    "df = pd.read_csv(DATASET_PATHS[0])\n"
+                    "emit_artifact('number', float(df['value'].mean()), title='headless mean', tol=1e-9)"
+                ))
+            if "审阅者" in system:
+                with SessionLocal() as lookup:
+                    artifact = lookup.scalar(select(Artifact).where(
+                        Artifact.project_id == project_id,
+                        Artifact.title == "headless mean",
+                    ).order_by(Artifact.created_at.desc()))
+                return ModelResponse(content=f"均值为 2⟦art_{str(artifact.id)[:4]}⟧。")
+            raise AssertionError(f"unexpected role: {system}")
+
+    adapter = ScriptedAnalysisAdapter()
+    old_routes = settings.planner_model, settings.executor_model, settings.critic_model
+    try:
+        settings.planner_model = "hunyuan:planner-test"
+        settings.executor_model = "hunyuan:executor-test"
+        settings.critic_model = "deepseek:critic-test"
+
+        async def wired_invoke(db, request):
+            return await real_invoke(db, request, adapter)
+
+        with pytest.MonkeyPatch.context() as patcher:
+            patcher.setattr(agent_api, "invoke_agent", wired_invoke)
+            response = client.post("/api/v1/agent/invoke", json={
+                "project_id": str(project_id), "task": "计算数据均值",
+                "inputs": {"dataset_ids": [dataset["dataset_id"]]},
+            })
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert set(payload) == {"result", "artifacts", "lineage", "verify_report"}
+        assert payload["artifacts"] and payload["verify_report"]["verdict"] == "pass"
+        artifact_id = payload["artifacts"][0]["artifact_id"]
+        assert {node["type"] for node in payload["lineage"][artifact_id]["nodes"]}.issuperset({"dataset", "run", "artifact"})
+        assert adapter.models == ["hunyuan:planner-test", "hunyuan:executor-test", "deepseek:critic-test"]
+    finally:
+        settings.planner_model, settings.executor_model, settings.critic_model = old_routes
+
+    invalid = client.post("/api/v1/agent/invoke", json={
+        "project_id": str(project_id), "task": "", "inputs": {"unknown": True},
+    })
+    assert invalid.status_code == 422
+    assert set(invalid.json()) == {"error"}
+
+
 @pytest.mark.skipif(not settings.llm_api_key, reason="LLM_API_KEY intentionally deferred")
 def test_m3_real_sse_chat_requires_configured_llm(client: TestClient, project_id: uuid.UUID):
     with client.stream("POST", "/api/v1/chat", json={

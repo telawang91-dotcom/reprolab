@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db import SessionLocal
+from app.core.config import settings
 from app.models.knowledge import Conversation, Message
 from app.schemas.memory import MemoryCreate
 from app.services.agents.model_adapter import ModelAdapter, model_adapter
@@ -56,6 +57,7 @@ def reflect_conversation(
     ))]
     try:
         response = adapter.chat({
+            "model": settings.agent_model_route["critic"],
             "messages": [
                 {
                     "role": "system",

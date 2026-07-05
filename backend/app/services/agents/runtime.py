@@ -1,3 +1,4 @@
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -11,39 +12,41 @@ def run_agent(
     tools: list[dict[str, Any]] | None = None,
     tool_handlers: dict[str, Callable[..., Any]] | None = None,
     adapter: ModelAdapter = model_adapter,
-    max_turns: int = 8,
+    max_turns: int | None = None,
+    route: str = "executor",
 ) -> str:
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": role},
         {"role": "user", "content": task},
     ]
-    for _ in range(max_turns):
-        response: ModelResponse = adapter.chat(
-            {"model": settings.llm_model, "messages": messages, "tools": tools or []}
-        )
+    limit = max_turns or settings.agent_max_steps
+    for _ in range(limit):
+        response: ModelResponse = adapter.chat({
+            "model": settings.agent_model_route.get(route, settings.executor_model),
+            "messages": messages,
+            "tools": tools or [],
+        })
         if not response.tool_calls:
             return response.content
-        messages.append(
-            {
-                "role": "assistant",
-                "content": response.content,
-                "tool_calls": [call.model_dump() if hasattr(call, "model_dump") else call for call in response.tool_calls],
-            }
-        )
-        for call in response.tool_calls:
-            name = call.function.name
-            if not tool_handlers or name not in tool_handlers:
-                raise RuntimeError(f"no handler for tool: {name}")
-            import json
-
-            arguments = json.loads(call.function.arguments or "{}")
-            result = tool_handlers[name](**arguments)
-            messages.append(
+        messages.append({
+            "role": "assistant",
+            "content": response.content,
+            "tool_calls": [
                 {
-                    "role": "tool",
-                    "tool_call_id": call.id,
-                    "content": json.dumps(result, ensure_ascii=False, default=str),
+                    "id": call.id,
+                    "type": "function",
+                    "function": {"name": call.name, "arguments": json.dumps(call.args, ensure_ascii=False)},
                 }
-            )
-    raise RuntimeError("agent exceeded maximum tool turns")
-
+                for call in response.tool_calls
+            ],
+        })
+        for call in response.tool_calls:
+            if not tool_handlers or call.name not in tool_handlers:
+                raise RuntimeError(f"no handler for tool: {call.name}")
+            result = tool_handlers[call.name](**call.args)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call.id,
+                "content": json.dumps(result, ensure_ascii=False, default=str),
+            })
+    raise RuntimeError(f"agent exceeded maximum tool turns ({limit})")

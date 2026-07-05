@@ -69,6 +69,7 @@ def judge_support(
         return NLIResult("neutral", 0.0, "文档没有可检索文本切块", "被引文档没有可用于判断的证据段落")
     premise = "\n\n".join(f"[{index + 1}] {item.content}" for index, item in enumerate(chunks))
     response = adapter.chat({
+        "model": settings.agent_model_route["critic"],
         "messages": [
             {
                 "role": "system",

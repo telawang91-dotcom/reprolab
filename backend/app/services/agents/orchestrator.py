@@ -11,6 +11,7 @@ from app.models.knowledge import Artifact, Conversation, Dataset, Message
 from app.models.skills import Skill
 from app.schemas.chat import ChatRequest, PlanStep, SSEEvent
 from app.services.agents.runtime import run_agent
+from app.services.agents.model_adapter import ModelAdapter, model_adapter
 from app.services.sandbox.runner import run_with_retry
 from app.services.memory.recall import memory_context, recall_memories
 from app.services.skills.store import ensure_builtins
@@ -98,7 +99,8 @@ def _skill_context(db: Session, request: ChatRequest) -> str:
 
 
 def _plan(
-    history: list[dict[str, str]], request: ChatRequest, datasets: str, memories: str, skill: str
+    history: list[dict[str, str]], request: ChatRequest, datasets: str, memories: str, skill: str,
+    adapter: ModelAdapter,
 ) -> list[PlanStep]:
     response = run_agent(
         "你是科研数据分析规划者。将请求拆成1到3个可执行步骤。只返回JSON。",
@@ -108,7 +110,7 @@ def _plan(
             f"可选技能上下文：{skill}\n"
             f"当前请求：{request.message}\n数据集：{datasets}\n"
             '返回格式：{"steps":[{"title":"...","rationale":"..."}]}。'
-        ),
+        ), adapter=adapter, route="planner",
     )
     payload = _json_object(response)
     steps = [PlanStep.model_validate(item) for item in payload.get("steps", [])]
@@ -124,6 +126,7 @@ def _generate_code(
     step: PlanStep,
     memories: str,
     skill: str,
+    adapter: ModelAdapter,
     previous_error: str | None = None,
 ) -> str:
     error_context = f"\n上次执行错误，请修复：\n{previous_error}" if previous_error else ""
@@ -140,7 +143,7 @@ def _generate_code(
                 "重要标量、系数、表格必须调用 emit_artifact(kind, value, title, tol)；"
                 "绘图需 plt.show()，并可额外 emit_artifact('figure', 结构化绘图数据, title)。"
                 "不要安装依赖、不要联网、不要伪造结果。" + error_context
-            ),
+            ), adapter=adapter, route="executor",
         )
     )
 
@@ -159,7 +162,9 @@ def _artifact_event(db: Session, artifact_id: uuid.UUID) -> dict[str, Any]:
     }
 
 
-async def run_chat(db: Session, request: ChatRequest) -> AsyncIterator[SSEEvent]:
+async def run_chat(
+    db: Session, request: ChatRequest, adapter: ModelAdapter = model_adapter
+) -> AsyncIterator[SSEEvent]:
     conversation = _conversation(db, request)
     history = _history(db, conversation.id)
     recalled = recall_memories(db, request.project_id, request.message) if request.conversation_id is None else []
@@ -173,7 +178,7 @@ async def run_chat(db: Session, request: ChatRequest) -> AsyncIterator[SSEEvent]
     ))
     db.commit()
     datasets = _dataset_context(db, request)
-    steps = _plan(history, request, datasets, memories, skill)
+    steps = _plan(history, request, datasets, memories, skill, adapter)
     yield _event("plan", {"steps": [item.model_dump() for item in steps]})
 
     run_ids: list[str] = []
@@ -184,7 +189,9 @@ async def run_chat(db: Session, request: ChatRequest) -> AsyncIterator[SSEEvent]
         yield _event("thinking", {"text": step.rationale})
         previous_error: str | None = None
         for attempt in range(2):
-            code = _generate_code(history, request, datasets, step, memories, skill, previous_error)
+            code = _generate_code(
+                history, request, datasets, step, memories, skill, adapter, previous_error
+            )
             yield _event("code", {"code": code, "lang": "python"})
             run = run_with_retry(
                 db,
@@ -230,7 +237,7 @@ async def run_chat(db: Session, request: ChatRequest) -> AsyncIterator[SSEEvent]
         (
             f"用户请求：{request.message}\n工具结果：{json.dumps(tool_summaries, ensure_ascii=False)}\n"
             f"可用锚点：{anchors}\n请生成简洁Markdown结论，并至少引用一个可用锚点。"
-        ),
+        ), adapter=adapter, route="critic",
     )
     used_anchors = [anchor for anchor in anchors if anchor in final_text]
     if anchors and not used_anchors:

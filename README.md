@@ -49,15 +49,27 @@ npm.cmd --prefix frontend run dev
 
 ## 模型配置
 
-M1/M2 与 M4/M5 不需要 LLM 密钥。M2 `/qa` 和 M3 `/chat` 需要在 `.env` 配置 OpenAI 兼容接口：
+M1/M2 与 M4/M5 不需要 LLM 密钥。M2 `/qa`、M3 `/chat` 和 `/agent/invoke` 通过模型无关路由读取配置：
 
 ```env
 LLM_BASE_URL=https://api.deepseek.com/v1
 LLM_API_KEY=
 LLM_MODEL=deepseek-chat
+DEEPSEEK_API_KEY=
+HUNYUAN_API_KEY=
+PLANNER_MODEL=deepseek:deepseek-chat
+EXECUTOR_MODEL=deepseek:deepseek-chat
+CRITIC_MODEL=deepseek:deepseek-chat
 ```
 
 未配置密钥时接口会明确报错，不会返回 mock 内容。
+
+Headless 调用示例：
+
+```powershell
+$body = @{ project_id = "00000000-0000-0000-0000-000000000101"; task = "计算所选数据的均值"; inputs = @{ dataset_ids = @() } } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri http://localhost:8000/api/v1/agent/invoke -ContentType application/json -Body $body
+```
 
 ## 验证
 
@@ -75,4 +87,3 @@ Docker/PostgreSQL 可用后再运行集成验收：
 $env:RUN_INTEGRATION="1"
 .\.venv\Scripts\python.exe -m pytest backend\tests\integration -q -s
 ```
-

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.models.knowledge import Artifact, Document
 from app.models.suggestions import Suggestion
 from app.schemas.suggest import Evidence, SuggestionCandidate
@@ -79,6 +80,7 @@ def generate_suggestions(
         return []
     try:
         response = (adapter or model_adapter).chat({
+            "model": settings.agent_model_route["critic"],
             "messages": [
                 {"role": "system", "content": "你是谨慎的科研建议助手，只能使用给定证据。"},
                 {"role": "user", "content": build_prompt(context)},

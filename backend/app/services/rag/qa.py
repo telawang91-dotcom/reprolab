@@ -46,7 +46,7 @@ def answer_question(
         context_parts.append(f"{anchor}\n{hit.content}")
     response = adapter.chat(
         {
-            "model": settings.llm_model,
+            "model": settings.agent_model_route["critic"],
             "messages": [
                 {
                     "role": "system",
@@ -64,4 +64,3 @@ def answer_question(
     if not citations:
         raise RuntimeError("LLM answer contains no valid source anchor")
     return QAResponse(answer=response.content, citations=citations)
-
