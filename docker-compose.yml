@@ -17,6 +17,7 @@ services:
 
   sandbox:
     profiles: ["sandbox"]
+    image: reprolab-sandbox:py311
     build:
       context: .
       dockerfile: docker/sandbox.Dockerfile
