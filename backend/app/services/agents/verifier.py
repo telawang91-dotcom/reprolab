@@ -1,4 +1,3 @@
-import json
 import re
 import uuid
 from typing import Any
@@ -7,11 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.knowledge import Artifact, Chunk, Claim, Document, Edge, Run
+from app.models.knowledge import Artifact, Claim, Document, Edge, Run
 from app.schemas.verify import VerifyItem, VerifyResponse
 from app.services.agents.anchors import AnchorRef, context_at, extract_anchors, extract_numbers, locate
 from app.services.agents.model_adapter import ModelAdapter, model_adapter
-from app.services.agents.runtime import run_agent
+from app.services.agents.nli import judge_support, passes_threshold
 from app.services.lineage.compare import artifact_value
 from app.services.lineage.reproduce import reproduce
 from app.services.rag.storage import read_bytes
@@ -33,22 +32,6 @@ def _item(check: str, anchor: str | None, passed: bool, reason: str, location: s
     )
 
 
-def _semantic_support(claim_text: str, evidence: str, adapter: ModelAdapter) -> tuple[bool, str]:
-    response = run_agent(
-        "你是苛刻的科研审稿人，只判断证据是否直接支撑论断。只返回JSON。",
-        (
-            f"论断：{claim_text}\n证据：{evidence}\n"
-            '返回 {"supports":true|false,"reason":"简短理由"}。不得根据常识补充证据。'
-        ),
-        adapter=adapter,
-    )
-    stripped = response.strip()
-    if stripped.startswith("```"):
-        stripped = re.sub(r"^```(?:json)?\s*|\s*```$", "", stripped, flags=re.IGNORECASE)
-    payload = json.loads(stripped[stripped.find("{") : stripped.rfind("}") + 1])
-    return bool(payload["supports"]), str(payload.get("reason") or "模型未提供理由")
-
-
 def check_citations(db: Session, project_id: uuid.UUID, text: str, adapter: ModelAdapter = model_adapter) -> list[VerifyItem]:
     documents = list(db.scalars(select(Document).where(Document.project_id == project_id)))
     items: list[VerifyItem] = []
@@ -62,16 +45,24 @@ def check_citations(db: Session, project_id: uuid.UUID, text: str, adapter: Mode
             items.append(_item("citation", anchor.raw, False, "引用短码不唯一，无法可靠定位文献", location))
             continue
         document = matches[0]
-        chunks = list(db.scalars(select(Chunk).where(Chunk.document_id == document.id).order_by(Chunk.position).limit(5)))
-        evidence = "\n".join(chunk.content for chunk in chunks)
         claim_context = context_at(text, anchor.start, anchor.end, radius=120)
         try:
-            supported, reason = _semantic_support(claim_context, evidence, adapter)
-        except RuntimeError as exc:
-            items.append(_item("citation", anchor.raw, False, f"语义支持度校验不可用：{exc}", location, severity="warn"))
+            result = judge_support(db, claim_context, document.id, adapter)
+        except (RuntimeError, ValueError) as exc:
+            items.append(_item(
+                "citation", anchor.raw, False, f"NLI 语义支持度校验不可用：{exc}", location,
+                severity="warn", label="neutral", support_score=0.0,
+            ))
             continue
+        supported = passes_threshold(result)
         if not supported:
-            items.append(_item("citation", anchor.raw, False, f"文献内容不支撑该结论：{reason}", location))
+            label_reason = "内容不支持，疑似张冠李戴" if result.label == "neutral" else "文献证据与论断矛盾"
+            items.append(_item(
+                "citation", anchor.raw, False,
+                f"{label_reason}（{result.label}, {result.support_score:.2f}）：{result.reason}",
+                location, label=result.label, support_score=result.support_score,
+                evidence_span=result.evidence_span,
+            ))
             continue
         doi_warning = bool(document.doi and not re.fullmatch(r"10\.\d{4,9}/\S+", document.doi))
         items.append(_item(
@@ -81,6 +72,9 @@ def check_citations(db: Session, project_id: uuid.UUID, text: str, adapter: Mode
             "引用存在且文献证据支持该论断" + ("；DOI 格式异常，已降级为警告" if doi_warning else ""),
             location,
             severity="warn" if doi_warning else "error",
+            label=result.label,
+            support_score=result.support_score,
+            evidence_span=result.evidence_span,
         ))
     return items
 
@@ -199,4 +193,3 @@ def verify(
             claim.status = claim_status
         db.commit()
     return VerifyResponse(verdict=verdict, items=items, claim_status=claim_status)
-

@@ -339,6 +339,50 @@ def test_m7_real_adversarial_verification(client: TestClient, project_id: uuid.U
         assert db.get(Claim, claim_id).status == "verified"
 
 
+def test_m7b_real_nli_labels_threshold_and_evidence_span(client: TestClient, project_id: uuid.UUID):
+    paper = upload(
+        client, project_id, "nli-support.md",
+        ("Randomized trial evidence shows the treatment reduces systolic blood pressure.\n" * 30).encode(),
+        "paper",
+    )
+    anchor = f"⟦src_{paper['id'][:4]}⟧"
+
+    from app.services.agents.model_adapter import ModelResponse
+    from app.services.agents.verifier import check_citations
+
+    class StaticAdapter:
+        def __init__(self, content):
+            self.content = content
+        def chat(self, request):
+            return ModelResponse(content=self.content)
+
+    with SessionLocal() as db:
+        supported = check_citations(
+            db, project_id, f"该治疗可降低收缩压{anchor}。",
+            StaticAdapter('{"label":"entailment","support_score":0.82,"reason":"试验结论直接支持"}'),
+        )[0]
+        assert supported.verdict == "pass" and supported.label == "entailment"
+        assert supported.support_score >= 0.6 and supported.evidence_span.startswith("chunk:")
+
+        misplaced = check_citations(
+            db, project_id, f"该治疗可提高材料导电率{anchor}。",
+            StaticAdapter('{"label":"neutral","support_score":0.08,"reason":"段落仅讨论血压"}'),
+        )[0]
+        assert misplaced.verdict == "fail" and misplaced.label == "neutral"
+        assert "张冠李戴" in misplaced.reason
+
+        old_threshold = settings.nli_support_threshold
+        try:
+            settings.nli_support_threshold = 0.5
+            boundary = check_citations(
+                db, project_id, f"该治疗可降低收缩压{anchor}。",
+                StaticAdapter('{"label":"entailment","support_score":0.55,"reason":"边界支持"}'),
+            )[0]
+            assert boundary.verdict == "pass"
+        finally:
+            settings.nli_support_threshold = old_threshold
+
+
 def test_m8_real_writeback_is_searchable_and_linked(client: TestClient, project_id: uuid.UUID):
     source = upload(client, project_id, "writeback-source.csv", b"value\n7\n8\n9\n")
     run = client.post("/api/v1/runs", json={

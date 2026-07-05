@@ -1,17 +1,10 @@
-from app.services.agents.model_adapter import ModelResponse
-from app.services.agents.verifier import _semantic_support
+from app.services.agents.nli import NLIResult, _json_object, passes_threshold
 
 
-class StaticAdapter:
-    def __init__(self, content: str):
-        self.content = content
-
-    def chat(self, request):
-        return ModelResponse(content=self.content)
-
-
-def test_semantic_support_uses_model_adapter_structured_result():
-    supported, reason = _semantic_support("claim", "evidence", StaticAdapter('{"supports":false,"reason":"主题无关"}'))
-    assert supported is False
-    assert reason == "主题无关"
-
+def test_nli_structured_result_and_threshold():
+    payload = _json_object('```json\n{"label":"entailment","support_score":0.55}\n```')
+    assert payload["label"] == "entailment"
+    result = NLIResult("entailment", 0.55, "chunk:1", "部分支持")
+    assert not passes_threshold(result, threshold=0.6)
+    assert passes_threshold(result, threshold=0.5)
+    assert not passes_threshold(NLIResult("neutral", 0.99, "chunk:1", "无关"), threshold=0.5)

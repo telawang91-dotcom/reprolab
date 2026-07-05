@@ -19,7 +19,7 @@ export type ReproduceResult = {
   new_run_id: string;
 };
 export type AttributionResult = { target_artifact_id: string; baseline: unknown; drifted: unknown; attributions: { dimension: string; contribution: number; direction: "up" | "down"; detail: string }[] };
-export type VerifyItem = { check: "citation" | "number" | "figure"; target_anchor: string | null; verdict: "pass" | "fail"; severity: "warn" | "error"; reason: string; locate: string };
+export type VerifyItem = { check: "citation" | "number" | "figure"; target_anchor: string | null; verdict: "pass" | "fail"; severity: "warn" | "error"; reason: string; locate: string; label?: "entailment" | "neutral" | "contradiction" | null; support_score?: number | null; evidence_span?: string | null };
 export type VerifyResult = { verdict: "pass" | "fail"; items: VerifyItem[]; claim_status?: "verified" | "flagged" | null };
 export type MemoryItem = { id: string; layer: "episodic" | "semantic" | "skill"; content: string; tags: string[]; importance: number; written_at: string };
 export type SuggestionItem = { id: string; type: "hypothesis" | "literature" | "next_step"; content: string; evidence: { kind: "document" | "artifact"; id: string; anchor: string }[] };

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +23,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.deepseek.com/v1"
     llm_api_key: str = ""
     llm_model: str = "deepseek-chat"
+    nli_support_threshold: float = Field(default=0.6, ge=0, le=1)
     sandbox_backend: str = "docker"
     sandbox_image: str = "reprolab-sandbox:py311"
     cors_origins: str = "http://localhost:3000"
