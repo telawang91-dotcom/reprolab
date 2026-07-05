@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Brain, Command, FlaskConical, LayoutDashboard, Moon, Network, Search, Settings, Sun, Workflow } from "lucide-react";
+import { BookOpen, Brain, CircleHelp, Command, FlaskConical, LayoutDashboard, Moon, Network, Search, Settings, Sun, Workflow } from "lucide-react";
 import { useEffect, useState } from "react";
+import { FirstRunGuide } from "@/components/guide/FirstRunGuide";
 
 const links = [
   { href: "/", label: "工作台", icon: LayoutDashboard },
@@ -10,7 +11,8 @@ const links = [
   { href: "/analysis", label: "分析对话", icon: FlaskConical },
   { href: "/lineage", label: "溯源图谱", icon: Network, disabled: true },
   { href: "/writing", label: "写作面板", icon: Workflow },
-  { href: "/memory", label: "科研记忆", icon: Brain }
+  { href: "/memory", label: "科研记忆", icon: Brain },
+  { href: "/guide", label: "产品指南", icon: CircleHelp }
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -40,5 +42,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     </aside>
     <main className="min-h-screen pt-12 md:pl-[220px]">{children}</main>
     {command && <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/35 pt-[15vh]" onMouseDown={() => setCommand(false)}><div className="card w-[520px] overflow-hidden" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center gap-3 border-b p-4"><Command size={18}/><input autoFocus className="w-full bg-transparent outline-none" placeholder="搜索文档、会话或命令…"/><kbd className="text-xs text-slate-400">ESC</kbd></div><div className="p-3 text-sm text-slate-500">输入关键词开始搜索。跨空间命令将在 P1 开放。</div></div></div>}
+    <FirstRunGuide/>
   </div>;
 }
