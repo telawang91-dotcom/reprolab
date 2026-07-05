@@ -23,15 +23,15 @@ class Settings(BaseSettings):
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     llm_base_url: str = "https://api.deepseek.com/v1"
     llm_api_key: str = ""
-    llm_model: str = "deepseek-chat"
+    llm_model: str = "deepseek-v4-flash"
     deepseek_base_url: str = "https://api.deepseek.com/v1"
     deepseek_api_key: str = ""
     hunyuan_base_url: str = "https://api.hunyuan.cloud.tencent.com/v1"
     hunyuan_api_key: str = ""
     claude_api_key: str = ""
-    planner_model: str = "deepseek:deepseek-chat"
-    executor_model: str = "deepseek:deepseek-chat"
-    critic_model: str = "deepseek:deepseek-chat"
+    planner_model: str = "deepseek:deepseek-v4-flash"
+    executor_model: str = "deepseek:deepseek-v4-flash"
+    critic_model: str = "deepseek:deepseek-v4-pro"
     model_max_retries: int = Field(default=2, ge=0, le=5)
     agent_max_steps: int = Field(default=10, ge=1, le=30)
     llm_temperature: float = Field(default=0.2, ge=0, le=2)

@@ -52,14 +52,13 @@ npm.cmd --prefix frontend run dev
 M1/M2 与 M4/M5 不需要 LLM 密钥。M2 `/qa`、M3 `/chat` 和 `/agent/invoke` 通过模型无关路由读取配置：
 
 ```env
-LLM_BASE_URL=https://api.deepseek.com/v1
-LLM_API_KEY=
-LLM_MODEL=deepseek-chat
+LLM_MODEL=deepseek-v4-flash
+DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_API_KEY=
 HUNYUAN_API_KEY=
-PLANNER_MODEL=deepseek:deepseek-chat
-EXECUTOR_MODEL=deepseek:deepseek-chat
-CRITIC_MODEL=deepseek:deepseek-chat
+PLANNER_MODEL=deepseek:deepseek-v4-flash
+EXECUTOR_MODEL=deepseek:deepseek-v4-flash
+CRITIC_MODEL=deepseek:deepseek-v4-pro
 ```
 
 未配置密钥时接口会明确报错，不会返回 mock 内容。

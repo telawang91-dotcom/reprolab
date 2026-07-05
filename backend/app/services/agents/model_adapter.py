@@ -80,6 +80,11 @@ class ModelAdapter:
                             "enable_thinking", settings.siliconflow_enable_thinking
                         )
                     }
+                elif "api.deepseek.com" in base_url and model.startswith("deepseek-v4-"):
+                    thinking = request.get(
+                        "thinking", "disabled"
+                    )
+                    options["extra_body"] = {"thinking": {"type": thinking}}
                 response = client.chat.completions.create(
                     model=model,
                     messages=request["messages"],
