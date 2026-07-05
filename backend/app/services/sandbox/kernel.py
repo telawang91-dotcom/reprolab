@@ -36,12 +36,12 @@ class ExecResult:
 
 @dataclass(slots=True)
 class KernelHandle:
-    manager: KernelManager
+    manager: Any
     client: Any
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
-def _new_handle() -> KernelHandle:
+def _new_host_handle() -> KernelHandle:
     manager = KernelManager(kernel_name="python3")
     # Always run the same locked Python 3.11 environment as the backend.
     manager.kernel_spec.argv = [sys.executable, "-m", "ipykernel_launcher", "-f", "{connection_file}"]
@@ -50,6 +50,19 @@ def _new_handle() -> KernelHandle:
     client.start_channels()
     client.wait_for_ready(timeout=30)
     return KernelHandle(manager=manager, client=client)
+
+
+def _new_handle() -> KernelHandle:
+    from app.core.config import settings
+
+    if settings.sandbox_backend == "host":
+        return _new_host_handle()
+    if settings.sandbox_backend == "docker":
+        from app.services.sandbox.docker_kernel import new_docker_handle
+
+        manager, client = new_docker_handle()
+        return KernelHandle(manager=manager, client=client)
+    raise RuntimeError(f"unsupported sandbox backend: {settings.sandbox_backend}")
 
 
 def _as_artifacts(data: dict[str, Any]) -> list[CapturedOutput]:

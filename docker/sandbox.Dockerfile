@@ -2,7 +2,9 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    MPLBACKEND=Agg
+    MPLBACKEND=Agg \
+    MPLCONFIGDIR=/tmp/matplotlib \
+    HOME=/tmp
 
 RUN pip install --no-cache-dir \
     numpy==1.26.4 \
@@ -18,4 +20,3 @@ USER sandbox
 WORKDIR /workspace
 
 CMD ["python", "-c", "import time; time.sleep(31536000)"]
-

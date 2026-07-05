@@ -9,6 +9,7 @@ htmlcov/
 .env
 backend/storage/*
 !backend/storage/.gitkeep
+backend/.runtime/
 frontend/node_modules/
 frontend/.next/
 *.log

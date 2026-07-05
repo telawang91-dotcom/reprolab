@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.knowledge import Dataset, Run
+from app.core.config import settings
 from app.schemas.runs import ArtifactCapture, RunResponse
 from app.services.rag.storage import path_of, save_bytes
 from app.services.sandbox.env import EnvironmentInfo, capture_environment, get_or_create_snapshot
@@ -22,6 +23,12 @@ def _dataset_hashes(db: Session, dataset_ids: list[uuid.UUID]) -> list[str]:
     if missing:
         raise ValueError("dataset not found: " + ", ".join(missing))
     return [by_id[item].storage_hash for item in dataset_ids]
+
+
+def _execution_paths(input_hashes: list[str]) -> list[str]:
+    if settings.sandbox_backend == "docker":
+        return [f"/data/{item}" for item in input_hashes]
+    return [str(path_of(item)) for item in input_hashes]
 
 
 def _capture_artifact(output: CapturedOutput) -> tuple[ArtifactCapture, str]:
@@ -59,7 +66,10 @@ def run_code(
     if lang != "python":
         raise ValueError("only python is supported")
     input_hashes = list(input_hashes_override) if input_hashes_override is not None else _dataset_hashes(db, dataset_ids or [])
-    dataset_paths = [str(path_of(item)) for item in input_hashes]
+    # Validate content-addressed files before dispatching to either backend.
+    for item in input_hashes:
+        path_of(item)
+    dataset_paths = _execution_paths(input_hashes)
     input_hash = merged_input_hash(input_hashes)
     environment = capture_environment()
     snapshot = get_or_create_snapshot(db, environment)
@@ -121,5 +131,7 @@ def sandbox_run(
     # input_hashes are part of caller-side trust validation; datasets are mounted by the Docker backend.
     resolved_hashes = sorted(input_hashes or [])
     merged_input_hash(resolved_hashes)
-    dataset_paths = [str(path_of(item)) for item in resolved_hashes]
+    for item in resolved_hashes:
+        path_of(item)
+    dataset_paths = _execution_paths(resolved_hashes)
     return execute_code(code, seed, timeout, conversation_id=None, dataset_paths=dataset_paths)

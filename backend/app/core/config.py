@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.deepseek.com/v1"
     llm_api_key: str = ""
     llm_model: str = "deepseek-chat"
+    sandbox_backend: str = "docker"
+    sandbox_image: str = "reprolab-sandbox:py311"
     cors_origins: str = "http://localhost:3000"
 
     @property
