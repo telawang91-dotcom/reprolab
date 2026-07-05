@@ -383,6 +383,65 @@ def test_m7b_real_nli_labels_threshold_and_evidence_span(client: TestClient, pro
             settings.nli_support_threshold = old_threshold
 
 
+def test_m7c_real_numeric_repair_citation_replacement_and_flagged_limit(client: TestClient, project_id: uuid.UUID):
+    dataset = upload(client, project_id, "repair-values.csv", b"value\n1\n2\n3\n")
+    run = client.post("/api/v1/runs", json={
+        "project_id": str(project_id),
+        "code": (
+            "import pandas as pd\n"
+            "df = pd.read_csv(DATASET_PATHS[0])\n"
+            "emit_artifact('number', float(df['value'].mean()), title='repair mean', tol=1e-9)"
+        ),
+        "dataset_ids": [dataset["dataset_id"]], "seed": 42,
+    }).json()
+    artifact_id = run["artifacts"][0]["artifact_id"]
+    numeric = client.post("/api/v1/verify", json={
+        "project_id": str(project_id),
+        "text": f"均值为 99⟦art_{artifact_id[:4]}⟧。",
+        "checks": ["number"], "repair": True,
+    })
+    assert numeric.status_code == 200, numeric.text
+    repaired = numeric.json()
+    assert repaired["verdict"] == "pass" and repaired["claim_status"] == "verified"
+    assert f"2⟦art_{artifact_id[:4]}⟧" in repaired["repaired_text"]
+    assert repaired["iterations"] and "账本产物真实值" in repaired["iterations"][0]["repair_action"]
+    with SessionLocal() as db:
+        claim = db.scalar(select(Claim).where(
+            Claim.project_id == project_id, Claim.text == repaired["repaired_text"]
+        ))
+        assert claim and claim.status == "verified" and claim.repair_count >= 1
+
+    bad = upload(client, project_id, "repair-bad-source.md", ("GEOLOGY_ONLY tectonic plates.\n" * 30).encode(), "paper")
+    good = upload(client, project_id, "repair-good-source.md", ("OMEGA_SUPPORT Omega therapy lowers systolic pressure.\n" * 30).encode(), "paper")
+    from app.services.agents.model_adapter import ModelResponse
+    from app.services.agents.reflexion import repair_loop
+
+    class EvidenceAdapter:
+        def chat(self, request):
+            premise = request["messages"][-1]["content"].split("假设：", 1)[0]
+            if "OMEGA_SUPPORT" in premise:
+                return ModelResponse(content='{"label":"entailment","support_score":0.91,"reason":"直接支持"}')
+            return ModelResponse(content='{"label":"neutral","support_score":0.05,"reason":"主题无关"}')
+
+    with SessionLocal() as db:
+        citation = repair_loop(
+            db, project_id, f"Omega therapy lowers systolic pressure⟦src_{bad['id'][:4]}⟧。",
+            None, ["citation"], adapter=EvidenceAdapter(),
+        )
+        assert citation.verdict == "pass" and citation.claim_status == "verified"
+        assert f"⟦src_{good['id'][:4]}⟧" in citation.repaired_text
+        assert citation.iterations and "NLI 支持引用" in citation.iterations[0].repair_action
+
+    impossible = client.post("/api/v1/verify", json={
+        "project_id": str(project_id), "text": "无法归因的裸数字 123。",
+        "checks": ["number"], "repair": True,
+    })
+    assert impossible.status_code == 200
+    assert impossible.json()["verdict"] == "fail"
+    assert impossible.json()["claim_status"] == "flagged"
+    assert "没有满足可信约束" in impossible.json()["iterations"][0]["repair_action"]
+
+
 def test_m8_real_writeback_is_searchable_and_linked(client: TestClient, project_id: uuid.UUID):
     source = upload(client, project_id, "writeback-source.csv", b"value\n7\n8\n9\n")
     run = client.post("/api/v1/runs", json={

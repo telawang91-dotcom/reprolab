@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "deepseek-chat"
     nli_support_threshold: float = Field(default=0.6, ge=0, le=1)
+    repair_max_iterations: int = Field(default=2, ge=1, le=5)
     sandbox_backend: str = "docker"
     sandbox_image: str = "reprolab-sandbox:py311"
     cors_origins: str = "http://localhost:3000"

@@ -49,4 +49,4 @@ class VerifyResponse(StrictModel):
     items: list[VerifyItem]
     iterations: list[RepairIteration] | None = None
     claim_status: Literal["verified", "flagged"] | None = None
-
+    repaired_text: str | None = None

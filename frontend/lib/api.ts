@@ -20,7 +20,7 @@ export type ReproduceResult = {
 };
 export type AttributionResult = { target_artifact_id: string; baseline: unknown; drifted: unknown; attributions: { dimension: string; contribution: number; direction: "up" | "down"; detail: string }[] };
 export type VerifyItem = { check: "citation" | "number" | "figure"; target_anchor: string | null; verdict: "pass" | "fail"; severity: "warn" | "error"; reason: string; locate: string; label?: "entailment" | "neutral" | "contradiction" | null; support_score?: number | null; evidence_span?: string | null };
-export type VerifyResult = { verdict: "pass" | "fail"; items: VerifyItem[]; claim_status?: "verified" | "flagged" | null };
+export type VerifyResult = { verdict: "pass" | "fail"; items: VerifyItem[]; claim_status?: "verified" | "flagged" | null; repaired_text?: string | null; iterations?: { round: number; fails: number; repair_action: string }[] | null };
 export type MemoryItem = { id: string; layer: "episodic" | "semantic" | "skill"; content: string; tags: string[]; importance: number; written_at: string };
 export type SuggestionItem = { id: string; type: "hypothesis" | "literature" | "next_step"; content: string; evidence: { kind: "document" | "artifact"; id: string; anchor: string }[] };
 
@@ -58,9 +58,9 @@ export const api = {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dataset_overrides: datasetOverrides, target_artifact_id: targetArtifactId, granularity: "column", top_k: 5 })
   }),
-  verify: (text: string, checks: ("citation" | "number" | "figure")[] = ["citation", "number", "figure"]) => request<VerifyResult>("/verify", {
+  verify: (text: string, checks: ("citation" | "number" | "figure")[] = ["citation", "number", "figure"], repair = false) => request<VerifyResult>("/verify", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: DEMO_PROJECT_ID, text, checks })
+    body: JSON.stringify({ project_id: DEMO_PROJECT_ID, text, checks, repair })
   }),
   postConclusion: (claimText: string, anchors: string[]) => request<{ document_id: string }>("/conclusions", {
     method: "POST", headers: { "Content-Type": "application/json" },

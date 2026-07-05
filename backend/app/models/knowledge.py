@@ -161,6 +161,8 @@ class Claim(Base):
     text: Mapped[str] = mapped_column(Text)
     doc_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
     status: Mapped[str] = mapped_column(Text, default="unverified")
+    repair_count: Mapped[int] = mapped_column(Integer, default=0)
+    repair_meta: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
