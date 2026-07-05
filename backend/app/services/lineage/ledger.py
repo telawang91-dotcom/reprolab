@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.models.knowledge import Artifact, Dataset, Document, Edge, Run
+from app.models.knowledge import Artifact, Dataset, Document, Edge, EnvSnapshot, Run
 from app.schemas.lineage import LineageEdge, LineageNode, LineageResponse
 from app.schemas.runs import ArtifactCapture
 
@@ -87,11 +87,21 @@ def _node(db: Session, node_type: str, node_id: uuid.UUID) -> LineageNode | None
         )
     if node_type == "run":
         item = db.get(Run, node_id)
+        environment = db.get(EnvSnapshot, item.env_snapshot_id) if item is not None and item.env_snapshot_id else None
         return None if item is None else LineageNode(
             id=item.id,
             type="run",
             label=f"Run {str(item.id)[:8]}",
-            meta={"code_hash": item.code_hash, "status": item.status, "seed": item.seed, "created_at": item.created_at},
+            meta={
+                "code": item.code,
+                "code_hash": item.code_hash,
+                "status": item.status,
+                "seed": item.seed,
+                "python_version": environment.python_version if environment else None,
+                "env_hash": environment.env_hash if environment else None,
+                "packages": environment.packages if environment else [],
+                "created_at": item.created_at,
+            },
         )
     if node_type == "artifact":
         item = db.get(Artifact, node_id)

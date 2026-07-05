@@ -1,0 +1,9 @@
+"use client";
+import { Check, X, XCircle } from "lucide-react";
+import { motion } from "framer-motion";
+import type { ReproduceResult } from "@/lib/api";
+
+export function DiffPanel({ result, onClose }: { result: ReproduceResult; onClose: () => void }) {
+  return <motion.aside initial={{ x: 380 }} animate={{ x: 0 }} exit={{ x: 380 }} className="absolute bottom-0 right-0 top-0 z-30 w-[400px] overflow-y-auto border-l bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950"><div className="flex items-start"><div><div className="label">Reproduction diff</div><h2 className="mt-1 text-lg font-semibold text-red-600">检测到结果漂移</h2></div><button onClick={onClose} className="btn-secondary ml-auto h-8 w-8 px-0"><X size={15}/></button></div><div className="mt-5 space-y-3">{result.comparisons.map((item) => <div key={item.artifact_id} className={`rounded-xl border p-4 ${item.within_tol ? "border-emerald-200 bg-emerald-50/50" : "border-red-200 bg-red-50/60"}`}><div className="flex items-center gap-2"><span className={`grid h-6 w-6 place-items-center rounded-full text-white ${item.within_tol ? "bg-emerald-600" : "bg-red-600"}`}>{item.within_tol ? <Check size={13}/> : <XCircle size={13}/>}</span><span className="font-medium">{item.kind}</span><span className="ml-auto font-mono text-[10px] text-slate-400">{item.artifact_id.slice(0, 8)}</span></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div className="rounded-lg bg-white/70 p-2"><div className="label">原值</div><pre className="mt-1 overflow-auto">{JSON.stringify(item.old)}</pre></div><div className="rounded-lg bg-white/70 p-2"><div className="label">新值</div><pre className="mt-1 overflow-auto">{JSON.stringify(item.new)}</pre></div></div>{!item.within_tol && <div className="mt-2 rounded-lg bg-red-100 p-2 text-xs text-red-700">差异：{JSON.stringify(item.diff)}</div>}</div>)}</div><div className="mt-4 font-mono text-[10px] text-slate-400">new run: {result.new_run_id}</div></motion.aside>;
+}
+

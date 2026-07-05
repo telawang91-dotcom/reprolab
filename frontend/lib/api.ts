@@ -13,6 +13,11 @@ export type DocumentDetail = DocumentItem & {
 export type SearchHit = { chunk_id: string; document_id: string; content: string; section: string | null; position: number | null; score: number };
 export type Citation = { document_id: string; chunk_id: string; anchor: string };
 export type Lineage = { nodes: { id: string; type: string; label: string; meta: Record<string, unknown> }[]; edges: { from: string; to: string; relation: string }[] };
+export type ReproduceResult = {
+  status: "match" | "drift";
+  comparisons: { artifact_id: string; kind: string; old: unknown; new: unknown; within_tol: boolean; diff?: unknown }[];
+  new_run_id: string;
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...init, cache: "no-store" });
@@ -39,7 +44,11 @@ export const api = {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ project_id: DEMO_PROJECT_ID, query })
   }),
-  lineage: (artifactId: string) => request<Lineage>(`/artifacts/${artifactId}/lineage`)
+  lineage: (artifactId: string) => request<Lineage>(`/artifacts/${artifactId}/lineage`),
+  reproduce: (runId: string, datasetOverrides: Record<string, string> = {}) => request<ReproduceResult>(`/runs/${runId}/reproduce`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dataset_overrides: datasetOverrides })
+  })
 };
 
 export type ChatEvent = { event: "plan" | "thinking" | "code" | "run" | "artifact" | "message" | "done"; data: Record<string, any> };
@@ -73,4 +82,3 @@ export async function streamChat(
     }
   }
 }
-
