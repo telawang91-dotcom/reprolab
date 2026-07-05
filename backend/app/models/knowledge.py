@@ -149,3 +149,16 @@ class Message(Base):
     extra_metadata: Mapped[dict[str, Any] | None] = mapped_column("meta", JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+
+
+class Claim(Base):
+    __tablename__ = "claims"
+    __table_args__ = (
+        CheckConstraint("status IN ('unverified','verified','flagged')", name="ck_claims_status"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"))
+    text: Mapped[str] = mapped_column(Text)
+    doc_id: Mapped[uuid.UUID | None] = mapped_column(index=True)
+    status: Mapped[str] = mapped_column(Text, default="unverified")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

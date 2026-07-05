@@ -19,6 +19,7 @@ from app.main import app
 from app.models.knowledge import (
     Artifact,
     Chunk,
+    Claim,
     Conversation,
     Dataset,
     Document,
@@ -50,6 +51,7 @@ def project_id():
         db.execute(delete(Run).where(Run.project_id == value))
         db.execute(delete(Message).where(Message.conversation_id.in_(conversation_ids)))
         db.execute(delete(Conversation).where(Conversation.project_id == value))
+        db.execute(delete(Claim).where(Claim.project_id == value))
         db.execute(delete(Chunk).where(Chunk.document_id.in_(document_ids)))
         db.execute(delete(Document).where(Document.project_id == value))
         db.execute(delete(Dataset).where(Dataset.project_id == value))
@@ -245,6 +247,54 @@ def test_m4_m5_real_ledger_match_and_drift(client: TestClient, project_id: uuid.
         assert network["status"] == "error"
 
 
+def test_m7_real_adversarial_verification(client: TestClient, project_id: uuid.UUID):
+    raw = pd.DataFrame({"value": [1.0, 2.0, 3.0]}).to_csv(index=False).encode()
+    dataset = upload(client, project_id, "verify-source.csv", raw)
+    run = client.post("/api/v1/runs", json={
+        "project_id": str(project_id),
+        "code": (
+            "import pandas as pd\n"
+            "df = pd.read_csv(DATASET_PATHS[0])\n"
+            "emit_artifact('coefficient', float(df['value'].mean()), title='verified mean', tol=1e-6)"
+        ),
+        "dataset_ids": [dataset["dataset_id"]], "seed": 42,
+    }).json()
+    artifact_id = run["artifacts"][0]["artifact_id"]
+    anchor = f"⟦art_{artifact_id[:4]}⟧"
+
+    valid = client.post("/api/v1/verify", json={
+        "project_id": str(project_id), "text": f"均值为 2{anchor}。", "checks": ["number"],
+    })
+    assert valid.status_code == 200, valid.text
+    assert valid.json()["verdict"] == "pass"
+    assert valid.json()["items"][0]["verdict"] == "pass"
+
+    mismatch = client.post("/api/v1/verify", json={
+        "project_id": str(project_id), "text": f"均值为 99{anchor}。", "checks": ["number"],
+    }).json()
+    assert mismatch["verdict"] == "fail" and "不符" in mismatch["items"][0]["reason"]
+    bare = client.post("/api/v1/verify", json={
+        "project_id": str(project_id), "text": "均值为 2。", "checks": ["number"],
+    }).json()
+    assert bare["verdict"] == "fail" and bare["items"][0]["target_anchor"] is None
+    fake_reference = client.post("/api/v1/verify", json={
+        "project_id": str(project_id), "text": "该结论已有研究支持⟦src_dead⟧。", "checks": ["citation"],
+    }).json()
+    assert fake_reference["verdict"] == "fail" and "不在知识库" in fake_reference["items"][0]["reason"]
+
+    writing = upload(client, project_id, "verified-note.md", f"均值为 2{anchor}。".encode(), "note")
+    claim_id = uuid.uuid4()
+    with SessionLocal() as db:
+        db.add(Claim(id=claim_id, project_id=project_id, doc_id=uuid.UUID(writing["id"]), text=f"均值为 2{anchor}。"))
+        db.commit()
+    status = client.post("/api/v1/verify", json={
+        "project_id": str(project_id), "doc_id": writing["id"], "checks": ["number"],
+    }).json()
+    assert status["verdict"] == "pass" and status["claim_status"] == "verified"
+    with SessionLocal() as db:
+        assert db.get(Claim, claim_id).status == "verified"
+
+
 @pytest.mark.skipif(not settings.llm_api_key, reason="LLM_API_KEY intentionally deferred")
 def test_m3_real_sse_chat_requires_configured_llm(client: TestClient, project_id: uuid.UUID):
     with client.stream("POST", "/api/v1/chat", json={
@@ -254,4 +304,3 @@ def test_m3_real_sse_chat_requires_configured_llm(client: TestClient, project_id
         body = "".join(response.iter_text())
     positions = [body.index(f"event: {name}") for name in ("plan", "thinking", "code", "run", "artifact", "message", "done")]
     assert positions == sorted(positions)
-
