@@ -8,7 +8,7 @@ const links = [
   { href: "/knowledge", label: "知识库", icon: BookOpen },
   { href: "/analysis", label: "分析对话", icon: FlaskConical },
   { href: "/lineage", label: "溯源图谱", icon: Network, disabled: true },
-  { href: "/writing", label: "写作面板", icon: Workflow, disabled: true }
+  { href: "/writing", label: "写作面板", icon: Workflow }
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -40,4 +40,3 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {command && <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/35 pt-[15vh]" onMouseDown={() => setCommand(false)}><div className="card w-[520px] overflow-hidden" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center gap-3 border-b p-4"><Command size={18}/><input autoFocus className="w-full bg-transparent outline-none" placeholder="搜索文档、会话或命令…"/><kbd className="text-xs text-slate-400">ESC</kbd></div><div className="p-3 text-sm text-slate-500">输入关键词开始搜索。跨空间命令将在 P1 开放。</div></div></div>}
   </div>;
 }
-

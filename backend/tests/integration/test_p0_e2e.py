@@ -295,6 +295,44 @@ def test_m7_real_adversarial_verification(client: TestClient, project_id: uuid.U
         assert db.get(Claim, claim_id).status == "verified"
 
 
+def test_m8_real_writeback_is_searchable_and_linked(client: TestClient, project_id: uuid.UUID):
+    source = upload(client, project_id, "writeback-source.csv", b"value\n7\n8\n9\n")
+    run = client.post("/api/v1/runs", json={
+        "project_id": str(project_id),
+        "code": (
+            "import pandas as pd\n"
+            "df = pd.read_csv(DATASET_PATHS[0])\n"
+            "emit_artifact('coefficient', float(df['value'].mean()), title='writeback mean', tol=1e-6)"
+        ),
+        "dataset_ids": [source["dataset_id"]], "seed": 42,
+    }).json()
+    artifact_id = run["artifacts"][0]["artifact_id"]
+    anchor = f"art_{artifact_id[:4]}"
+    marker = f"reprolab-writeback-{uuid.uuid4().hex}"
+    claim_text = f"{marker} 的均值为 8⟦{anchor}⟧。"
+    response = client.post("/api/v1/conclusions", json={
+        "project_id": str(project_id), "claim_text": claim_text,
+        "anchors": [anchor], "status": "verified",
+    })
+    assert response.status_code == 200, response.text
+    document_id = uuid.UUID(response.json()["document_id"])
+    with SessionLocal() as db:
+        document = db.get(Document, document_id)
+        claim = db.scalar(select(Claim).where(Claim.doc_id == document_id))
+        assert document and document.type == "note"
+        assert claim and claim.status == "verified"
+        assert db.scalar(select(Edge.id).where(
+            Edge.from_id == uuid.UUID(artifact_id), Edge.to_id == claim.id, Edge.relation == "supports",
+        )) is not None
+
+    search = client.post("/api/v1/search", json={
+        "project_id": str(project_id), "query": marker,
+        "mode": "keyword", "filters": {"type": "note"}, "k": 5,
+    })
+    assert search.status_code == 200, search.text
+    assert str(document_id) in {item["document_id"] for item in search.json()["hits"]}
+
+
 @pytest.mark.skipif(not settings.llm_api_key, reason="LLM_API_KEY intentionally deferred")
 def test_m3_real_sse_chat_requires_configured_llm(client: TestClient, project_id: uuid.UUID):
     with client.stream("POST", "/api/v1/chat", json={

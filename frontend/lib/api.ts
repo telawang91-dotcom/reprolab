@@ -18,6 +18,8 @@ export type ReproduceResult = {
   comparisons: { artifact_id: string; kind: string; old: unknown; new: unknown; within_tol: boolean; diff?: unknown }[];
   new_run_id: string;
 };
+export type VerifyItem = { check: "citation" | "number" | "figure"; target_anchor: string | null; verdict: "pass" | "fail"; severity: "warn" | "error"; reason: string; locate: string };
+export type VerifyResult = { verdict: "pass" | "fail"; items: VerifyItem[]; claim_status?: "verified" | "flagged" | null };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...init, cache: "no-store" });
@@ -48,6 +50,14 @@ export const api = {
   reproduce: (runId: string, datasetOverrides: Record<string, string> = {}) => request<ReproduceResult>(`/runs/${runId}/reproduce`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dataset_overrides: datasetOverrides })
+  }),
+  verify: (text: string, checks: ("citation" | "number" | "figure")[] = ["citation", "number", "figure"]) => request<VerifyResult>("/verify", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_id: DEMO_PROJECT_ID, text, checks })
+  }),
+  postConclusion: (claimText: string, anchors: string[]) => request<{ document_id: string }>("/conclusions", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_id: DEMO_PROJECT_ID, claim_text: claimText, anchors, status: "verified" })
   })
 };
 
