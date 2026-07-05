@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+.dark { color-scheme: dark; }
+* { border-color: #e2e8f0; }
+html, body { min-height: 100%; }
+body { margin: 0; background: #f8fafc; color: #0f172a; font-size: 14px; }
+.dark body { background: #0b0f17; color: #e5e7eb; }
+button, input, textarea, select { font: inherit; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, a:focus-visible {
+  outline: 2px solid #2563eb; outline-offset: 2px;
+}
+::selection { background: #dbeafe; color: #1e3a8a; }
+
+@layer components {
+  .card { @apply rounded-xl border border-slate-200 bg-white shadow-card dark:border-slate-800 dark:bg-slate-900; }
+  .btn { @apply inline-flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium transition duration-150 disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-primary { @apply btn bg-brand text-white hover:bg-brand-hover; }
+  .btn-secondary { @apply btn border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800; }
+  .input { @apply h-10 rounded-lg border border-slate-200 bg-white px-3 text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100; }
+  .label { @apply text-xs font-medium uppercase tracking-wide text-slate-500; }
+}
+
