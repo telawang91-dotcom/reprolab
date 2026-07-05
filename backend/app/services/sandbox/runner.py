@@ -17,11 +17,11 @@ def _dataset_hashes(db: Session, dataset_ids: list[uuid.UUID]) -> list[str]:
     if not dataset_ids:
         return []
     rows = list(db.scalars(select(Dataset).where(Dataset.id.in_(dataset_ids))))
-    found = {row.id for row in rows}
-    missing = [str(item) for item in dataset_ids if item not in found]
+    by_id = {row.id: row for row in rows}
+    missing = [str(item) for item in dataset_ids if item not in by_id]
     if missing:
         raise ValueError("dataset not found: " + ", ".join(missing))
-    return sorted(row.storage_hash for row in rows)
+    return [by_id[item].storage_hash for item in dataset_ids]
 
 
 def _capture_artifact(output: CapturedOutput) -> tuple[ArtifactCapture, str]:
@@ -58,7 +58,7 @@ def run_code(
 ) -> RunResponse:
     if lang != "python":
         raise ValueError("only python is supported")
-    input_hashes = sorted(input_hashes_override) if input_hashes_override is not None else _dataset_hashes(db, dataset_ids or [])
+    input_hashes = list(input_hashes_override) if input_hashes_override is not None else _dataset_hashes(db, dataset_ids or [])
     dataset_paths = [str(path_of(item)) for item in input_hashes]
     input_hash = merged_input_hash(input_hashes)
     environment = capture_environment()

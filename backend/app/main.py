@@ -9,6 +9,7 @@ from app.api.documents import router as documents_router
 from app.api.search import router as search_router
 from app.api.runs import router as runs_router
 from app.api.lineage import router as lineage_router
+from app.api.chat import router as chat_router
 from app.core.config import settings
 from app.services.rag.embedder import preheat
 
@@ -33,6 +34,7 @@ app.include_router(documents_router, prefix=settings.api_prefix)
 app.include_router(search_router, prefix=settings.api_prefix)
 app.include_router(runs_router, prefix=settings.api_prefix)
 app.include_router(lineage_router, prefix=settings.api_prefix)
+app.include_router(chat_router, prefix=settings.api_prefix)
 
 
 @app.exception_handler(HTTPException)
