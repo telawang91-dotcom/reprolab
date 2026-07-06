@@ -50,6 +50,8 @@ class ModelAdapter:
             return provider, model, settings.deepseek_base_url or settings.llm_base_url, settings.deepseek_api_key or settings.llm_api_key
         if provider == "hunyuan":
             return provider, model, settings.hunyuan_base_url, settings.hunyuan_api_key
+        if provider == "custom":
+            return provider, model, settings.llm_base_url, settings.llm_api_key
         if provider == "claude":
             if not settings.claude_api_key:
                 raise ModelAdapterError(provider, "CLAUDE_API_KEY is not configured")
@@ -63,6 +65,9 @@ class ModelAdapter:
         if key not in self._clients:
             self._clients[key] = self._client_factory(api_key=api_key, base_url=base_url)
         return self._clients[key]
+
+    def clear_clients(self) -> None:
+        self._clients.clear()
 
     def chat(self, request: dict[str, Any]) -> ModelResponse:
         provider, model, base_url, api_key = self._route(request.get("model"))

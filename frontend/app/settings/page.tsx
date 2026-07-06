@@ -1,27 +1,96 @@
 "use client";
 
-import { CheckCircle2, CircleHelp, Database, KeyRound, Server, ShieldCheck } from "lucide-react";
+import { Check, CheckCircle2, CircleHelp, Database, Eye, EyeOff, KeyRound, Loader2, Save, Server, ShieldCheck, SlidersHorizontal, UserRound, Wifi } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+
+import { api, type ModelConfig, type ModelTestResult } from "@/lib/api";
 
 const API_ROOT = (process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000/api/v1").replace(/\/api\/v1$/, "");
+const providerMeta = {
+  deepseek: { label: "DeepSeek 官方", baseUrl: "https://api.deepseek.com/v1", analysis: "deepseek-chat", review: "deepseek-reasoner" },
+  hunyuan: { label: "腾讯混元", baseUrl: "https://api.hunyuan.cloud.tencent.com/v1", analysis: "hunyuan-turbos-latest", review: "hunyuan-turbos-latest" },
+  custom: { label: "其他兼容服务", baseUrl: "", analysis: "", review: "" },
+} as const;
 
 export default function SettingsPage() {
   const [backend, setBackend] = useState<"checking" | "online" | "offline">("checking");
   const [database, setDatabase] = useState<"checking" | "online" | "offline">("checking");
-  useEffect(() => { fetch(`${API_ROOT}/health`, { cache: "no-store" }).then(async (response) => { const result = await response.json(); setBackend(response.ok ? "online" : "offline"); setDatabase(result.database === "online" ? "online" : "offline"); }).catch(() => { setBackend("offline"); setDatabase("offline"); }); }, []);
-  return <div className="mx-auto max-w-5xl space-y-6 p-5 lg:p-8">
-    <header><div className="label">系统状态</div><h1 className="mt-1 text-2xl font-semibold">设置</h1><p className="mt-2 text-sm text-slate-500">检查服务、数据库和模型是否可用。模型密钥只保存在服务端，不会发送到浏览器。</p></header>
-    <section className="grid gap-4 md:grid-cols-3">
-      <StatusCard icon={Server} title="后端服务" value={backend === "checking" ? "检查中…" : backend === "online" ? "已连接" : "未连接"} ok={backend === "online"}/>
-      <StatusCard icon={Database} title="数据与向量库" value={database === "checking" ? "检查中…" : database === "online" ? "PostgreSQL 已连接" : "PostgreSQL 未连接"} ok={database === "online"}/>
-      <StatusCard icon={ShieldCheck} title="沙箱与可信链" value="运行时按服务端配置"/>
+  const [config, setConfig] = useState<ModelConfig>();
+  const [apiKey, setApiKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [notice, setNotice] = useState<{ kind: "success" | "error"; text: string }>();
+  const [testResult, setTestResult] = useState<ModelTestResult>();
+
+  useEffect(() => {
+    fetch(`${API_ROOT}/health`, { cache: "no-store" }).then(async (response) => {
+      const result = await response.json(); setBackend(response.ok ? "online" : "offline"); setDatabase(result.database === "online" ? "online" : "offline");
+    }).catch(() => { setBackend("offline"); setDatabase("offline"); });
+    api.modelConfig().then(setConfig).catch((reason) => setNotice({ kind: "error", text: reason instanceof Error ? reason.message : "模型配置读取失败" })).finally(() => setLoading(false));
+  }, []);
+
+  function changeProvider(provider: ModelConfig["provider"]) {
+    const preset = providerMeta[provider];
+    setConfig((current) => current ? { ...current, provider, base_url: preset.baseUrl, analysis_model: preset.analysis, review_model: preset.review } : current);
+    setTestResult(undefined); setNotice(undefined);
+  }
+
+  async function save(testAfter = false) {
+    if (!config) return;
+    setSaving(true); setNotice(undefined); setTestResult(undefined);
+    try {
+      const saved = await api.saveModelConfig({
+        provider: config.provider, base_url: config.base_url, analysis_model: config.analysis_model,
+        review_model: config.review_model, ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+      });
+      setConfig(saved); setApiKey("");
+      window.dispatchEvent(new CustomEvent("reprolab-model-updated", { detail: saved.provider }));
+      setNotice({ kind: "success", text: "模型设置已保存" });
+      if (testAfter) {
+        setTesting(true);
+        const result = await api.testModel(); setTestResult(result);
+        setNotice(result.ok ? { kind: "success", text: "设置已保存，模型连接正常" } : { kind: "error", text: result.message });
+      }
+    } catch (reason) {
+      setNotice({ kind: "error", text: reason instanceof Error ? reason.message : "设置保存失败" });
+    } finally { setSaving(false); setTesting(false); }
+  }
+
+  function submit(event: FormEvent) { event.preventDefault(); void save(false); }
+
+  return <div className="mx-auto max-w-6xl space-y-6 p-5 lg:p-8">
+    <header className="flex flex-wrap items-end justify-between gap-4"><div><div className="label">工作区偏好</div><h1 className="mt-1 text-2xl font-semibold">设置</h1><p className="mt-2 text-sm text-slate-500">管理模型、个人资料和本机运行状态。</p></div><Link href="/profile" className="btn-secondary"><UserRound size={15}/>个人资料</Link></header>
+
+    {notice && <div role="status" className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-sm ${notice.kind === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-700"}`}>{notice.kind === "success" ? <Check size={16}/> : <CircleHelp size={16}/>}<span>{notice.text}</span><button onClick={() => setNotice(undefined)} className="ml-auto text-xs underline">关闭</button></div>}
+
+    <section className="grid gap-5 lg:grid-cols-[220px_1fr]">
+      <aside className="space-y-2"><div className="rounded-xl border bg-white p-2 dark:border-slate-800 dark:bg-slate-950"><div className="flex items-center gap-3 rounded-lg bg-blue-50 px-3 py-3 text-sm font-medium text-brand dark:bg-blue-950/40"><SlidersHorizontal size={16}/>模型配置</div><Link href="/profile" className="mt-1 flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"><UserRound size={16}/>个人资料</Link><a href="#system-status" className="mt-1 flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"><Server size={16}/>运行状态</a></div><p className="px-2 text-xs leading-5 text-slate-400">密钥只提交给本机后端保存，不会写入浏览器存储或返回页面。</p></aside>
+
+      <form onSubmit={submit} className="card overflow-hidden">
+        <div className="flex items-start gap-3 border-b p-5"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-brand dark:bg-blue-950"><KeyRound size={18}/></span><div><h2 className="font-semibold">模型服务</h2><p className="mt-1 text-sm text-slate-500">选择日常分析和结果校验使用的模型。</p></div>{config?.api_key_configured && <span className="ml-auto hidden items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 sm:flex"><CheckCircle2 size={13}/>密钥已配置</span>}</div>
+        {loading || !config ? <div className="flex min-h-72 items-center justify-center gap-2 text-sm text-slate-400"><Loader2 size={16} className="animate-spin"/>读取模型设置…</div> : <div className="space-y-5 p-5">
+          <fieldset><legend className="mb-2 text-sm font-medium">服务提供方</legend><div className="grid gap-2 sm:grid-cols-3">{(Object.keys(providerMeta) as ModelConfig["provider"][]).map((provider) => <label key={provider} className={`cursor-pointer rounded-xl border p-3 transition ${config.provider === provider ? "border-blue-300 bg-blue-50 dark:bg-blue-950/30" : "hover:border-slate-300"}`}><input type="radio" name="provider" className="sr-only" checked={config.provider === provider} onChange={() => changeProvider(provider)}/><span className="flex items-center text-sm font-medium">{providerMeta[provider].label}{config.provider === provider && <Check size={14} className="ml-auto text-brand"/>}</span><span className="mt-1 block text-xs text-slate-400">{provider === "custom" ? "支持 OpenAI 接口格式" : "使用官方接口"}</span></label>)}</div></fieldset>
+
+          <label className="block"><span className="text-sm font-medium">服务地址</span><input value={config.base_url} onChange={(event) => setConfig({ ...config, base_url: event.target.value })} className="input mt-2 w-full" placeholder="https://api.example.com/v1" required/><span className="mt-1.5 block text-xs text-slate-400">通常保留默认值；使用代理或私有服务时再修改。</span></label>
+
+          <div className="grid gap-4 sm:grid-cols-2"><label><span className="text-sm font-medium">分析模型</span><input value={config.analysis_model} onChange={(event) => setConfig({ ...config, analysis_model: event.target.value })} className="input mt-2 w-full" placeholder="例如 deepseek-chat" required/><span className="mt-1.5 block text-xs text-slate-400">用于规划步骤、生成代码和回答。</span></label><label><span className="text-sm font-medium">校验模型</span><input value={config.review_model} onChange={(event) => setConfig({ ...config, review_model: event.target.value })} className="input mt-2 w-full" placeholder="例如 deepseek-reasoner" required/><span className="mt-1.5 block text-xs text-slate-400">用于检查引用、数字和分析结果。</span></label></div>
+
+          <label className="block"><span className="flex items-center text-sm font-medium">API Key{config.api_key_configured && <span className="ml-2 text-xs font-normal text-emerald-600">已保存 {config.api_key_hint}</span>}</span><div className="relative mt-2"><input type={showKey ? "text" : "password"} value={apiKey} onChange={(event) => setApiKey(event.target.value)} className="input w-full pr-11" autoComplete="off" placeholder={config.api_key_configured ? "留空则继续使用现有密钥" : "输入服务商提供的 API Key"}/><button type="button" onClick={() => setShowKey((value) => !value)} aria-label={showKey ? "隐藏密钥" : "显示密钥"} className="absolute right-1.5 top-1.5 grid h-7 w-8 place-items-center rounded-md text-slate-400 hover:bg-slate-100">{showKey ? <EyeOff size={15}/> : <Eye size={15}/>}</button></div><span className="mt-1.5 block text-xs text-slate-400">出于安全考虑，已保存的密钥不能再次查看。</span></label>
+
+          {testResult && <div className={`rounded-xl border p-4 text-sm ${testResult.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-700"}`}><div className="font-medium">{testResult.ok ? "连接测试通过" : "连接测试失败"}</div><p className="mt-1">{testResult.message}</p><p className="mt-2 text-xs opacity-70">{testResult.model} · {testResult.latency_ms} ms</p></div>}
+
+          <div className="flex flex-wrap justify-end gap-2 border-t pt-5"><button type="button" onClick={() => void save(true)} disabled={saving || testing} className="btn-secondary"><Wifi size={15}/>{testing ? "测试中…" : "保存并测试"}</button><button type="submit" disabled={saving || testing} className="btn-primary"><Save size={15}/>{saving ? "保存中…" : "保存设置"}</button></div>
+        </div>}
+      </form>
     </section>
-    <section className="card p-6"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-50 text-emerald-700"><KeyRound size={18}/></span><div><h2 className="font-semibold">模型服务</h2><p className="mt-1 text-sm text-slate-500">当前使用 DeepSeek 完成分析规划、代码生成和结果检查。更换模型只需修改服务端配置。</p></div><span className="ml-auto hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 sm:block">密钥仅服务端可见</span></div></section>
-    <section className="grid gap-4 md:grid-cols-2"><article className="card p-5"><h2 className="font-semibold">页面没有数据怎么办？</h2><ol className="mt-3 space-y-2 text-sm leading-6 text-slate-600"><li>1. 确认上方服务和数据库均显示“已连接”。</li><li>2. 如果未连接，请先启动 ReproLab 服务。</li><li>3. 服务正常后，先在知识库上传资料。</li></ol></article><article className="card p-5"><h2 className="font-semibold">第一次使用</h2><p className="mt-3 text-sm leading-6 text-slate-600">产品指南会带你走完“上传资料—分析—核对来源—保存结论”。</p><Link href="/guide" className="btn-secondary mt-4"><CircleHelp size={15}/>打开产品指南</Link></article></section>
+
+    <section id="system-status" className="scroll-mt-20"><div className="mb-3"><h2 className="font-semibold">运行状态</h2><p className="mt-1 text-sm text-slate-500">用于排查页面无法加载或分析无法执行的问题。</p></div><div className="grid gap-3 md:grid-cols-3"><StatusCard icon={Server} title="应用服务" state={backend}/><StatusCard icon={Database} title="数据与向量库" state={database}/><article className="card p-4"><div className="flex items-center gap-2 text-sm font-medium"><ShieldCheck size={16} className="text-brand"/>可信运行环境</div><p className="mt-3 text-sm text-slate-500">Docker 沙箱 · 内容指纹已启用</p></article></div></section>
   </div>;
 }
 
-function StatusCard({ icon: Icon, title, value, ok }: { icon: typeof Server; title: string; value: string; ok?: boolean }) {
-  return <article className="card p-5"><div className="flex items-center gap-2 text-sm font-medium"><Icon size={16} className={ok ? "text-emerald-600" : "text-brand"}/>{title}{ok && <CheckCircle2 size={14} className="ml-auto text-emerald-600"/>}</div><p className="mt-3 text-sm text-slate-500">{value}</p></article>;
+function StatusCard({ icon: Icon, title, state }: { icon: typeof Server; title: string; state: "checking" | "online" | "offline" }) {
+  return <article className="card p-4"><div className="flex items-center gap-2 text-sm font-medium"><Icon size={16} className={state === "online" ? "text-emerald-600" : "text-slate-400"}/>{title}<span className={`ml-auto h-2 w-2 rounded-full ${state === "online" ? "bg-emerald-500" : state === "offline" ? "bg-red-500" : "animate-pulse bg-amber-400"}`}/></div><p className="mt-3 text-sm text-slate-500">{state === "online" ? "运行正常" : state === "offline" ? "暂时无法连接" : "正在检查…"}</p></article>;
 }

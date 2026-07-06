@@ -24,6 +24,11 @@ export type VerifyResult = { verdict: "pass" | "fail"; items: VerifyItem[]; clai
 export type MemoryItem = { id: string; layer: "episodic" | "semantic" | "skill"; content: string; tags: string[]; importance: number; written_at: string };
 export type SuggestionItem = { id: string; type: "hypothesis" | "literature" | "next_step"; content: string; evidence: { kind: "document" | "artifact"; id: string; anchor: string }[] };
 export type SkillItem = { id: string; project_id: string | null; name: string; discipline: string | null; template: string; meta: Record<string, unknown> | null; created_at: string };
+export type ModelConfig = {
+  provider: "deepseek" | "hunyuan" | "custom"; base_url: string;
+  analysis_model: string; review_model: string; api_key_configured: boolean; api_key_hint: string | null;
+};
+export type ModelTestResult = { ok: boolean; message: string; model: string; latency_ms: number };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...init, cache: "no-store" });
@@ -82,7 +87,12 @@ export const api = {
   skills: (discipline?: string) => request<SkillItem[]>(`/skills?project_id=${DEMO_PROJECT_ID}${discipline ? `&discipline=${encodeURIComponent(discipline)}` : ""}`),
   createSkill: (payload: Omit<SkillItem, "id" | "created_at">) => request<SkillItem>("/skills", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
-  })
+  }),
+  modelConfig: () => request<ModelConfig>("/settings/model"),
+  saveModelConfig: (payload: Omit<ModelConfig, "api_key_configured" | "api_key_hint"> & { api_key?: string }) => request<ModelConfig>("/settings/model", {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+  }),
+  testModel: () => request<ModelTestResult>("/settings/model/test", { method: "POST" })
 };
 
 export type ChatEvent = { event: "plan" | "thinking" | "code" | "run" | "artifact" | "message" | "done"; data: Record<string, any> };
