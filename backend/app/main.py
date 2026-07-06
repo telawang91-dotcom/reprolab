@@ -19,6 +19,7 @@ from app.api.agent import router as agent_router
 from app.core.db import SessionLocal
 from app.core.config import settings
 from app.services.rag.embedder import preheat
+from app.services.sandbox.kernel import kernel_registry
 from app.services.skills.store import ensure_builtins
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -35,7 +36,10 @@ async def lifespan(_: FastAPI):
     except SQLAlchemyError:
         # The health endpoint remains usable while the explicitly configured database is offline.
         pass
-    yield
+    try:
+        yield
+    finally:
+        kernel_registry.close_all()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
