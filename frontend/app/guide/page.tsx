@@ -5,16 +5,16 @@ import Link from "next/link";
 
 const workflow = [
   { number: "01", title: "资料入库", text: "上传数据、论文、笔记或代码，建立内容指纹和检索切块。", href: "/knowledge", icon: Database },
-  { number: "02", title: "对话分析", text: "选择数据集，用自然语言描述问题；Agent 动态生成并运行 Python。", href: "/analysis", icon: FlaskConical },
+  { number: "02", title: "提出分析问题", text: "选择数据，用自己的话描述要比较、检验或解释什么。", href: "/analysis", icon: FlaskConical },
   { number: "03", title: "查看溯源", text: "从产物锚点进入血缘图，查看原始数据、代码、环境和输出。", href: "/analysis", icon: Network },
   { number: "04", title: "校验写作", text: "检查数字、引用与图表，修复问题，通过后回写可信结论。", href: "/writing", icon: FileCheck2 },
 ];
 
 const capabilities = [
   { title: "知识库", text: "文件入库、混合检索、文献问答与原文定位。", icon: BookOpen },
-  { title: "分析 Agent", text: "规划、代码生成、沙箱运行、失败修正与产物登记。", icon: FlaskConical },
+  { title: "数据分析", text: "根据问题生成并运行代码，失败时尝试修正，并登记每项结果。", icon: FlaskConical },
   { title: "复现与漂移", text: "固定随机种子重跑；数值按容差、文件按内容哈希比较。", icon: Network },
-  { title: "对抗式三查", text: "拦截裸数字、幻觉引用、张冠李戴和不可复现图表。", icon: ShieldCheck },
+  { title: "结论检查", text: "检查无来源数字、错误引用和无法复现的图表。", icon: ShieldCheck },
   { title: "科研记忆", text: "记住研究偏好与方法，并按语义相关性和时效召回。", icon: Brain },
   { title: "主动建议与技能", text: "建议必须绑定真实证据；技能包只作为可选加速模板。", icon: Lightbulb },
 ];
