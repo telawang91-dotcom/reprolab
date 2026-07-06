@@ -11,7 +11,7 @@ from app.schemas.runs import ArtifactCapture
 
 
 def _value_json(capture: ArtifactCapture) -> Any:
-    if capture.kind == "number":
+    if capture.kind in {"number", "coefficient"}:
         return {"value": capture.value, "mime_type": capture.mime_type}
     if capture.kind == "table":
         return {"data": capture.value, "mime_type": capture.mime_type}

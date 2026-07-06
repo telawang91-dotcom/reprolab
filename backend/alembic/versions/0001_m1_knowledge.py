@@ -1,5 +1,7 @@
 """M1 knowledge base tables."""
 
+import uuid
+
 from alembic import op
 import sqlalchemy as sa
 from pgvector.sqlalchemy import Vector
@@ -75,13 +77,16 @@ def upgrade() -> None:
     )
     op.execute(
         sa.text("INSERT INTO users (id, name, email) VALUES (:id, 'Demo User', 'demo@reprolab.local')")
-        .bindparams(id=DEMO_USER_ID)
+        .bindparams(sa.bindparam("id", value=uuid.UUID(DEMO_USER_ID), type_=sa.Uuid()))
     )
     op.execute(
         sa.text(
             "INSERT INTO projects (id, owner_id, name, description) "
             "VALUES (:id, :owner_id, 'ReproLab Demo', 'Default demo project')"
-        ).bindparams(id=DEMO_PROJECT_ID, owner_id=DEMO_USER_ID)
+        ).bindparams(
+            sa.bindparam("id", value=uuid.UUID(DEMO_PROJECT_ID), type_=sa.Uuid()),
+            sa.bindparam("owner_id", value=uuid.UUID(DEMO_USER_ID), type_=sa.Uuid()),
+        )
     )
 
 

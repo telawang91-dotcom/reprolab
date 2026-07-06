@@ -29,6 +29,10 @@ try:
 except ImportError:
     pass
 try:
+    get_ipython().run_line_magic("matplotlib", "inline")
+except (NameError, ImportError):
+    pass
+try:
     import torch as _reprolab_torch
     _reprolab_torch.manual_seed(SEED)
 except ImportError:

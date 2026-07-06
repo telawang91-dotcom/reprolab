@@ -1,6 +1,16 @@
 import uuid
 
+import pytest
+
+from app.core.config import settings
 from app.services.sandbox.kernel import execute_code, kernel_registry
+
+
+@pytest.fixture(autouse=True)
+def host_sandbox(monkeypatch):
+    monkeypatch.setattr(settings, "sandbox_backend", "host")
+    yield
+    kernel_registry.close_all()
 
 
 def test_persistent_kernel_and_seed_reproducibility():
