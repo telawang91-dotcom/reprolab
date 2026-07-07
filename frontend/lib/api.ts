@@ -23,7 +23,18 @@ export type VerifyItem = { check: "citation" | "number" | "figure"; target_ancho
 export type VerifyResult = { verdict: "pass" | "fail"; items: VerifyItem[]; claim_status?: "verified" | "flagged" | null; repaired_text?: string | null; iterations?: { round: number; fails: number; repair_action: string }[] | null };
 export type MemoryItem = { id: string; layer: "episodic" | "semantic" | "skill"; content: string; tags: string[]; importance: number; written_at: string };
 export type SuggestionItem = { id: string; type: "hypothesis" | "literature" | "next_step"; content: string; evidence: { kind: "document" | "artifact"; id: string; anchor: string }[] };
-export type SkillItem = { id: string; project_id: string | null; name: string; discipline: string | null; template: string; meta: Record<string, unknown> | null; created_at: string };
+export type SkillItem = {
+  id: string; project_id: string | null; name: string; discipline: string | null; template: string;
+  meta: Record<string, unknown> | null; intent: string; input_roles: Record<string, Record<string, unknown>>;
+  version: number; origin: "local" | "builtin" | "imported" | "hub"; package_hash: string | null; created_at: string;
+};
+export type SkillHubItem = { id: string; name: string; intent: string; discipline: string; version: number; author: string };
+export type SkillApplyResult = {
+  skill_id: string; fallback_used: boolean; mapping: Record<string, string>; mapping_reason: string;
+  run_id: string | null; status: "success" | "error"; code: string | null; artifacts: Record<string, any>[];
+  conversation_id: string | null; events: ChatEvent[];
+  token_usage: { mapping_tokens: number; estimated_from_scratch_tokens: number; saved_tokens: number };
+};
 export type ModelConfig = {
   provider: "deepseek" | "hunyuan" | "custom"; base_url: string;
   analysis_model: string; review_model: string; api_key_configured: boolean; api_key_hint: string | null;
@@ -87,6 +98,24 @@ export const api = {
   skills: (discipline?: string) => request<SkillItem[]>(`/skills?project_id=${DEMO_PROJECT_ID}${discipline ? `&discipline=${encodeURIComponent(discipline)}` : ""}`),
   createSkill: (payload: Omit<SkillItem, "id" | "created_at">) => request<SkillItem>("/skills", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+  }),
+  harvestSkill: (artifactId: string, name: string, intent: string, discipline = "general") => request<SkillItem>("/skills/from-artifact", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ artifact_id: artifactId, name, intent, discipline })
+  }),
+  applySkill: (skillId: string, datasetIds: string[], conversationId?: string) => request<SkillApplyResult>(`/skills/${skillId}/apply`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_id: DEMO_PROJECT_ID, dataset_ids: datasetIds, conversation_id: conversationId })
+  }),
+  exportSkill: (skillId: string) => request<Record<string, unknown>>(`/skills/${skillId}/export`),
+  importSkill: (skillPackage: Record<string, unknown>) => request<SkillItem>("/skills/import", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_id: DEMO_PROJECT_ID, package: skillPackage })
+  }),
+  skillHub: () => request<SkillHubItem[]>("/skills/hub"),
+  importHubSkill: (hubId: string) => request<SkillItem>(`/skills/hub/${hubId}/import`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_id: DEMO_PROJECT_ID })
   }),
   modelConfig: () => request<ModelConfig>("/settings/model"),
   saveModelConfig: (payload: Omit<ModelConfig, "api_key_configured" | "api_key_hint"> & { api_key?: string }) => request<ModelConfig>("/settings/model", {

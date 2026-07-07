@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Text, func
+from sqlalchemy import DateTime, ForeignKey, Integer, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,4 +17,11 @@ class Skill(Base):
     discipline: Mapped[str | None] = mapped_column(Text)
     template: Mapped[str] = mapped_column(Text)
     meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    intent: Mapped[str] = mapped_column(Text, default="", server_default="")
+    input_roles: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default=text("'{}'::jsonb")
+    )
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    origin: Mapped[str] = mapped_column(Text, default="local", server_default="local")
+    package_hash: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

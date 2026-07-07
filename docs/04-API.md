@@ -246,6 +246,25 @@ GET  /skills
 POST /skills               # 注册/固化一个技能包
 ```
 
+### M11b 技能生命周期
+
+```
+POST /skills/from-artifact       # 成功产物 → 参数化用户技能
+  body: { artifact_id, name, intent, discipline? }
+  -> skill
+
+POST /skills/{id}/apply          # 字段映射 → 沙箱执行 → 新血缘；映射失败回退 M3
+  body: { project_id, dataset_ids, conversation_id?, intent_override? }
+  -> { skill_id, fallback_used, mapping, mapping_reason, run_id?, status,
+       code?, artifacts, conversation_id?, events?,
+       token_usage: { mapping_tokens, estimated_from_scratch_tokens, saved_tokens } }
+
+GET  /skills/{id}/export         # 版本化、带 sha256 的 JSON 技能包
+POST /skills/import              # body: { project_id, package }
+GET  /skills/hub
+POST /skills/hub/{hub_id}/import # body: { project_id }
+```
+
 ### M-Platform 平台适配层
 
 plaintext
@@ -290,4 +309,5 @@ POST /agent/invoke         # headless 调用：脱离前端，走完"输入→�
 |      M9      |                   GET/POST /memories                   |
 |     M10      |      GET /suggestions, POST /suggestions/refresh       |
 |     M11      |                    GET/POST /skills                    |
+|    M11b      | POST /skills/from-artifact, POST /skills/{id}/apply, GET /skills/{id}/export, POST /skills/import, GET/POST /skills/hub* |
 |  M-Platform  |                   POST /agent/invoke                   |

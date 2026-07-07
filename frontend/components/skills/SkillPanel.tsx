@@ -1,18 +1,94 @@
 "use client";
 
-import { Blocks, Check, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Blocks, Check, Download, Loader2, Play, Store, Upload } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { api, SkillItem } from "@/lib/api";
+import { api, SkillHubItem, SkillItem } from "@/lib/api";
 
-export function SkillPanel({ selected, onSelect }: { selected?: string; onSelect: (skill?: SkillItem) => void }) {
+type Props = {
+  selected?: string;
+  onSelect: (skill?: SkillItem) => void;
+  onApply?: (skill: SkillItem) => Promise<void>;
+  refreshKey?: number;
+};
+
+export function SkillPanel({ selected, onSelect, onApply, refreshKey = 0 }: Props) {
   const [discipline, setDiscipline] = useState("");
   const [items, setItems] = useState<SkillItem[]>([]);
+  const [hub, setHub] = useState<SkillHubItem[]>([]);
+  const [hubOpen, setHubOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  useEffect(() => {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const reload = useCallback(async () => {
     setLoading(true); setError("");
-    api.skills(discipline || undefined).then(setItems).catch((reason) => setError(reason instanceof Error ? reason.message : "技能加载失败")).finally(() => setLoading(false));
+    try { setItems(await api.skills(discipline || undefined)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "技能加载失败"); }
+    finally { setLoading(false); }
   }, [discipline]);
-  return <div className="mt-7 border-t pt-5"><div className="flex items-center gap-2 text-sm font-medium"><Blocks size={15} className="text-violet-600"/>分析方式<span className="ml-auto text-[10px] text-slate-400">可选</span></div><select value={discipline} onChange={(event) => setDiscipline(event.target.value)} className="input mt-2 h-8 w-full text-xs"><option value="">全部领域</option><option value="general">通用</option><option value="materials">材料</option><option value="biology">生物</option></select>{loading ? <div className="mt-3 flex items-center gap-2 text-xs text-slate-400"><Loader2 size={13} className="animate-spin"/>加载分析方式…</div> : error ? <div className="mt-3 text-xs text-red-600">{error}</div> : <div className="mt-2 space-y-2"><button onClick={() => onSelect(undefined)} className={`w-full rounded-lg border p-2 text-left text-xs ${!selected ? "border-blue-300 bg-blue-50" : "hover:bg-slate-50"}`}><span className="font-medium">根据问题自动分析</span><span className="mt-1 block text-[10px] text-slate-400">推荐，适合大多数任务</span></button>{items.map((item) => <button key={item.id} onClick={() => onSelect(item)} className={`w-full rounded-lg border p-2 text-left text-xs ${selected === item.id ? "border-violet-300 bg-violet-50" : "hover:bg-slate-50"}`}><span className="flex items-center gap-2 font-medium">{item.name}{selected === item.id && <Check size={12} className="ml-auto text-violet-600"/>}</span><span className="mt-1 block text-[10px] text-slate-400">{item.discipline || "通用"} · 参考模板</span></button>)}</div>}<p className="mt-2 text-[10px] leading-4 text-slate-400">模板只提供起点，系统仍会根据你的问题调整分析步骤。</p></div>;
+
+  useEffect(() => { void reload(); }, [reload, refreshKey]);
+
+  async function exportItem(item: SkillItem) {
+    setBusy(item.id); setError("");
+    try {
+      const payload = await api.exportSkill(item.id);
+      const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+      const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${item.name}.reproskill.json`; anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) { setError((reason as Error).message); }
+    finally { setBusy(""); }
+  }
+
+  async function importFile(file?: File) {
+    if (!file) return;
+    setBusy("import"); setError("");
+    try { await api.importSkill(JSON.parse(await file.text())); await reload(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "技能导入失败"); }
+    finally { setBusy(""); if (inputRef.current) inputRef.current.value = ""; }
+  }
+
+  async function toggleHub() {
+    const next = !hubOpen; setHubOpen(next);
+    if (next && !hub.length) {
+      try { setHub(await api.skillHub()); } catch (reason) { setError((reason as Error).message); }
+    }
+  }
+
+  async function importHub(item: SkillHubItem) {
+    setBusy(item.id); setError("");
+    try { await api.importHubSkill(item.id); await reload(); }
+    catch (reason) { setError((reason as Error).message); }
+    finally { setBusy(""); }
+  }
+
+  async function applyItem(item: SkillItem) {
+    if (!onApply) return;
+    setBusy(item.id); setError("");
+    try { await onApply(item); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "技能应用失败"); }
+    finally { setBusy(""); }
+  }
+
+  return <div className="mt-7 border-t pt-5">
+    <div className="flex items-center gap-2 text-sm font-medium"><Blocks size={15} className="text-violet-600"/>我的技能<span className="ml-auto text-[10px] text-slate-400">可复用</span></div>
+    <select value={discipline} onChange={(event) => setDiscipline(event.target.value)} className="input mt-2 h-8 w-full text-xs"><option value="">全部领域</option><option value="general">通用</option><option value="materials">材料</option><option value="biology">生物</option></select>
+    <div className="mt-2 grid grid-cols-2 gap-2">
+      <button onClick={() => inputRef.current?.click()} className="btn-secondary h-8 text-xs"><Upload size={12}/>导入</button>
+      <button onClick={() => void toggleHub()} className="btn-secondary h-8 text-xs"><Store size={12}/>SkillHub</button>
+      <input ref={inputRef} type="file" accept=".json" className="hidden" onChange={(event) => void importFile(event.target.files?.[0])}/>
+    </div>
+    {loading ? <div className="mt-3 flex items-center gap-2 text-xs text-slate-400"><Loader2 size={13} className="animate-spin"/>加载技能…</div> : <div className="mt-2 space-y-2">
+      <button onClick={() => onSelect(undefined)} className={`w-full rounded-lg border p-2 text-left text-xs ${!selected ? "border-blue-300 bg-blue-50" : "hover:bg-slate-50"}`}><span className="font-medium">根据问题自动分析</span><span className="mt-1 block text-[10px] text-slate-400">没有合适技能时使用</span></button>
+      {items.map((item) => <div key={item.id} className={`rounded-lg border p-2 text-xs ${selected === item.id ? "border-violet-300 bg-violet-50" : ""}`}>
+        <button onClick={() => onSelect(item)} className="w-full text-left"><span className="flex items-center gap-2 font-medium">{item.name}{selected === item.id && <Check size={12} className="ml-auto text-violet-600"/>}</span><span className="mt-1 block text-[10px] leading-4 text-slate-400">{item.intent || `${item.discipline || "通用"}模板`} · v{item.version}</span></button>
+        <div className="mt-2 flex gap-1 border-t pt-2"><button disabled={busy === item.id || !onApply} onClick={() => void applyItem(item)} className="flex flex-1 items-center justify-center gap-1 rounded px-1 py-1 text-[10px] text-violet-700 hover:bg-violet-100 disabled:opacity-50">{busy === item.id ? <Loader2 size={10} className="animate-spin"/> : <Play size={10}/>}应用</button><button onClick={() => void exportItem(item)} className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-slate-500 hover:bg-slate-100"><Download size={10}/>导出</button></div>
+      </div>)}
+    </div>}
+    {hubOpen && <div className="mt-3 rounded-lg border bg-slate-50 p-2"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">SkillHub</div>{hub.map((item) => <div key={item.id} className="mt-2 rounded-md bg-white p-2 text-xs"><div className="font-medium">{item.name}</div><div className="mt-1 text-[10px] leading-4 text-slate-400">{item.intent} · {item.author}</div><button onClick={() => void importHub(item)} className="mt-2 text-[10px] font-medium text-brand">导入到我的技能</button></div>)}</div>}
+    {error && <div className="mt-2 text-xs text-red-600">{error}</div>}
+    <p className="mt-2 text-[10px] leading-4 text-slate-400">复用仍会重新执行并登记完整溯源；字段不匹配时自动回退动态分析。</p>
+  </div>;
 }

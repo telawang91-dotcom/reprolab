@@ -23,13 +23,16 @@ def ensure_builtins(db: Session) -> None:
         if skill is None:
             db.add(Skill(
                 id=pack.id, project_id=None, name=pack.name, discipline=pack.discipline,
-                template=pack.code_template, meta=meta,
+                template=pack.code_template, meta=meta, intent=pack.prompt_template,
+                input_roles={}, origin="builtin",
             ))
         else:
             skill.name = pack.name
             skill.discipline = pack.discipline
             skill.template = pack.code_template
             skill.meta = meta
+            skill.intent = pack.prompt_template
+            skill.origin = "builtin"
     db.commit()
 
 
@@ -69,6 +72,11 @@ def create_skill(db: Session, request: SkillCreate) -> Skill:
         discipline=request.discipline,
         template=request.template,
         meta=meta or None,
+        intent=request.intent,
+        input_roles=request.input_roles,
+        version=request.version,
+        origin=request.origin,
+        package_hash=request.package_hash,
     )
     db.add(skill)
     db.commit()

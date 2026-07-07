@@ -245,6 +245,11 @@ CREATE TABLE skills (
   discipline  TEXT,                 -- 学科标签
   template    TEXT NOT NULL,        -- 代码/提示词模板
   meta        JSONB,
+  intent      TEXT NOT NULL DEFAULT '',       -- M11b：可复用分析意图
+  input_roles JSONB NOT NULL DEFAULT '{}',    -- M11b：字段角色契约
+  version     INTEGER NOT NULL DEFAULT 1,     -- M11b：技能/交换包版本
+  origin      TEXT NOT NULL DEFAULT 'local',  -- local | builtin | imported | hub
+  package_hash TEXT,                          -- 导入交换包的规范化 sha256
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
@@ -272,3 +277,4 @@ CREATE TABLE skills (
 |    M9 记忆     |                         memories                          |
 |    M10 建议    |             suggestions, documents, artifacts             |
 |   M11 技能包   |                          skills                           |
+| M11b 技能生命周期 |                         skills                           |
