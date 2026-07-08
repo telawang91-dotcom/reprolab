@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.documents import router as documents_router
+from app.api.collections import router as collections_router
 from app.api.search import router as search_router
 from app.api.runs import router as runs_router
 from app.api.lineage import router as lineage_router
@@ -52,6 +53,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(documents_router, prefix=settings.api_prefix)
+app.include_router(collections_router, prefix=settings.api_prefix)
 app.include_router(search_router, prefix=settings.api_prefix)
 app.include_router(runs_router, prefix=settings.api_prefix)
 app.include_router(lineage_router, prefix=settings.api_prefix)

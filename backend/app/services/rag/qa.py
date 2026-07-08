@@ -31,8 +31,11 @@ def answer_question(
     project_id: uuid.UUID,
     query: str,
     adapter: ModelAdapter = model_adapter,
+    collection_id: uuid.UUID | None = None,
 ) -> QAResponse:
-    hits = complex_retrieve(db, project_id, query, mode="hybrid", k=8)
+    hits = complex_retrieve(
+        db, project_id, query, mode="hybrid", k=8, collection_id=collection_id
+    )
     if not hits:
         raise LookupError("no knowledge-base evidence found")
     lookup: dict[str, Citation] = {}

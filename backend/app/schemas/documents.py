@@ -14,6 +14,7 @@ class DocumentUploadResponse(BaseModel):
     storage_hash: str
     chunks_count: int | None = None
     dataset_id: uuid.UUID | None = None
+    collection_id: uuid.UUID | None = None
 
 
 class DocumentListItem(BaseModel):
@@ -24,6 +25,7 @@ class DocumentListItem(BaseModel):
     title: str | None
     year: int | None
     created_at: datetime
+    collection_id: uuid.UUID | None = None
 
 
 class DocumentDetail(DocumentListItem):
@@ -42,3 +44,22 @@ class DocumentDetail(DocumentListItem):
 class DeleteResponse(BaseModel):
     id: uuid.UUID
     deleted: bool
+
+
+class BatchItem(BaseModel):
+    filename: str
+    status: Literal["queued", "processing", "success", "error"]
+    document_id: uuid.UUID | None = None
+    dataset_id: uuid.UUID | None = None
+    error: str | None = None
+
+
+class BatchStatus(BaseModel):
+    batch_id: uuid.UUID
+    project_id: uuid.UUID
+    collection_id: uuid.UUID | None = None
+    status: Literal["queued", "processing", "success", "partial", "error"]
+    total: int
+    completed: int
+    failed: int
+    items: list[BatchItem]

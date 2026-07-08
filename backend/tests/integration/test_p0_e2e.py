@@ -3,6 +3,7 @@ import io
 import json
 import os
 import uuid
+import zipfile
 from datetime import datetime, timedelta, timezone
 
 import fitz
@@ -21,6 +22,7 @@ from app.models.knowledge import (
     Artifact,
     Chunk,
     Claim,
+    Collection,
     Conversation,
     Dataset,
     Document,
@@ -79,6 +81,59 @@ def upload(client: TestClient, project_id: uuid.UUID, filename: str, raw: bytes,
     response = client.post("/api/v1/documents", data=data, files={"file": (filename, raw)})
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def test_m1b_real_collection_scope_batch_and_set_null(client: TestClient, project_id: uuid.UUID):
+    first = client.post("/api/v1/collections", json={
+        "project_id": str(project_id), "name": f"综述-{uuid.uuid4().hex[:6]}",
+    })
+    second = client.post("/api/v1/collections", json={
+        "project_id": str(project_id), "name": f"实验-{uuid.uuid4().hex[:6]}",
+    })
+    assert first.status_code == second.status_code == 201
+    first_id, second_id = first.json()["id"], second.json()["id"]
+    marker = f"collection-scope-{uuid.uuid4().hex}"
+
+    doc_a = client.post("/api/v1/documents", data={
+        "project_id": str(project_id), "collection_id": first_id, "type": "paper",
+    }, files={"file": ("a.md", f"{marker} evidence A".encode())}).json()
+    doc_b = client.post("/api/v1/documents", data={
+        "project_id": str(project_id), "collection_id": second_id, "type": "paper",
+    }, files={"file": ("b.md", f"{marker} evidence B".encode())}).json()
+
+    for collection_id, expected, excluded in (
+        (first_id, doc_a["id"], doc_b["id"]),
+        (second_id, doc_b["id"], doc_a["id"]),
+    ):
+        response = client.post("/api/v1/search", json={
+            "project_id": str(project_id), "collection_id": collection_id,
+            "query": marker, "mode": "keyword", "k": 8,
+        })
+        ids = {item["document_id"] for item in response.json()["hits"]}
+        assert expected in ids and excluded not in ids
+
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as archive:
+        archive.writestr("folder/c.md", f"{marker} batch C")
+        archive.writestr("folder/d.txt", f"{marker} batch D")
+    batch = client.post("/api/v1/documents/batch", data={
+        "project_id": str(project_id), "collection_id": first_id,
+    }, files=[("files", ("papers.zip", stream.getvalue()))])
+    assert batch.status_code == 202, batch.text
+    status_response = client.get(
+        f"/api/v1/documents/batch/{batch.json()['batch_id']}",
+        params={"project_id": str(project_id)},
+    )
+    assert status_response.status_code == 200
+    assert status_response.json()["status"] == "success"
+    assert status_response.json()["completed"] == 2
+
+    removed = client.delete(f"/api/v1/collections/{first_id}")
+    assert removed.status_code == 200
+    with SessionLocal() as db:
+        preserved = db.get(Document, uuid.UUID(doc_a["id"]))
+        assert preserved is not None and preserved.collection_id is None
+        assert db.get(Collection, uuid.UUID(first_id)) is None
 
 
 def three_page_pdf() -> bytes:

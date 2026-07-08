@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Integer, Text, func
+from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Integer, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,11 +27,24 @@ class Project(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class Collection(Base):
+    __tablename__ = "collections"
+    __table_args__ = (UniqueConstraint("project_id", "name", name="uq_collections_project_name"),)
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (CheckConstraint("type IN ('paper','note','code','other')", name="ck_documents_type"),)
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"))
+    collection_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("collections.id", ondelete="SET NULL"), index=True
+    )
     type: Mapped[str] = mapped_column(Text)
     filename: Mapped[str] = mapped_column(Text)
     storage_hash: Mapped[str] = mapped_column(Text)
@@ -61,6 +74,9 @@ class Dataset(Base):
     __tablename__ = "datasets"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"))
+    collection_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("collections.id", ondelete="SET NULL"), index=True
+    )
     name: Mapped[str] = mapped_column(Text)
     storage_hash: Mapped[str] = mapped_column(Text)
     schema_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

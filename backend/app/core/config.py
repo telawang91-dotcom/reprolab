@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     repair_max_iterations: int = Field(default=2, ge=1, le=5)
     sandbox_backend: str = "docker"
     sandbox_image: str = "reprolab-sandbox:py311"
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     @property
     def cors_origin_list(self) -> list[str]:

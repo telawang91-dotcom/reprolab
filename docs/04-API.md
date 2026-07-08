@@ -38,6 +38,31 @@ GET  /documents/{id}       # 详情 + 预览元数据
 DELETE /documents/{id}
 ```
 
+### M1b 知识空间与批量入库
+
+```
+POST /collections
+  body: { project_id, name, description? }
+  -> { id, project_id, name, description, document_count, created_at }
+
+GET /collections?project_id={id}
+PATCH /collections/{id}          # body: { name?, description? }
+DELETE /collections/{id}         # 文件保留并解除分组
+
+POST /documents/batch            # multipart；files 可含 ZIP
+  form: files[], project_id, collection_id?, type?
+  -> 202 { batch_id, status, total, completed, failed, items }
+GET /documents/batch/{batch_id}?project_id={id}
+
+# 以下均为向后兼容的可选字段；不传时行为不变
+POST /documents                  # form 新增 collection_id?
+GET  /documents                  # query 新增 collection_id?
+POST /search                     # body 新增 collection_id?
+POST /qa                         # body 新增 collection_id?
+```
+
+`collection_id` 仅作为 M2 SQL 元数据前置过滤条件；BM25、向量、RRF、reranker 与 `⟦src_*⟧` 引用契约保持不变。批量处理使用 FastAPI BackgroundTasks，后台逐文件复用 M1 `ingest()`。
+
 ### M2 混合检索 / 问答
 
 plaintext
@@ -296,6 +321,7 @@ POST /agent/invoke         # headless 调用：脱离前端，走完"输入→�
 |     模块     |                          接口                          |
 | :----------: | :----------------------------------------------------: |
 |      M1      |               POST/GET/DELETE /documents               |
+|     M1b      | CRUD /collections, POST/GET /documents/batch, collection 作用域扩展 |
 |      M2      |                 POST /search, POST /qa                 |
 |      M3      |                    POST /chat (SSE)                    |
 |      M4      |                       POST /runs                       |

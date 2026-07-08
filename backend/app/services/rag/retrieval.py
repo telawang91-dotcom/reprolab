@@ -31,7 +31,11 @@ class Candidate:
         return self.chunk.id
 
 
-def _scope_statement(project_id: uuid.UUID, filters: SearchFilters | None) -> Select:
+def _scope_statement(
+    project_id: uuid.UUID,
+    filters: SearchFilters | None,
+    collection_id: uuid.UUID | None = None,
+) -> Select:
     statement = (
         select(Chunk, Document)
         .join(Document, Chunk.document_id == Document.id)
@@ -41,11 +45,20 @@ def _scope_statement(project_id: uuid.UUID, filters: SearchFilters | None) -> Se
         statement = statement.where(Document.year >= filters.year_gte)
     if filters and filters.type is not None:
         statement = statement.where(Document.type == filters.type)
+    if collection_id is not None:
+        statement = statement.where(Document.collection_id == collection_id)
     return statement
 
 
-def metadata_prefilter(db: Session, project_id: uuid.UUID, filters: SearchFilters | None) -> list[Candidate]:
-    return [Candidate(chunk=row.Chunk, document=row.Document) for row in db.execute(_scope_statement(project_id, filters))]
+def metadata_prefilter(
+    db: Session,
+    project_id: uuid.UUID,
+    filters: SearchFilters | None,
+    collection_id: uuid.UUID | None = None,
+) -> list[Candidate]:
+    return [Candidate(chunk=row.Chunk, document=row.Document) for row in db.execute(
+        _scope_statement(project_id, filters, collection_id)
+    )]
 
 
 def _tokens(text: str) -> list[str]:
@@ -74,11 +87,12 @@ def pgvector_search(
     query: str,
     filters: SearchFilters | None,
     limit: int = RECALL_LIMIT,
+    collection_id: uuid.UUID | None = None,
 ) -> list[Candidate]:
     query_vector = encode([query])[0]
     distance = Chunk.embedding.cosine_distance(query_vector)
     rows = db.execute(
-        _scope_statement(project_id, filters)
+        _scope_statement(project_id, filters, collection_id)
         .where(Chunk.embedding.is_not(None))
         .add_columns(distance.label("distance"))
         .order_by(distance)
@@ -131,11 +145,14 @@ def complex_retrieve(
     mode: str = "hybrid",
     filters: SearchFilters | None = None,
     k: int = 8,
+    collection_id: uuid.UUID | None = None,
 ) -> list[SearchHit]:
-    scope = metadata_prefilter(db, project_id, filters)
+    scope = metadata_prefilter(db, project_id, filters, collection_id)
     if mode == "keyword":
         return _to_hits(bm25_search(query, scope, k))
-    semantic = pgvector_search(db, project_id, query, filters, RECALL_LIMIT)
+    semantic = pgvector_search(
+        db, project_id, query, filters, RECALL_LIMIT, collection_id
+    )
     if mode == "semantic":
         return _to_hits(semantic[:k])
     keyword = bm25_search(query, scope, RECALL_LIMIT)

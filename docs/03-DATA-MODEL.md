@@ -50,10 +50,22 @@ sql
 
 
 ```
+-- M1b 知识空间：同一项目内给文献/数据分组；删除空间不删除内容。
+CREATE TABLE collections (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id    UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  description   TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(project_id, name)
+);
+CREATE INDEX idx_collections_project ON collections(project_id);
+
 -- 上传的文件（论文/笔记/代码）。type=paper 的行同时充当溯源图里的 Source(文献) 节点。
 CREATE TABLE documents (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id    UUID REFERENCES projects(id),
+  collection_id UUID REFERENCES collections(id) ON DELETE SET NULL, -- M1b，可空即未分组
   type          TEXT NOT NULL,              -- paper | note | code | other
   filename      TEXT NOT NULL,
   storage_hash  TEXT NOT NULL,              -- sha256，指向 storage/<hash>
@@ -67,6 +79,7 @@ CREATE TABLE documents (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_documents_project ON documents(project_id);
+CREATE INDEX idx_documents_collection ON documents(collection_id);
 
 -- 文本切块 + 向量
 CREATE TABLE chunks (
@@ -86,6 +99,7 @@ CREATE INDEX idx_chunks_embedding ON chunks USING ivfflat (embedding vector_cosi
 CREATE TABLE datasets (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id    UUID REFERENCES projects(id),
+  collection_id UUID REFERENCES collections(id) ON DELETE SET NULL, -- M1b，可空即未分组
   name          TEXT NOT NULL,
   storage_hash  TEXT NOT NULL,               -- sha256 文件内容指纹，防"偷换数据"
   schema_json   JSONB,                        -- 列名/类型/行数
@@ -252,6 +266,7 @@ CREATE TABLE skills (
   package_hash TEXT,                          -- 导入交换包的规范化 sha256
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX idx_datasets_collection ON datasets(collection_id);
 ```
 
 ### 模块 × 表映射（Codex 按此最小加载）
@@ -267,6 +282,7 @@ CREATE TABLE skills (
 |      模块      |                          涉及表                           |
 | :------------: | :-------------------------------------------------------: |
 |    M1 入库     |                documents, chunks, datasets                |
+| M1b 知识空间   |             collections, documents, datasets             |
 |    M2 检索     |                     chunks, documents                     |
 |  M3 对话分析   | conversations, messages, +（产出经 M5 落 runs/artifacts） |
 |    M4 沙箱     |             env_snapshots（读写）, runs（写）             |

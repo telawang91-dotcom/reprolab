@@ -19,6 +19,7 @@ def search(request: SearchRequest, db: Session = Depends(get_db)) -> SearchRespo
             request.mode,
             request.filters,
             request.k,
+            request.collection_id,
         )
     )
 
@@ -26,7 +27,8 @@ def search(request: SearchRequest, db: Session = Depends(get_db)) -> SearchRespo
 @router.post("/qa", response_model=QAResponse)
 def qa(request: QARequest, db: Session = Depends(get_db)) -> QAResponse:
     try:
-        return answer_question(db, request.project_id, request.query)
+        return answer_question(
+            db, request.project_id, request.query, collection_id=request.collection_id
+        )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-

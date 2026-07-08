@@ -19,6 +19,7 @@ class SearchRequest(StrictModel):
     mode: Literal["keyword", "semantic", "hybrid"] = "hybrid"
     filters: SearchFilters | None = None
     k: int = Field(default=8, ge=1, le=50)
+    collection_id: uuid.UUID | None = None
 
 
 class SearchHit(StrictModel):
@@ -37,6 +38,7 @@ class SearchResponse(StrictModel):
 class QARequest(StrictModel):
     project_id: uuid.UUID
     query: str = Field(min_length=1, max_length=4000)
+    collection_id: uuid.UUID | None = None
 
 
 class Citation(StrictModel):
@@ -48,4 +50,3 @@ class Citation(StrictModel):
 class QAResponse(StrictModel):
     answer: str
     citations: list[Citation]
-

@@ -5,16 +5,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { BookOpen, Brain, ChevronDown, CircleHelp, Command, FlaskConical, LayoutDashboard, Menu, Moon, Network, Search, Settings, Sun, UserRound, Workflow, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { FirstRunGuide } from "@/components/guide/FirstRunGuide";
 import { api } from "@/lib/api";
 import { defaultProfile, profileInitials, readProfile, type LocalProfile } from "@/lib/profile";
 
 const links = [
-  { href: "/", label: "工作台", detail: "项目概览与科研建议", icon: LayoutDashboard },
-  { href: "/knowledge", label: "知识库", detail: "上传、检索与问答", icon: BookOpen },
-  { href: "/analysis", label: "分析对话", detail: "选择数据并提出分析问题", icon: FlaskConical },
-  { href: "/lineage", label: "溯源图谱", detail: "查看数据、运行与产物", icon: Network },
-  { href: "/writing", label: "写作与校验", detail: "检查来源并保存结论", icon: Workflow },
+  { href: "/", label: "开始", detail: "任务入口与研究进度", icon: LayoutDashboard },
+  { href: "/knowledge", label: "知识空间", detail: "文献、检索与限定问答", icon: BookOpen },
+  { href: "/analysis", label: "数据分析", detail: "运行代码并生成可信产物", icon: FlaskConical },
+  { href: "/lineage", label: "可信记录", detail: "溯源、复现与漂移", icon: Network },
+  { href: "/writing", label: "结论写作", detail: "插入来源并运行校验", icon: Workflow },
   { href: "/memory", label: "科研记忆", detail: "管理偏好与方法", icon: Brain },
   { href: "/guide", label: "产品指南", detail: "第一次使用从这里开始", icon: CircleHelp },
   { href: "/settings", label: "设置", detail: "模型、个人资料与运行状态", icon: Settings },
@@ -63,10 +62,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const open = (href: string) => { setCommand(false); setQuery(""); router.push(href); };
   const isActive = (href: string) => pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
 
-  const navigation = <nav className="space-y-1">{links.slice(0, 7).map(({ href, label, icon: Icon }) =>
+  const navigation = <nav><div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">研究流程</div><div className="space-y-1">{links.slice(0, 5).map(({ href, label, icon: Icon }) =>
     <Link key={href} href={href} className={`relative flex h-9 items-center gap-3 rounded-lg px-3 transition ${isActive(href) ? "bg-blue-50 font-medium text-brand dark:bg-blue-950/40" : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"}`}>
       {isActive(href) && <span className="absolute -left-3 h-5 w-0.5 rounded bg-brand"/>}<Icon size={16}/>{label}
-    </Link>)}</nav>;
+    </Link>)}</div><div className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">个人化</div><Link href="/memory" className={`relative flex h-9 items-center gap-3 rounded-lg px-3 transition ${isActive("/memory") ? "bg-blue-50 font-medium text-brand dark:bg-blue-950/40" : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"}`}><Brain size={16}/>科研记忆</Link></nav>;
 
   return <div className="min-h-screen bg-canvas dark:bg-[#0B0F17]">
     <header className="fixed inset-x-0 top-0 z-40 flex h-12 items-center border-b bg-white/95 px-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 md:px-4">
@@ -91,6 +90,5 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
     <main className="min-h-screen pt-12 md:pl-[220px]">{children}</main>
     {command && <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/35 px-4 pt-[12vh]" onMouseDown={() => setCommand(false)}><div role="dialog" aria-label="搜索页面与功能" className="card w-full max-w-[560px] overflow-hidden" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-center gap-3 border-b p-4"><Command size={18}/><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && matches.length === 1) open(matches[0].href); }} className="w-full bg-transparent outline-none" placeholder="搜索页面与功能，例如：上传、校验、记忆…"/><kbd className="text-xs text-slate-400">ESC</kbd></div><div className="max-h-[52vh] overflow-y-auto p-2">{matches.length ? matches.map(({ href, label, detail, icon: Icon }) => <button key={href} onClick={() => open(href)} className="flex w-full items-center gap-3 rounded-lg p-3 text-left transition hover:bg-blue-50 dark:hover:bg-blue-950/30"><span className="grid h-9 w-9 place-items-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"><Icon size={16}/></span><span><strong className="block text-sm">{label}</strong><span className="text-xs text-slate-500">{detail}</span></span></button>) : <div className="p-8 text-center text-sm text-slate-500">没有匹配的功能，试试“分析”或“校验”。</div>}</div></div></div>}
-    <FirstRunGuide/>
   </div>;
 }

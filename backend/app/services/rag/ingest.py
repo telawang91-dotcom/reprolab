@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.knowledge import Chunk, Dataset, Document
+from app.models.knowledge import Chunk, Collection, Dataset, Document
 from app.services.rag import chunker, embedder, parser, storage
 
 
@@ -38,7 +38,20 @@ def _metadata(text: str, filename: str) -> tuple[str | None, int | None, str | N
     return title, int(year_match.group()) if year_match else None, doi_match.group().rstrip(".,") if doi_match else None
 
 
-def ingest(db: Session, filename: str, raw: bytes, project_id: uuid.UUID, document_type: str | None) -> IngestResult:
+def ingest(
+    db: Session,
+    filename: str,
+    raw: bytes,
+    project_id: uuid.UUID,
+    document_type: str | None,
+    collection_id: uuid.UUID | None = None,
+) -> IngestResult:
+    if collection_id is not None:
+        collection = db.get(Collection, collection_id)
+        if collection is None:
+            raise ValueError("collection not found")
+        if collection.project_id != project_id:
+            raise ValueError("collection belongs to another project")
     parsed = parser.parse(filename, raw)
     storage_hash = storage.save_bytes(raw)
     resolved_type = document_type or infer_type(filename)
@@ -48,12 +61,14 @@ def ingest(db: Session, filename: str, raw: bytes, project_id: uuid.UUID, docume
     if parsed.kind == "dataset":
         dataset = Dataset(
             project_id=project_id,
+            collection_id=collection_id,
             name=filename,
             storage_hash=storage_hash,
             schema_json=parsed.dataset_schema,
         )
         document = Document(
             project_id=project_id,
+            collection_id=collection_id,
             type="other",
             filename=filename,
             storage_hash=storage_hash,
@@ -69,6 +84,7 @@ def ingest(db: Session, filename: str, raw: bytes, project_id: uuid.UUID, docume
     title, year, doi = _metadata(parsed.text, filename)
     document = Document(
         project_id=project_id,
+        collection_id=collection_id,
         type=resolved_type,
         filename=filename,
         storage_hash=storage_hash,
@@ -103,6 +119,7 @@ def list_documents(
     document_type: str | None = None,
     tag: str | None = None,
     query: str | None = None,
+    collection_id: uuid.UUID | None = None,
 ) -> list[Document]:
     statement = select(Document).where(Document.project_id == project_id)
     if document_type:
@@ -111,6 +128,8 @@ def list_documents(
         statement = statement.where(Document.filename.ilike(f"%{query}%"))
     if tag:
         statement = statement.where(Document.extra_metadata["tags"].contains([tag]))
+    if collection_id is not None:
+        statement = statement.where(Document.collection_id == collection_id)
     return list(db.scalars(statement.order_by(Document.created_at.desc())))
 
 
@@ -123,6 +142,7 @@ def document_detail(db: Session, document_id: uuid.UUID) -> tuple[Document, int,
         select(Dataset).where(
             Dataset.project_id == document.project_id,
             Dataset.storage_hash == document.storage_hash,
+            Dataset.collection_id == document.collection_id,
         )
     )
     return document, count, dataset
@@ -136,6 +156,7 @@ def delete_document(db: Session, document_id: uuid.UUID) -> bool:
         select(Dataset).where(
             Dataset.project_id == document.project_id,
             Dataset.storage_hash == document.storage_hash,
+            Dataset.collection_id == document.collection_id,
         )
     )
     if dataset is not None:
@@ -143,4 +164,3 @@ def delete_document(db: Session, document_id: uuid.UUID) -> bool:
     db.delete(document)
     db.commit()
     return True
-

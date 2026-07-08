@@ -1,9 +1,9 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000/api/v1";
+export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000/api/v1";
 export const DEMO_PROJECT_ID = "00000000-0000-0000-0000-000000000101";
 
 export type DocumentItem = {
   id: string; type: "paper" | "note" | "code" | "other"; filename: string;
-  title: string | null; year: number | null; created_at: string;
+  title: string | null; year: number | null; created_at: string; collection_id: string | null;
 };
 export type DocumentDetail = DocumentItem & {
   project_id: string; storage_hash: string; authors: string[] | null; doi: string | null;
@@ -12,6 +12,13 @@ export type DocumentDetail = DocumentItem & {
 };
 export type SearchHit = { chunk_id: string; document_id: string; content: string; section: string | null; position: number | null; score: number };
 export type Citation = { document_id: string; chunk_id: string; anchor: string };
+export type CollectionItem = { id: string; project_id: string; name: string; description: string | null; document_count: number; created_at: string };
+export type BatchStatus = {
+  batch_id: string; project_id: string; collection_id: string | null;
+  status: "queued" | "processing" | "success" | "partial" | "error";
+  total: number; completed: number; failed: number;
+  items: { filename: string; status: "queued" | "processing" | "success" | "error"; document_id: string | null; dataset_id: string | null; error: string | null }[];
+};
 export type Lineage = { nodes: { id: string; type: string; label: string; meta: Record<string, unknown> }[]; edges: { from: string; to: string; relation: string }[] };
 export type ReproduceResult = {
   status: "match" | "drift";
@@ -51,20 +58,36 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  documents: (type?: string) => request<DocumentItem[]>(`/documents?project_id=${DEMO_PROJECT_ID}${type ? `&type=${type}` : ""}`),
+  documents: (type?: string, collectionId?: string) => request<DocumentItem[]>(`/documents?project_id=${DEMO_PROJECT_ID}${type ? `&type=${type}` : ""}${collectionId ? `&collection_id=${collectionId}` : ""}`),
   document: (id: string) => request<DocumentDetail>(`/documents/${id}`),
   deleteDocument: (id: string) => request(`/documents/${id}`, { method: "DELETE" }),
-  upload: async (file: File) => {
+  upload: async (file: File, collectionId?: string) => {
     const body = new FormData(); body.append("file", file); body.append("project_id", DEMO_PROJECT_ID);
+    if (collectionId) body.append("collection_id", collectionId);
     return request<{ id: string; chunks_count?: number; dataset_id?: string }>("/documents", { method: "POST", body });
   },
-  search: (query: string, mode: string, filters: Record<string, unknown>) => request<{ hits: SearchHit[] }>("/search", {
+  batchUpload: async (files: File[], collectionId?: string) => {
+    const body = new FormData(); files.forEach((file) => body.append("files", file, file.webkitRelativePath || file.name)); body.append("project_id", DEMO_PROJECT_ID);
+    if (collectionId) body.append("collection_id", collectionId);
+    return request<BatchStatus>("/documents/batch", { method: "POST", body });
+  },
+  batchStatus: (batchId: string) => request<BatchStatus>(`/documents/batch/${batchId}?project_id=${DEMO_PROJECT_ID}`),
+  collections: () => request<CollectionItem[]>(`/collections?project_id=${DEMO_PROJECT_ID}`),
+  createCollection: (name: string, description?: string) => request<CollectionItem>("/collections", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: DEMO_PROJECT_ID, query, mode, filters, k: 8 })
+    body: JSON.stringify({ project_id: DEMO_PROJECT_ID, name, description: description || null })
   }),
-  qa: (query: string) => request<{ answer: string; citations: Citation[] }>("/qa", {
+  updateCollection: (id: string, payload: { name?: string; description?: string | null }) => request<CollectionItem>(`/collections/${id}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+  }),
+  deleteCollection: (id: string) => request<{ id: string; deleted: boolean }>(`/collections/${id}`, { method: "DELETE" }),
+  search: (query: string, mode: string, filters: Record<string, unknown>, collectionId?: string) => request<{ hits: SearchHit[] }>("/search", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: DEMO_PROJECT_ID, query })
+    body: JSON.stringify({ project_id: DEMO_PROJECT_ID, query, mode, filters, k: 8, collection_id: collectionId || null })
+  }),
+  qa: (query: string, collectionId?: string) => request<{ answer: string; citations: Citation[] }>("/qa", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_id: DEMO_PROJECT_ID, query, collection_id: collectionId || null })
   }),
   lineage: (artifactId: string) => request<Lineage>(`/artifacts/${artifactId}/lineage`),
   reproduce: (runId: string, datasetOverrides: Record<string, string> = {}) => request<ReproduceResult>(`/runs/${runId}/reproduce`, {
