@@ -20,6 +20,7 @@ const typeNames = { paper: "论文", note: "笔记", code: "代码", other: "数
 
 export default function KnowledgePage() {
   const [collections, setCollections] = useState<CollectionItem[]>([]);
+  const [collectionsLoaded, setCollectionsLoaded] = useState(false);
   const [collection, setCollection] = useState("");
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +54,7 @@ export default function KnowledgePage() {
     () => documents.filter((doc) => !type || doc.type === type),
     [documents, type],
   );
+  const hasDocuments = documents.length > 0;
 
   const loadDocuments = useCallback(async () => {
     try {
@@ -65,6 +67,7 @@ export default function KnowledgePage() {
   const loadCollections = useCallback(async () => {
     try { setCollections(await api.collections()); }
     catch (reason) { setError((reason as Error).message); }
+    finally { setCollectionsLoaded(true); }
   }, []);
 
   useEffect(() => { void loadDocuments(); }, [loadDocuments]);
@@ -77,6 +80,9 @@ export default function KnowledgePage() {
     if (requestedCollection) setCollection(requestedCollection);
     if (documentId) api.document(documentId).then(setPreview).catch((reason) => setError((reason as Error).message));
   }, [loadCollections]);
+  useEffect(() => {
+    if (collectionsLoaded && collection && !collections.some((item) => item.id === collection)) chooseCollection("");
+  }, [collection, collections, collectionsLoaded]);
 
   function chooseCollection(id: string) {
     setCollection(id); setHits([]); setAnswer(""); setCitations([]); setBatch(undefined);
@@ -175,7 +181,7 @@ export default function KnowledgePage() {
 
       <main className="min-w-0">
         <div className="mb-5 flex flex-wrap items-start gap-3">
-          <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="truncate text-lg font-semibold">{activeCollection?.name || "全部资料"}</h2><span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"><ShieldCheck size={11}/>{activeCollection ? "回答已限定此空间" : "跨空间范围"}</span></div><p className="mt-1 text-sm text-slate-500">{activeCollection?.description || (activeCollection ? "尚未添加描述" : "查看项目内的全部文献、数据与笔记")}</p></div>
+          <div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h2 className="truncate text-lg font-semibold">{activeCollection?.name || "全部资料"}</h2><span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"><ShieldCheck size={11}/>{activeCollection ? "回答已限定此空间" : "项目全部资料"}</span></div><p className="mt-1 text-sm text-slate-500">{activeCollection?.description || (activeCollection ? "尚未添加描述" : "查看项目内的全部文献、数据与笔记")}</p></div>
           {activeCollection && <button onClick={() => void removeCollection()} title="删除空间" className="grid h-9 w-9 place-items-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={15}/></button>}
           <button onClick={() => fileRef.current?.click()} className="btn-primary h-9"><UploadCloud size={14}/>添加资料</button>
           <button onClick={() => folderRef.current?.click()} className="btn-secondary h-9"><FolderOpen size={14}/>文件夹</button>
@@ -185,12 +191,13 @@ export default function KnowledgePage() {
         <input ref={fileRef} className="hidden" type="file" multiple accept=".pdf,.csv,.xlsx,.py,.ipynb,.md,.txt,.zip" onChange={(event) => event.target.files && void upload(event.target.files)}/>
         <input ref={folderRef} className="hidden" type="file" multiple onChange={(event) => event.target.files && void upload(event.target.files)}/>
 
-        <section className="overflow-hidden rounded-xl bg-slate-900 text-white shadow-sm dark:bg-slate-800">
+        {hasDocuments && <><section className="overflow-hidden rounded-xl bg-slate-900 text-white shadow-sm dark:bg-slate-800">
           <div className="flex min-h-16 items-center gap-3 px-4 md:px-5"><Search size={18} className="shrink-0 text-slate-400"/><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void ask()} className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-slate-500" placeholder={activeCollection ? `向“${activeCollection.name}”提问…` : "向全部资料提问，或输入关键词检索…"}/>{searching && <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400"/>}<button onClick={() => void search()} disabled={searching || !query.trim()} className="hidden h-9 rounded-lg px-3 text-sm text-slate-300 hover:bg-white/10 disabled:opacity-40 sm:block">检索</button><button onClick={() => void ask()} disabled={searching || !query.trim()} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-white px-3.5 text-sm font-medium text-slate-900 hover:bg-slate-100 disabled:opacity-40"><Sparkles size={14}/>问知识库</button></div>
           <div className="flex flex-wrap items-center gap-2 border-t border-white/10 px-4 py-2.5 text-xs text-slate-400 md:px-5"><ShieldCheck size={13} className="text-emerald-400"/><span>仅使用当前范围内的证据，答案保留可点击出处</span><span className="ml-auto hidden sm:inline">检索方式</span><select value={mode} onChange={(event) => setMode(event.target.value)} className="rounded-md border-0 bg-white/10 px-2 py-1 text-xs text-slate-200 outline-none">{modes.map((item) => <option className="text-slate-900" key={item.id} value={item.id}>{item.label}</option>)}</select></div>
         </section>
 
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><select value={type} onChange={(event) => setType(event.target.value)} className="h-8 rounded-md border bg-white px-2 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"><option value="">所有类型</option><option value="paper">论文</option><option value="note">笔记</option><option value="code">代码</option><option value="other">数据/其他</option></select><input value={year} onChange={(event) => setYear(event.target.value)} className="h-8 w-24 rounded-md border bg-white px-2 text-slate-600 outline-none dark:border-slate-700 dark:bg-slate-950" inputMode="numeric" placeholder="年份 ≥"/><span className="ml-auto text-slate-400">{documents.length} 份资料</span></div>
+        </>}
 
         {error && <div role="alert" className="mt-4 flex items-start border-l-2 border-red-500 bg-red-50 px-3 py-2.5 text-sm text-red-700"><span className="flex-1">{error}</span><button onClick={() => setError("")}><X size={14}/></button></div>}
 
@@ -203,7 +210,7 @@ export default function KnowledgePage() {
         <section className="mt-8"><div className="mb-3 flex items-end justify-between"><div><h3 className="font-semibold">资料</h3><p className="mt-1 text-xs text-slate-400">拖入文件、文件夹或 ZIP 即可批量入库</p></div><span className="text-xs text-slate-400">{visible.length} 项</span></div><div onDragEnter={(event) => { event.preventDefault(); setDragging(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (event.currentTarget === event.target) setDragging(false); }} onDrop={(event) => { event.preventDefault(); void upload(event.dataTransfer.files); }} className={`relative transition ${dragging ? "rounded-lg bg-blue-50 p-3 ring-2 ring-brand/30 dark:bg-blue-950/20" : ""}`}>
           {dragging && <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-lg bg-blue-50/90 text-sm font-medium text-brand dark:bg-blue-950/90">松手添加到{activeCollection ? `“${activeCollection.name}”` : "全部资料"}</div>}
           {uploading.length > 0 && !batch && <div className="mb-3 flex items-center gap-2 py-2 text-sm text-slate-500"><UploadCloud className="animate-bounce" size={15}/>正在准备 {uploading.length} 个文件…</div>}
-          {loading ? <div className="divide-y dark:divide-slate-800">{Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-16 animate-pulse bg-slate-50 dark:bg-slate-900"/>)}</div> : visible.length === 0 ? <div className="rounded-lg border border-dashed py-10"><EmptyState title={activeCollection ? "这个空间还没有资料" : "还没有资料"} description="添加论文、笔记或数据，开始限定范围的可信问答。" action={<button onClick={() => fileRef.current?.click()} className="btn-primary"><UploadCloud size={14}/>添加第一份资料</button>}/></div> : <div className="divide-y border-y dark:divide-slate-800 dark:border-slate-800">{visible.map((doc) => { const Icon = icons[doc.type]; return <button key={doc.id} onClick={() => void openDocument(doc.id)} className="group flex w-full items-center gap-3 px-1 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-900/60"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800"><Icon size={16}/></span><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{doc.title || doc.filename}</div><div className="mt-0.5 truncate text-xs text-slate-400">{doc.filename}</div></div><span className="hidden text-xs text-slate-400 sm:block">{typeNames[doc.type]}</span><span className="w-12 text-right text-xs text-slate-400">{doc.year || "—"}</span><ChevronRight size={14} className="text-slate-300 group-hover:text-slate-500"/></button>; })}</div>}
+          {loading ? <div className="divide-y dark:divide-slate-800">{Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-16 animate-pulse bg-slate-50 dark:bg-slate-900"/>)}</div> : visible.length === 0 ? <div className="rounded-lg border border-dashed py-10"><EmptyState title={activeCollection ? "这个空间还没有资料" : "还没有资料"} description="拖入论文、笔记、数据表或 ZIP。系统只会处理你主动添加的内容。" action={<div className="flex flex-wrap justify-center gap-2"><button onClick={() => fileRef.current?.click()} className="btn-primary"><UploadCloud size={14}/>添加资料</button><button onClick={() => folderRef.current?.click()} className="btn-secondary"><FolderOpen size={14}/>选择文件夹</button></div>}/></div> : <div className="divide-y border-y dark:divide-slate-800 dark:border-slate-800">{visible.map((doc) => { const Icon = icons[doc.type]; return <button key={doc.id} onClick={() => void openDocument(doc.id)} className="group flex w-full items-center gap-3 px-1 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-900/60"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500 dark:bg-slate-800"><Icon size={16}/></span><div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{doc.title || doc.filename}</div><div className="mt-0.5 truncate text-xs text-slate-400">{doc.filename}</div></div><span className="hidden text-xs text-slate-400 sm:block">{typeNames[doc.type]}</span><span className="w-12 text-right text-xs text-slate-400">{doc.year || "—"}</span><ChevronRight size={14} className="text-slate-300 group-hover:text-slate-500"/></button>; })}</div>}
         </div></section>
       </main>
     </div>

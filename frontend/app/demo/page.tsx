@@ -44,7 +44,7 @@ export default function DemoPage() {
   const step = steps[current];
   const Icon = step.icon;
 
-  return <div className="mx-auto flex min-h-[calc(100vh-48px)] max-w-6xl flex-col px-5 py-8 lg:px-8">
+  return <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-5 py-8 lg:px-8">
     <header className="flex items-center justify-between">
       <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 dark:hover:text-white"><ArrowLeft size={15}/>退出演示</Link>
       <div className="inline-flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-400"><ShieldCheck size={13}/>不会创建或修改任何资料</div>

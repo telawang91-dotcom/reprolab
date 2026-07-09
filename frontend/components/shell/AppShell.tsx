@@ -67,6 +67,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {isActive(href) && <span className="absolute -left-3 h-5 w-0.5 rounded bg-brand"/>}<Icon size={16}/>{label}
     </Link>)}</div><div className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">个人化</div><Link href="/memory" className={`relative flex h-9 items-center gap-3 rounded-lg px-3 transition ${isActive("/memory") ? "bg-blue-50 font-medium text-brand dark:bg-blue-950/40" : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"}`}><Brain size={16}/>科研记忆</Link></nav>;
 
+  if (pathname.startsWith("/demo")) return <div className="min-h-screen bg-canvas dark:bg-[#0B0F17]">{children}</div>;
+
   return <div className="min-h-screen bg-canvas dark:bg-[#0B0F17]">
     <header className="fixed inset-x-0 top-0 z-40 flex h-12 items-center border-b bg-white/95 px-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 md:px-4">
       <button onClick={() => setMobileMenu(true)} aria-label="打开导航菜单" className="btn-secondary mr-2 h-8 w-8 px-0 md:hidden"><Menu size={16}/></button>
