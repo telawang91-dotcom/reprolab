@@ -18,7 +18,9 @@ from app.api.suggest import router as suggest_router
 from app.api.skills import router as skills_router
 from app.api.agent import router as agent_router
 from app.api.settings import router as settings_router
-from app.core.db import SessionLocal
+from app.api.projects import router as projects_router
+from app.api.workbench import router as workbench_router
+from app.core.db import ProjectArchivedError, SessionLocal
 from app.core.config import settings
 from app.services.rag.embedder import preheat
 from app.services.sandbox.kernel import kernel_registry
@@ -65,6 +67,8 @@ app.include_router(suggest_router, prefix=settings.api_prefix)
 app.include_router(skills_router, prefix=settings.api_prefix)
 app.include_router(agent_router, prefix=settings.api_prefix)
 app.include_router(settings_router, prefix=settings.api_prefix)
+app.include_router(projects_router, prefix=settings.api_prefix)
+app.include_router(workbench_router, prefix=settings.api_prefix)
 
 
 @app.exception_handler(HTTPException)
@@ -89,6 +93,14 @@ async def database_exception(_: Request, __: SQLAlchemyError) -> JSONResponse:
     return JSONResponse(
         status_code=503,
         content={"error": {"code": "database_unavailable", "message": "数据库暂不可用，请启动 PostgreSQL 后重试。"}},
+    )
+
+
+@app.exception_handler(ProjectArchivedError)
+def archived_project_exception(_: Request, exc: ProjectArchivedError) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={"error": {"code": "project_archived", "message": "该研究项目已归档，仅可查看历史记录。"}},
     )
 
 

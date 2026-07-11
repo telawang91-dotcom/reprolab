@@ -6,15 +6,14 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: { DEFAULT: "#2563EB", hover: "#1D4ED8" },
-        canvas: "#F8FAFC",
-        ink: "#0F172A",
+        brand: { DEFAULT: "#5E65D6", hover: "#4C53BD" },
+        canvas: "#F6F7FB",
+        ink: "#172033",
         muted: "#64748B",
         line: "#E2E8F0"
       },
-      boxShadow: { card: "0 1px 2px rgba(15,23,42,.06)" },
       fontFamily: {
-        sans: ["Inter", "Noto Sans SC", "ui-sans-serif", "system-ui"],
+        sans: ["-apple-system", "BlinkMacSystemFont", "SF Pro Text", "PingFang SC", "Microsoft YaHei", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "monospace"]
       }
     }
@@ -23,4 +22,3 @@ const config: Config = {
 };
 
 export default config;
-

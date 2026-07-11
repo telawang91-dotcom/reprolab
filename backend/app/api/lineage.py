@@ -17,15 +17,18 @@ router = APIRouter(tags=["lineage"])
 
 
 @router.get("/artifacts/{artifact_id}/content", response_class=FileResponse)
-def artifact_content(artifact_id: uuid.UUID, db: Session = Depends(get_db)) -> FileResponse:
+def artifact_content(artifact_id: uuid.UUID, project_id: uuid.UUID, db: Session = Depends(get_db)) -> FileResponse:
     artifact = db.get(Artifact, artifact_id)
-    if artifact is None or not artifact.content_hash:
+    if artifact is None or artifact.project_id != project_id or not artifact.content_hash:
         raise HTTPException(status_code=404, detail="artifact content not found")
     return FileResponse(path_of(artifact.content_hash))
 
 
 @router.get("/artifacts/{artifact_id}/lineage", response_model=LineageResponse)
-def artifact_lineage(artifact_id: uuid.UUID, db: Session = Depends(get_db)) -> LineageResponse:
+def artifact_lineage(artifact_id: uuid.UUID, project_id: uuid.UUID, db: Session = Depends(get_db)) -> LineageResponse:
+    artifact = db.get(Artifact, artifact_id)
+    if artifact is None or artifact.project_id != project_id:
+        raise HTTPException(status_code=404, detail="artifact not found")
     result = get_lineage(db, artifact_id)
     if result is None:
         raise HTTPException(status_code=404, detail="artifact not found")

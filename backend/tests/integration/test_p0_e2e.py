@@ -149,7 +149,7 @@ def three_page_pdf() -> bytes:
 def test_m1_real_ingest_contract(client: TestClient, project_id: uuid.UUID):
     pdf = upload(client, project_id, "study.pdf", three_page_pdf(), "paper")
     assert pdf["chunks_count"] > 0
-    detail = client.get(f"/api/v1/documents/{pdf['id']}")
+    detail = client.get(f"/api/v1/documents/{pdf['id']}", params={"project_id": str(project_id)})
     assert detail.status_code == 200
     assert detail.json()["year"] == 2024
     with SessionLocal() as db:
@@ -161,7 +161,7 @@ def test_m1_real_ingest_contract(client: TestClient, project_id: uuid.UUID):
     csv_raw = frame.to_csv(index=False).encode()
     csv = upload(client, project_id, "measurements.csv", csv_raw)
     assert csv["dataset_id"]
-    csv_detail = client.get(f"/api/v1/documents/{csv['id']}").json()
+    csv_detail = client.get(f"/api/v1/documents/{csv['id']}", params={"project_id": str(project_id)}).json()
     assert csv_detail["schema_json"]["row_count"] == 10
     assert len(csv_detail["schema_json"]["columns"]) == 3
     assert csv_detail["storage_hash"] == hashlib.sha256(csv_raw).hexdigest()
@@ -179,7 +179,7 @@ def test_m1_real_ingest_contract(client: TestClient, project_id: uuid.UUID):
     assert markdown["type"] == "note" and markdown["chunks_count"] > 0
     paper_list = client.get(f"/api/v1/documents?project_id={project_id}&type=paper").json()
     assert paper_list and all(item["type"] == "paper" for item in paper_list)
-    assert client.delete(f"/api/v1/documents/{markdown['id']}").status_code == 200
+    assert client.delete(f"/api/v1/documents/{markdown['id']}", params={"project_id": str(project_id)}).status_code == 200
     with SessionLocal() as db:
         assert db.scalar(select(func.count(Chunk.id)).where(Chunk.document_id == uuid.UUID(markdown["id"]))) == 0
 
@@ -278,9 +278,19 @@ def test_m4_m5_real_ledger_match_and_drift(client: TestClient, project_id: uuid.
             (Edge.to_id == uuid.UUID(run["run_id"])) | (Edge.from_id == uuid.UUID(run["run_id"]))
         )))
         assert {"reads", "produces"}.issubset(edge_relations)
-    lineage = client.get(f"/api/v1/artifacts/{artifact_id}/lineage")
+    lineage = client.get(f"/api/v1/artifacts/{artifact_id}/lineage", params={"project_id": str(project_id)})
     assert lineage.status_code == 200
     assert {node["type"] for node in lineage.json()["nodes"]}.issuperset({"dataset", "run", "artifact"})
+    report = client.get(f"/api/v1/runs/{run['run_id']}/report", params={"project_id": str(project_id)})
+    assert report.status_code == 200 and report.json()["artifacts"] and report.json()["datasets"]
+    comparison = client.get(f"/api/v1/runs/{run['run_id']}/compare", params={
+        "project_id": str(project_id), "other_run_id": run["run_id"],
+    })
+    assert comparison.status_code == 200 and comparison.json()["code_changed"] is False
+    timeline = client.get(f"/api/v1/projects/{project_id}/timeline")
+    assert timeline.status_code == 200 and any(item["kind"] == "run" for item in timeline.json()["events"])
+    review = client.get(f"/api/v1/projects/{project_id}/review")
+    assert review.status_code == 200 and review.json()["counts"]["artifacts"] >= 1
 
     match = client.post(f"/api/v1/runs/{run['run_id']}/reproduce", json={"dataset_overrides": {}})
     assert match.status_code == 200, match.text
@@ -647,7 +657,7 @@ def test_m10_real_evidence_whitelist_and_empty_project(client: TestClient, proje
     listed = client.get("/api/v1/suggestions", params={"project_id": str(project_id)})
     assert listed.status_code == 200 and listed.json()
     assert listed.json()[0]["evidence"]
-    lineage = client.get(f"/api/v1/artifacts/{artifact_id}/lineage")
+    lineage = client.get(f"/api/v1/artifacts/{artifact_id}/lineage", params={"project_id": str(project_id)})
     assert lineage.status_code == 200
     assert {node["type"] for node in lineage.json()["nodes"]}.issuperset({"dataset", "run", "artifact"})
 
@@ -702,7 +712,7 @@ def test_m11_real_builtin_registration_harvest_filter_and_lineage(client: TestCl
     run_data = run.json()
     assert run_data["status"] == "success" and run_data["artifacts"]
     artifact_id = run_data["artifacts"][0]["artifact_id"]
-    lineage = client.get(f"/api/v1/artifacts/{artifact_id}/lineage").json()
+    lineage = client.get(f"/api/v1/artifacts/{artifact_id}/lineage", params={"project_id": str(project_id)}).json()
     assert {node["type"] for node in lineage["nodes"]}.issuperset({"dataset", "run", "artifact"})
 
     from app.services.skills.harvest import from_run

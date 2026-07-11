@@ -9,6 +9,7 @@ from app.schemas.documents import BatchStatus, DeleteResponse, DocumentDetail, D
 from app.services.rag import ingest as ingest_service
 from app.services.rag import batch_ingest
 from app.services.rag.collections import require_collection
+from app.services.workbench import project_document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -105,11 +106,13 @@ def get_documents(
 
 
 @router.get("/{document_id}", response_model=DocumentDetail)
-def get_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> DocumentDetail:
+def get_document(document_id: uuid.UUID, project_id: uuid.UUID, db: Session = Depends(get_db)) -> DocumentDetail:
     result = ingest_service.document_detail(db, document_id)
     if result is None:
         raise HTTPException(status_code=404, detail="document not found")
     document, chunks_count, dataset = result
+    if document.project_id != project_id:
+        raise HTTPException(status_code=404, detail="document not found")
     return DocumentDetail(
         id=document.id,
         project_id=document.project_id,
@@ -131,7 +134,11 @@ def get_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> Docum
 
 
 @router.delete("/{document_id}", response_model=DeleteResponse)
-def delete_document(document_id: uuid.UUID, db: Session = Depends(get_db)) -> DeleteResponse:
+def delete_document(document_id: uuid.UUID, project_id: uuid.UUID, db: Session = Depends(get_db)) -> DeleteResponse:
+    try:
+        project_document(db, project_id, document_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     if not ingest_service.delete_document(db, document_id):
         raise HTTPException(status_code=404, detail="document not found")
     return DeleteResponse(id=document_id, deleted=True)

@@ -63,6 +63,8 @@ reprolab/
 ├── tasks/                     # 逐张任务卡（每次做一张）
 │   ├── M1-ingest.md ... M11-skills.md, M-Platform.md
 │   ├── M5b-drift-attribution.md   # 算法增强(P1)：差异归因，扩展 M5
+│   ├── M0-product-quality-gate.md # P0：全站可诊断、可恢复与可信状态门禁
+│   ├── M12-project-workspaces.md  # P1：研究项目隔离与工作区切换
 │   ├── M7b-citation-nli.md        # 算法增强(P1)：引用支持度 NLI，强化 M7
 │   └── M7c-reflexion-repair.md    # 算法增强(P1)：反思式自修复，编排闭环
 ├── docker-compose.yml         # 只有一个 postgres+pgvector 容器（+可选沙箱镜像）

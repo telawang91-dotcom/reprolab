@@ -31,6 +31,8 @@ export default function KnowledgePage() {
   const [year, setYear] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [searching, setSearching] = useState(false);
+  const [warmingRetrieval, setWarmingRetrieval] = useState(false);
+  const [semanticPrepared, setSemanticPrepared] = useState(false);
   const [uploading, setUploading] = useState<string[]>([]);
   const [batch, setBatch] = useState<BatchStatus>();
   const [dragging, setDragging] = useState(false);
@@ -123,23 +125,27 @@ export default function KnowledgePage() {
   async function search() {
     if (!query.trim()) return;
     setSearching(true); setError(""); setAnswer("");
+    const needsWarmup = mode !== "keyword" && !semanticPrepared;
+    if (needsWarmup) setWarmingRetrieval(true);
     try {
       const filters: Record<string, unknown> = {};
       if (type) filters.type = type;
       if (year) filters.year_gte = Number(year);
       setHits((await api.search(query, mode, filters, collection || undefined)).hits);
     } catch (reason) { setError((reason as Error).message); }
-    finally { setSearching(false); }
+    finally { setSearching(false); setWarmingRetrieval(false); if (needsWarmup) setSemanticPrepared(true); }
   }
 
   async function ask() {
     if (!query.trim()) return;
     setSearching(true); setError(""); setHits([]);
+    const needsWarmup = !semanticPrepared;
+    if (needsWarmup) setWarmingRetrieval(true);
     try {
       const response = await api.qa(query, collection || undefined);
       setAnswer(response.answer); setCitations(response.citations);
     } catch (reason) { setError((reason as Error).message); }
-    finally { setSearching(false); }
+    finally { setSearching(false); setWarmingRetrieval(false); if (needsWarmup) setSemanticPrepared(true); }
   }
 
   async function openDocument(id: string, hit: SearchHit | null = null) {
@@ -193,7 +199,7 @@ export default function KnowledgePage() {
 
         {hasDocuments && <><section className="overflow-hidden rounded-xl bg-slate-900 text-white shadow-sm dark:bg-slate-800">
           <div className="flex min-h-16 items-center gap-3 px-4 md:px-5"><Search size={18} className="shrink-0 text-slate-400"/><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void ask()} className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-slate-500" placeholder={activeCollection ? `向“${activeCollection.name}”提问…` : "向全部资料提问，或输入关键词检索…"}/>{searching && <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400"/>}<button onClick={() => void search()} disabled={searching || !query.trim()} className="hidden h-9 rounded-lg px-3 text-sm text-slate-300 hover:bg-white/10 disabled:opacity-40 sm:block">检索</button><button onClick={() => void ask()} disabled={searching || !query.trim()} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-white px-3.5 text-sm font-medium text-slate-900 hover:bg-slate-100 disabled:opacity-40"><Sparkles size={14}/>问知识库</button></div>
-          <div className="flex flex-wrap items-center gap-2 border-t border-white/10 px-4 py-2.5 text-xs text-slate-400 md:px-5"><ShieldCheck size={13} className="text-emerald-400"/><span>仅使用当前范围内的证据，答案保留可点击出处</span><span className="ml-auto hidden sm:inline">检索方式</span><select value={mode} onChange={(event) => setMode(event.target.value)} className="rounded-md border-0 bg-white/10 px-2 py-1 text-xs text-slate-200 outline-none">{modes.map((item) => <option className="text-slate-900" key={item.id} value={item.id}>{item.label}</option>)}</select></div>
+          <div className="flex flex-wrap items-center gap-2 border-t border-white/10 px-4 py-2.5 text-xs text-slate-400 md:px-5"><ShieldCheck size={13} className="text-emerald-400"/><span>{warmingRetrieval ? "首次语义检索正在准备本地科研模型，完成后会自动继续。" : "仅使用当前范围内的证据，答案保留可点击出处"}</span><span className="ml-auto hidden sm:inline">检索方式</span><select value={mode} onChange={(event) => setMode(event.target.value)} className="rounded-md border-0 bg-white/10 px-2 py-1 text-xs text-slate-200 outline-none">{modes.map((item) => <option className="text-slate-900" key={item.id} value={item.id}>{item.label}</option>)}</select></div>
         </section>
 
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><select value={type} onChange={(event) => setType(event.target.value)} className="h-8 rounded-md border bg-white px-2 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"><option value="">所有类型</option><option value="paper">论文</option><option value="note">笔记</option><option value="code">代码</option><option value="other">数据/其他</option></select><input value={year} onChange={(event) => setYear(event.target.value)} className="h-8 w-24 rounded-md border bg-white px-2 text-slate-600 outline-none dark:border-slate-700 dark:bg-slate-950" inputMode="numeric" placeholder="年份 ≥"/><span className="ml-auto text-slate-400">{documents.length} 份资料</span></div>

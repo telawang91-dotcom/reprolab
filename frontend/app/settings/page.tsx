@@ -4,9 +4,8 @@ import { Check, CheckCircle2, CircleHelp, Database, Eye, EyeOff, KeyRound, Loade
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 
-import { api, type ModelConfig, type ModelTestResult } from "@/lib/api";
+import { api, type ModelConfig, type ModelTestResult, type RuntimeStatus } from "@/lib/api";
 
-const API_ROOT = (process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000/api/v1").replace(/\/api\/v1$/, "");
 const providerMeta = {
   deepseek: { label: "DeepSeek 官方", baseUrl: "https://api.deepseek.com/v1", analysis: "deepseek-chat", review: "deepseek-reasoner" },
   hunyuan: { label: "腾讯混元", baseUrl: "https://api.hunyuan.cloud.tencent.com/v1", analysis: "hunyuan-turbos-latest", review: "hunyuan-turbos-latest" },
@@ -14,8 +13,7 @@ const providerMeta = {
 } as const;
 
 export default function SettingsPage() {
-  const [backend, setBackend] = useState<"checking" | "online" | "offline">("checking");
-  const [database, setDatabase] = useState<"checking" | "online" | "offline">("checking");
+  const [runtime, setRuntime] = useState<RuntimeStatus>();
   const [config, setConfig] = useState<ModelConfig>();
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -26,9 +24,7 @@ export default function SettingsPage() {
   const [testResult, setTestResult] = useState<ModelTestResult>();
 
   useEffect(() => {
-    fetch(`${API_ROOT}/health`, { cache: "no-store" }).then(async (response) => {
-      const result = await response.json(); setBackend(response.ok ? "online" : "offline"); setDatabase(result.database === "online" ? "online" : "offline");
-    }).catch(() => { setBackend("offline"); setDatabase("offline"); });
+    api.runtimeStatus().then(setRuntime).catch((reason) => setNotice({ kind: "error", text: reason instanceof Error ? reason.message : "运行状态读取失败" }));
     api.modelConfig().then(setConfig).catch((reason) => setNotice({ kind: "error", text: reason instanceof Error ? reason.message : "模型配置读取失败" })).finally(() => setLoading(false));
   }, []);
 
@@ -87,10 +83,15 @@ export default function SettingsPage() {
       </form>
     </section>
 
-    <section id="system-status" className="scroll-mt-20"><div className="mb-3"><h2 className="font-semibold">运行状态</h2><p className="mt-1 text-sm text-slate-500">用于排查页面无法加载或分析无法执行的问题。</p></div><div className="grid gap-3 md:grid-cols-3"><StatusCard icon={Server} title="应用服务" state={backend}/><StatusCard icon={Database} title="数据与向量库" state={database}/><article className="card p-4"><div className="flex items-center gap-2 text-sm font-medium"><ShieldCheck size={16} className="text-brand"/>可信运行环境</div><p className="mt-3 text-sm text-slate-500">Docker 沙箱 · 内容指纹已启用</p></article></div></section>
+    <section id="system-status" className="scroll-mt-20"><div className="mb-3"><h2 className="font-semibold">运行状态</h2><p className="mt-1 text-sm text-slate-500">页面、资料和分析能力是否可用，以及下一步该如何恢复。</p></div>{runtime ? <><div className={`mb-3 rounded-xl border px-4 py-3 text-sm ${runtime.state === "ready" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-900"}`}>{runtime.summary}</div><div className="grid gap-3 md:grid-cols-3">{runtime.components.map((item) => <RuntimeCard key={item.key} item={item}/>)}</div></> : <div className="grid gap-3 md:grid-cols-3"><StatusCard icon={Server} title="运行状态" state="checking"/><StatusCard icon={Database} title="数据与向量库" state="checking"/><StatusCard icon={ShieldCheck} title="可信运行环境" state="checking"/></div>}</section>
   </div>;
 }
 
 function StatusCard({ icon: Icon, title, state }: { icon: typeof Server; title: string; state: "checking" | "online" | "offline" }) {
   return <article className="card p-4"><div className="flex items-center gap-2 text-sm font-medium"><Icon size={16} className={state === "online" ? "text-emerald-600" : "text-slate-400"}/>{title}<span className={`ml-auto h-2 w-2 rounded-full ${state === "online" ? "bg-emerald-500" : state === "offline" ? "bg-red-500" : "animate-pulse bg-amber-400"}`}/></div><p className="mt-3 text-sm text-slate-500">{state === "online" ? "运行正常" : state === "offline" ? "暂时无法连接" : "正在检查…"}</p></article>;
+}
+
+function RuntimeCard({ item }: { item: RuntimeStatus["components"][number] }) {
+  const state = item.state === "ready" ? "online" : item.state === "offline" ? "offline" : "checking";
+  return <article className="card p-4"><div className="flex items-center gap-2 text-sm font-medium"><span className={`h-2 w-2 rounded-full ${state === "online" ? "bg-emerald-500" : state === "offline" ? "bg-red-500" : "bg-amber-400"}`}/>{item.title}</div><p className="mt-3 text-sm leading-6 text-slate-500">{item.message}</p>{item.action && <p className="mt-3 text-xs font-medium text-brand">下一步：{item.action}</p>}</article>;
 }

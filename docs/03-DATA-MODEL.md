@@ -31,11 +31,12 @@ CREATE TABLE projects (
   owner_id    UUID REFERENCES users(id),
   name        TEXT NOT NULL,
   description TEXT,
+  archived_at TIMESTAMPTZ,                 -- NULL=当前工作区；归档只读且保留全部血缘
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
-demo 可先固定单 user + 单 project，但表保留以便讲 "多知识空间"。
+demo 单 user，但必须以 project 为资料、运行、产物、结论与记忆的隔离边界。归档项目禁止新的写入，不物理删除，以保证历史可复现。
 
 ### 2. 知识库（M1 / M2）
 

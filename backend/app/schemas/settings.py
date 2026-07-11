@@ -54,3 +54,20 @@ class ModelTestResult(BaseModel):
     message: str
     model: str
     latency_ms: int
+
+
+RuntimeState = Literal["ready", "action_required", "offline"]
+
+
+class RuntimeComponent(BaseModel):
+    key: Literal["database", "model", "sandbox"]
+    title: str
+    state: RuntimeState
+    message: str
+    action: str | None = None
+
+
+class RuntimeStatusRead(BaseModel):
+    state: Literal["ready", "degraded"]
+    summary: str
+    components: list[RuntimeComponent]

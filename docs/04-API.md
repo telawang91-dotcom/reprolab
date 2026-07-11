@@ -13,6 +13,41 @@
 3. 时间：ISO8601 UTC。
 4. 锚点：正文里的 ⟦art_xxxx⟧ / ⟦src_xxxx⟧ 为机器可解析标记（xxxx = artifact/document id 短码）。
 
+### M12 研究项目工作区
+
+```
+GET  /projects?include_archived=false
+  -> [ { id, name, description?, archived_at?, created_at } ]
+POST /projects
+  body: { name, description? }
+PATCH /projects/{id}
+  body: { name?, description? }
+POST /projects/{id}/archive
+POST /projects/{id}/restore
+POST /projects/demo              # 创建/复用隔离演示项目，并准备 Palmer Penguins CSV
+```
+
+前端保存当前项目 ID 并将它作为所有既有项目作用域接口的 `project_id`。归档项目可被列表和只读查看，但任何上传、分析、写作回写、记忆或建议写入必须返回 409；不得物理删除项目及其血缘。
+
+`POST /projects/demo` 只操作固定的演示项目；它不得向当前真实项目写入资料、记忆、建议或产物。
+
+### 研究交付与审阅（P1）
+
+```
+GET /projects/{project_id}/timeline
+  -> { events: [{ kind, title, detail, created_at, href?, trusted }] }
+GET /projects/{project_id}/review
+  -> { project, counts, risks: [], next_actions: [] }
+GET /runs/{run_id}/report?project_id={id}
+  -> { run, datasets, environment, artifacts, reproduction_note }
+GET /runs/{run_id}/compare?project_id={id}&other_run_id={id}
+  -> { baseline, candidate, code_changed, input_changed, environment_changed, artifact_changes }
+GET /documents/{document_id}/evidence?project_id={id}
+  -> { document_id, excerpts: [{ section?, position?, content }] }
+```
+
+这些接口只读取现有账本实体，不创建第二套“报告/时间线”事实来源。所有按 ID 读取的文档、运行和产物必须校验 `project_id`；跨项目统一返回 404，避免泄露存在性。
+
 ### M1 知识库入库
 
 plaintext
@@ -307,6 +342,22 @@ POST /agent/invoke         # headless 调用：脱离前端，走完"输入→�
   body: { project_id, task: str, inputs?: {} }
   -> { result, artifacts, lineage, verify_report }
 ```
+
+### 运行状态与可恢复错误（产品体验 P0）
+
+```
+GET /settings/runtime
+  -> {
+       state: "ready" | "degraded",
+       summary: str,
+       components: [
+         { key: "database"|"model"|"sandbox", title, state: "ready"|"action_required"|"offline",
+           message, action?: str }
+       ]
+     }
+```
+
+前端不得把网络异常原样显示为 `Failed to fetch`。它应调用本接口展示受影响能力、下一步操作和设置入口；接口只检查本机配置与依赖可达性，不主动发送模型请求或泄露密钥。
 
 ### 模块 × 接口映射（Codex 按此最小加载）
 

@@ -24,6 +24,7 @@ class Project(Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     name: Mapped[str] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

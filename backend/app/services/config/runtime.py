@@ -1,10 +1,15 @@
 import os
+import shutil
+import subprocess
 import time
 from pathlib import Path
 
 from app.core.config import BACKEND_DIR, settings
-from app.schemas.settings import ModelConfigRead, ModelConfigUpdate, ModelTestResult
+from app.core.db import SessionLocal
+from app.schemas.settings import ModelConfigRead, ModelConfigUpdate, ModelTestResult, RuntimeComponent, RuntimeStatusRead
 from app.services.agents.model_adapter import ModelAdapterError, model_adapter
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 
 ENV_PATH = BACKEND_DIR.parent / ".env"
@@ -121,4 +126,66 @@ def test_model_connection() -> ModelTestResult:
         message=message,
         model=config.analysis_model,
         latency_ms=round((time.perf_counter() - started) * 1000),
+    )
+
+
+def database_online() -> bool:
+    try:
+        with SessionLocal() as db:
+            db.execute(text("SELECT 1"))
+        return True
+    except SQLAlchemyError:
+        return False
+
+
+def docker_daemon_available() -> bool:
+    executable = shutil.which("docker")
+    if executable is None:
+        return False
+    try:
+        probe = subprocess.run(
+            [executable, "version", "--format", "{{.Server.Version}}"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return probe.returncode == 0 and bool(probe.stdout.strip())
+
+
+def get_runtime_status() -> RuntimeStatusRead:
+    """Return actionable local readiness without testing remote model credentials."""
+    database_ready = database_online()
+    model_ready = get_model_config().api_key_configured
+    sandbox_ready = settings.sandbox_backend != "docker" or docker_daemon_available()
+    components = [
+        RuntimeComponent(
+            key="database",
+            title="数据与向量库",
+            state="ready" if database_ready else "offline",
+            message="PostgreSQL 与 pgvector 可以使用。" if database_ready else "无法连接本地 PostgreSQL；资料、血缘与结论暂不能读取或保存。",
+            action=None if database_ready else "启动 PostgreSQL 后重试",
+        ),
+        RuntimeComponent(
+            key="model",
+            title="分析模型",
+            state="ready" if model_ready else "action_required",
+            message="模型密钥已配置，可用于分析和校验。" if model_ready else "尚未配置模型密钥；仍可管理资料，但不能生成分析或运行语义校验。",
+            action=None if model_ready else "前往设置配置模型",
+        ),
+        RuntimeComponent(
+            key="sandbox",
+            title="可信运行环境",
+            state="ready" if sandbox_ready else "action_required",
+            message=("Docker 沙箱可用，分析会固定环境和随机种子。" if settings.sandbox_backend == "docker" else "当前使用开发执行环境；正式复现建议切换为 Docker 沙箱。") if sandbox_ready else "Docker 沙箱暂不可连接，无法以隔离环境执行可复现分析。",
+            action=None if sandbox_ready else "启动 Docker Desktop 后重试",
+        ),
+    ]
+    ready = all(item.state == "ready" for item in components)
+    return RuntimeStatusRead(
+        state="ready" if ready else "degraded",
+        summary="工作台已具备完整可信分析条件。" if ready else "部分能力暂不可用；请按下方提示完成配置。",
+        components=components,
     )

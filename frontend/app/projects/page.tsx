@@ -1,0 +1,42 @@
+"use client";
+
+import { Archive, Check, FolderKanban, Plus, RotateCcw } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+
+import { activeProjectId, api, setActiveProjectId, type ProjectItem } from "@/lib/api";
+
+export default function ProjectsPage() {
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [activeId, setActiveId] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    try { setProjects(await api.projects(true)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "项目列表加载失败"); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { setActiveId(activeProjectId()); void load(); }, [load]);
+
+  async function create(event: FormEvent) {
+    event.preventDefault(); if (!name.trim()) return;
+    setBusy("create"); setError("");
+    try { const project = await api.createProject(name.trim(), description.trim()); setActiveProjectId(project.id); window.location.reload(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "项目创建失败"); }
+    finally { setBusy(""); }
+  }
+  async function archive(project: ProjectItem) {
+    if (!window.confirm(`归档“${project.name}”后将禁止继续写入，但历史资料与血缘会保留。`)) return;
+    setBusy(project.id); setError("");
+    try { await api.archiveProject(project.id); if (project.id === activeId) { const next = projects.find((item) => item.id !== project.id && !item.archived_at); if (next) { setActiveProjectId(next.id); window.location.reload(); } } await load(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "项目归档失败"); }
+    finally { setBusy(""); }
+  }
+  async function restore(project: ProjectItem) { setBusy(project.id); setError(""); try { await api.restoreProject(project.id); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : "项目恢复失败"); } finally { setBusy(""); } }
+
+  return <div className="mx-auto max-w-5xl space-y-7 p-5 lg:p-8"><header><div className="label">研究上下文</div><h1 className="mt-1 text-2xl font-semibold">研究项目</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">项目是资料、数据、分析、结论与科研记忆的隔离边界。归档只读保留历史血缘，不会删除研究记录。</p></header>{error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}<section className="card p-5"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-brand"><Plus size={18}/></span><div><h2 className="font-semibold">新建研究项目</h2><p className="mt-1 text-sm text-slate-500">从一个课题、论文或实验目标开始。</p></div></div><form onSubmit={create} className="mt-5 grid gap-3 sm:grid-cols-[1fr_1.4fr_auto]"><input value={name} onChange={(event) => setName(event.target.value)} className="input" placeholder="例如：企鹅形态差异研究" maxLength={120}/><input value={description} onChange={(event) => setDescription(event.target.value)} className="input" placeholder="可选：课题说明" maxLength={1000}/><button disabled={!name.trim() || busy === "create"} className="btn-primary"><Plus size={14}/>{busy === "create" ? "创建中…" : "创建并进入"}</button></form></section><section><div className="mb-3"><h2 className="font-semibold">全部项目</h2><p className="mt-1 text-sm text-slate-500">切换后，所有页面会重新读取该项目范围内的内容。</p></div>{loading ? <div className="grid gap-3 md:grid-cols-2">{[1, 2].map((item) => <div key={item} className="h-32 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800"/>)}</div> : <div className="grid gap-3 md:grid-cols-2">{projects.map((project) => { const active = project.id === activeId; const archived = Boolean(project.archived_at); return <article key={project.id} className={`card p-5 ${archived ? "opacity-70" : ""}`}><div className="flex gap-3"><span className={`grid h-10 w-10 place-items-center rounded-xl ${archived ? "bg-slate-100 text-slate-500" : "bg-blue-50 text-brand"}`}><FolderKanban size={18}/></span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="truncate font-semibold">{project.name}</h3>{active && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">当前项目</span>}{archived && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">已归档</span>}</div><p className="mt-2 min-h-10 text-sm leading-5 text-slate-500">{project.description || "尚未添加项目说明。"}</p></div></div><div className="mt-5 flex flex-wrap gap-2">{!archived && !active && <button onClick={() => { setActiveProjectId(project.id); window.location.reload(); }} className="btn-primary h-8"><Check size={14}/>切换到此项目</button>}{!archived && <button onClick={() => void archive(project)} disabled={busy === project.id} className="btn-secondary h-8"><Archive size={14}/>归档</button>}{archived && <button onClick={() => void restore(project)} disabled={busy === project.id} className="btn-secondary h-8"><RotateCcw size={14}/>恢复项目</button>}</div></article>; })}</div>}</section></div>;
+}
