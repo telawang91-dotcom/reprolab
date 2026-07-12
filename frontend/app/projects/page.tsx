@@ -2,12 +2,17 @@
 
 import {
   Archive,
+  ArrowRight,
+  Brain,
   Check,
+  Clock3,
   FolderKanban,
   Pencil,
   Plus,
   RotateCcw,
+  ShieldCheck,
 } from "lucide-react";
+import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import {
@@ -120,6 +125,48 @@ export default function ProjectsPage() {
           项目是资料、数据、分析、结论与科研记忆的隔离边界。归档只读保留历史血缘，不会删除研究记录。
         </p>
       </header>
+      <section className="grid gap-3 sm:grid-cols-3">
+        {[
+          {
+            href: "/timeline",
+            label: "研究时间线",
+            detail: "回看资料、分析和结论",
+            icon: Clock3,
+          },
+          {
+            href: "/review",
+            label: "导师审阅",
+            detail: "只读查看项目健康度",
+            icon: ShieldCheck,
+          },
+          {
+            href: "/memory",
+            label: "科研记忆",
+            detail: "管理偏好和复用方法",
+            icon: Brain,
+          },
+        ].map(({ href, label, detail, icon: Icon }) => (
+          <Link
+            key={href}
+            href={href}
+            className="group flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 transition hover:border-indigo-200 hover:shadow-card dark:border-white/[.10] dark:bg-slate-900"
+          >
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-50 text-brand dark:bg-indigo-950">
+              <Icon size={16} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <strong className="block text-sm">{label}</strong>
+              <span className="mt-0.5 block truncate text-xs text-slate-500">
+                {detail}
+              </span>
+            </span>
+            <ArrowRight
+              size={14}
+              className="text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand"
+            />
+          </Link>
+        ))}
+      </section>
       {error && (
         <div
           role="alert"

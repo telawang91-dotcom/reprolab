@@ -10,10 +10,12 @@ import {
   Clock3,
   Command,
   FlaskConical,
+  FolderKanban,
   LayoutDashboard,
   Menu,
   Moon,
   Network,
+  PackageCheck,
   Plus,
   Search,
   Settings,
@@ -42,7 +44,7 @@ import {
 const links = [
   {
     href: "/",
-    label: "开始",
+    label: "工作台",
     detail: "任务入口与研究进度",
     icon: LayoutDashboard,
   },
@@ -58,7 +60,24 @@ const links = [
     detail: "描述问题并运行分析",
     icon: FlaskConical,
   },
-  { href: "/lineage", label: "记录", detail: "查看运行与结果", icon: Network },
+  {
+    href: "/results",
+    label: "成果",
+    detail: "检查产物并形成报告",
+    icon: PackageCheck,
+  },
+  {
+    href: "/projects",
+    label: "项目",
+    detail: "切换、归档与研究概览",
+    icon: FolderKanban,
+  },
+  {
+    href: "/lineage",
+    label: "溯源",
+    detail: "查看数据、代码与产物关系",
+    icon: Network,
+  },
   { href: "/writing", label: "写作", detail: "整理报告与结论", icon: Workflow },
   { href: "/timeline", label: "时间线", detail: "回看项目进展", icon: Clock3 },
   { href: "/review", label: "审阅", detail: "查看项目摘要", icon: ShieldCheck },
@@ -178,8 +197,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setQuery("");
     router.push(href);
   };
-  const isActive = (href: string) =>
-    pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+  const isActive = (href: string) => {
+    if (
+      href === "/results" &&
+      ["/writing", "/lineage", "/report"].some((item) =>
+        pathname.startsWith(item),
+      )
+    )
+      return true;
+    if (
+      href === "/projects" &&
+      ["/timeline", "/review", "/memory"].some((item) =>
+        pathname.startsWith(item),
+      )
+    )
+      return true;
+    return (
+      pathname === href || (href !== "/" && pathname.startsWith(`${href}/`))
+    );
+  };
   const selectProject = (item: ProjectItem) => {
     if (item.id === activeProject?.id) {
       setProjectMenuOpen(false);
@@ -199,7 +235,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const navigation = (
     <nav>
       <div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-        工作
+        研究流程
       </div>
       <div className="space-y-1">
         {links.slice(0, 5).map(({ href, label, icon: Icon }) => (
@@ -217,35 +253,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ))}
       </div>
       <div className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-        项目
+        项目工具
       </div>
       <Link
         href="/timeline"
         className={`relative flex h-9 items-center gap-3 rounded-lg px-3 transition ${isActive("/timeline") ? "bg-indigo-50 font-medium text-brand dark:bg-indigo-950/40" : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"}`}
       >
         <Clock3 size={16} />
-        时间线
+        研究时间线
       </Link>
       <Link
         href="/review"
         className={`relative mt-1 flex h-9 items-center gap-3 rounded-lg px-3 transition ${isActive("/review") ? "bg-indigo-50 font-medium text-brand dark:bg-indigo-950/40" : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"}`}
       >
         <ShieldCheck size={16} />
-        审阅
+        导师审阅
       </Link>
       <Link
         href="/memory"
         className={`relative mt-1 flex h-9 items-center gap-3 rounded-lg px-3 transition ${isActive("/memory") ? "bg-indigo-50 font-medium text-brand dark:bg-indigo-950/40" : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"}`}
       >
         <Brain size={16} />
-        记忆
+        科研记忆
       </Link>
       <Link
         href="/guide"
         className={`relative mt-1 flex h-9 items-center gap-3 rounded-lg px-3 transition ${isActive("/guide") ? "bg-indigo-50 font-medium text-brand dark:bg-indigo-950/40" : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"}`}
       >
         <CircleHelp size={16} />
-        使用指南
+        使用帮助
       </Link>
     </nav>
   );
@@ -284,6 +320,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <FlaskConical size={15} />
           </span>
           <span className="hidden sm:inline">ReproLab</span>
+        </Link>
+        <Link
+          href="/projects"
+          aria-label="查看当前研究项目"
+          className="ml-1 flex min-w-0 max-w-[42vw] items-center gap-1.5 rounded-full border border-white/15 bg-white/[.08] px-2.5 py-1.5 text-[11px] text-white/90 sm:hidden"
+        >
+          <span
+            className={`h-1.5 w-1.5 shrink-0 rounded-full ${activeProject?.archived_at ? "bg-amber-300" : "bg-emerald-300"}`}
+          />
+          <span className="truncate">{activeProject?.name || "选择项目"}</span>
         </Link>
         <div className="relative ml-2 hidden sm:block">
           <button
