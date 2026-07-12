@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.schemas.workbench import EvidenceResponse, ReviewResponse, RunCompare, RunReport, TimelineResponse
+from app.schemas.workbench import ArtifactListResponse, EvidenceResponse, ReviewResponse, RunCompare, RunReport, TimelineResponse
 from app.services import workbench
 
 
@@ -24,6 +24,11 @@ def timeline(project_id: uuid.UUID, db: Session = Depends(get_db)) -> TimelineRe
 @router.get("/projects/{project_id}/review", response_model=ReviewResponse)
 def review(project_id: uuid.UUID, db: Session = Depends(get_db)) -> ReviewResponse:
     return guarded(lambda: workbench.project_review(db, project_id))
+
+
+@router.get("/projects/{project_id}/artifacts", response_model=ArtifactListResponse)
+def artifacts(project_id: uuid.UUID, limit: int = 50, db: Session = Depends(get_db)) -> ArtifactListResponse:
+    return guarded(lambda: workbench.project_artifacts(db, project_id, min(max(limit, 1), 100)))
 
 
 @router.get("/runs/{run_id}/report", response_model=RunReport)

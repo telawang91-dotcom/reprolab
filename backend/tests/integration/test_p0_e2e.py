@@ -271,6 +271,10 @@ def test_m4_m5_real_ledger_match_and_drift(client: TestClient, project_id: uuid.
     run = run_response.json()
     assert run["status"] == "success" and len(run["code_hash"]) == 64
     artifact_id = run["artifacts"][0]["artifact_id"]
+    artifact_list = client.get(f"/api/v1/projects/{project_id}/artifacts")
+    assert artifact_list.status_code == 200, artifact_list.text
+    listed_artifact = next(item for item in artifact_list.json()["items"] if item["id"] == artifact_id)
+    assert listed_artifact["source_complete"] is True
     with SessionLocal() as db:
         assert db.get(Run, uuid.UUID(run["run_id"])) is not None
         assert db.scalar(select(func.count(EnvSnapshot.id))) >= 1

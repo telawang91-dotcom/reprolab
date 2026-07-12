@@ -4,9 +4,9 @@ from collections.abc import Iterable
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.knowledge import Artifact, Chunk, Claim, Conversation, Dataset, Document, EnvSnapshot, Project, Run
+from app.models.knowledge import Artifact, Chunk, Claim, Conversation, Dataset, Document, Edge, EnvSnapshot, Project, Run
 from app.schemas.workbench import (
-    ArtifactChange, EvidenceExcerpt, EvidenceResponse, ReportArtifact, ReviewCounts,
+    ArtifactChange, ArtifactListResponse, ArtifactSummary, EvidenceExcerpt, EvidenceResponse, ReportArtifact, ReviewCounts,
     ReviewResponse, RunCompare, RunReport, TimelineItem, TimelineResponse,
 )
 
@@ -64,6 +64,29 @@ def project_review(db: Session, project_id: uuid.UUID) -> ReviewResponse:
     elif verified == 0: next_actions.append("把可信产物写入结论，并运行来源校验。")
     else: next_actions.append("导出复现报告，或与导师分享只读审阅页。")
     return ReviewResponse(project_id=project.id, project_name=project.name, counts=ReviewCounts(documents=documents, datasets=datasets, successful_runs=successful, failed_runs=failed, artifacts=artifacts, verified_claims=verified, flagged_claims=flagged), risks=risks, next_actions=next_actions)
+
+
+def project_artifacts(db: Session, project_id: uuid.UUID, limit: int = 50) -> ArtifactListResponse:
+    _project(db, project_id)
+    artifacts = list(db.scalars(
+        select(Artifact).where(Artifact.project_id == project_id).order_by(Artifact.created_at.desc()).limit(limit)
+    ))
+    items: list[ArtifactSummary] = []
+    for artifact in artifacts:
+        run = db.get(Run, artifact.run_id) if artifact.run_id else None
+        produced = bool(run and db.scalar(select(Edge.id).where(
+            Edge.from_id == run.id, Edge.to_id == artifact.id, Edge.relation == "produces"
+        ).limit(1)))
+        reads = bool(run and db.scalar(select(Edge.id).where(
+            Edge.to_id == run.id, Edge.relation == "reads"
+        ).limit(1)))
+        source_complete = bool(run and run.status == "success" and produced and (reads or not run.input_hashes))
+        items.append(ArtifactSummary(
+            id=artifact.id, run_id=artifact.run_id, kind=artifact.kind, title=artifact.title,
+            value=artifact.value_json, content_hash=artifact.content_hash, created_at=artifact.created_at,
+            source_complete=source_complete, run_status=run.status if run else None,
+        ))
+    return ArtifactListResponse(items=items)
 
 
 def run_report(db: Session, project_id: uuid.UUID, run_id: uuid.UUID) -> RunReport:

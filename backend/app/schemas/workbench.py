@@ -36,6 +36,22 @@ class ReviewResponse(BaseModel):
     next_actions: list[str]
 
 
+class ArtifactSummary(BaseModel):
+    id: uuid.UUID
+    run_id: uuid.UUID | None
+    kind: str
+    title: str | None
+    value: Any | None
+    content_hash: str | None
+    created_at: datetime
+    source_complete: bool
+    run_status: str | None
+
+
+class ArtifactListResponse(BaseModel):
+    items: list[ArtifactSummary]
+
+
 class EvidenceExcerpt(BaseModel):
     section: str | None
     position: int | None

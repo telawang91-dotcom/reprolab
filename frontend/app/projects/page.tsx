@@ -30,6 +30,12 @@ export default function ProjectsPage() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [activeId, setActiveId] = useState("");
+  const [dialog, setDialog] = useState<{
+    type: "rename" | "archive";
+    project: ProjectItem;
+  }>();
+  const [renameValue, setRenameValue] = useState("");
+  const [toast, setToast] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,6 +52,14 @@ export default function ProjectsPage() {
     setActiveId(activeProjectId());
     void load();
   }, [load]);
+  useEffect(() => {
+    if (!dialog) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDialog(undefined);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [dialog]);
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -63,12 +77,6 @@ export default function ProjectsPage() {
     }
   }
   async function archive(project: ProjectItem) {
-    if (
-      !window.confirm(
-        `归档“${project.name}”后将禁止继续写入，但历史资料与血缘会保留。`,
-      )
-    )
-      return;
     setBusy(project.id);
     setError("");
     try {
@@ -83,6 +91,9 @@ export default function ProjectsPage() {
         }
       }
       await load();
+      setDialog(undefined);
+      setToast("项目已归档，历史资料仍可只读查看");
+      window.setTimeout(() => setToast(""), 3000);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "项目归档失败");
     } finally {
@@ -101,14 +112,16 @@ export default function ProjectsPage() {
       setBusy("");
     }
   }
-  async function rename(project: ProjectItem) {
-    const next = window.prompt("新的项目名称", project.name)?.trim();
+  async function rename(project: ProjectItem, next = renameValue.trim()) {
     if (!next || next === project.name) return;
     setBusy(project.id);
     setError("");
     try {
       await api.updateProject(project.id, { name: next });
       await load();
+      setDialog(undefined);
+      setToast("项目名称已更新");
+      window.setTimeout(() => setToast(""), 3000);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "项目重命名失败");
     } finally {
@@ -282,7 +295,10 @@ export default function ProjectsPage() {
                     )}
                     {!archived && (
                       <button
-                        onClick={() => void rename(project)}
+                        onClick={() => {
+                          setRenameValue(project.name);
+                          setDialog({ type: "rename", project });
+                        }}
                         disabled={busy === project.id}
                         className="btn-secondary h-8"
                       >
@@ -292,7 +308,7 @@ export default function ProjectsPage() {
                     )}
                     {!archived && (
                       <button
-                        onClick={() => void archive(project)}
+                        onClick={() => setDialog({ type: "archive", project })}
                         disabled={busy === project.id}
                         className="btn-secondary h-8"
                       >
@@ -317,6 +333,91 @@ export default function ProjectsPage() {
           </div>
         )}
       </section>
+      {dialog && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-4"
+          onMouseDown={() => setDialog(undefined)}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="project-dialog-title"
+            className="card w-full max-w-md p-6"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="label">研究项目</div>
+            <h2
+              id="project-dialog-title"
+              className="mt-2 text-xl font-semibold"
+            >
+              {dialog.type === "rename" ? "重命名项目" : "归档项目"}
+            </h2>
+            {dialog.type === "rename" ? (
+              <>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  修改名称不会影响项目中的资料、运行和血缘。
+                </p>
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(event) => setRenameValue(event.target.value)}
+                  onKeyDown={(event) =>
+                    event.key === "Enter" &&
+                    renameValue.trim() &&
+                    void rename(dialog.project)
+                  }
+                  className="input mt-5 w-full"
+                  maxLength={120}
+                />
+              </>
+            ) : (
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                归档“{dialog.project.name}
+                ”后将禁止继续写入，但所有历史资料、产物和血缘都会保留，可随时恢复。
+              </p>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setDialog(undefined)}
+                className="btn-secondary"
+              >
+                取消
+              </button>
+              <button
+                onClick={() =>
+                  dialog.type === "rename"
+                    ? void rename(dialog.project)
+                    : void archive(dialog.project)
+                }
+                disabled={
+                  busy === dialog.project.id ||
+                  (dialog.type === "rename" && !renameValue.trim())
+                }
+                className={
+                  dialog.type === "archive"
+                    ? "btn bg-red-600 text-white hover:bg-red-700"
+                    : "btn-primary"
+                }
+              >
+                {busy === dialog.project.id
+                  ? "处理中…"
+                  : dialog.type === "rename"
+                    ? "保存名称"
+                    : "确认归档"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 right-6 z-50 rounded-xl bg-slate-950 px-4 py-3 text-sm text-white shadow-xl"
+        >
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

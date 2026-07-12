@@ -143,32 +143,58 @@ export default function Home() {
 
   return (
     <div className="mx-auto max-w-6xl px-5 py-7 lg:px-8 lg:py-9">
-      <header className="aurora-hero px-6 py-11 text-center sm:px-10 sm:py-16">
-        <span className="aurora-orb -left-20 top-8 h-56 w-56 bg-indigo-300/30" />
-        <span className="aurora-orb -right-12 bottom-0 h-64 w-64 bg-blue-200/25" />
-        <span className="aurora-orb left-[45%] top-3 h-32 w-32 bg-white/15" />
-        <div className="relative">
-          <div className="eyebrow text-indigo-100">ReproLab</div>
-          <h1 className="mx-auto mt-3 max-w-3xl text-4xl font-semibold tracking-[-.05em] sm:text-6xl">
-            从一个问题开始。
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-[17px] leading-7 text-indigo-100">
-            把资料、数据和想法放到同一个工作区，然后继续推进你的研究。
-          </p>
-          <div className="mt-7 flex flex-wrap justify-center gap-3">
-            <Link href="/knowledge" className="btn-primary">
-              添加资料
-              <ArrowRight size={15} />
-            </Link>
-            <Link
-              href="/analysis"
-              className="btn-secondary border-white/25 bg-white/10 text-white hover:bg-white/20"
-            >
-              开始分析
-            </Link>
+      {loading || isEmptyWorkspace ? (
+        <header className="aurora-hero px-6 py-11 text-center sm:px-10 sm:py-16">
+          <span className="aurora-orb -left-20 top-8 h-56 w-56 bg-indigo-300/30" />
+          <span className="aurora-orb -right-12 bottom-0 h-64 w-64 bg-blue-200/25" />
+          <span className="aurora-orb left-[45%] top-3 h-32 w-32 bg-white/15" />
+          <div className="relative">
+            <div className="eyebrow text-indigo-100">ReproLab</div>
+            <h1 className="mx-auto mt-3 max-w-3xl text-4xl font-semibold tracking-[-.05em] sm:text-6xl">
+              从一个问题开始。
+            </h1>
+            <p className="mx-auto mt-5 max-w-2xl text-[17px] leading-7 text-indigo-100">
+              把资料、数据和想法放到同一个工作区，然后继续推进你的研究。
+            </p>
+            <div className="mt-7 flex flex-wrap justify-center gap-3">
+              <Link href="/knowledge" className="btn-primary">
+                添加资料
+                <ArrowRight size={15} />
+              </Link>
+              <Link
+                href="/analysis"
+                className="btn-secondary border-white/25 bg-white/10 text-white hover:bg-white/20"
+              >
+                开始分析
+              </Link>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      ) : (
+        <header className="flex flex-wrap items-end justify-between gap-5 border-b border-slate-200/80 py-5 dark:border-slate-800">
+          <div>
+            <div className="eyebrow text-brand">Current project</div>
+            <h1 className="mt-1 text-[30px] font-semibold tracking-[-.04em]">
+              继续推进
+              {review?.project_name ? `“${review.project_name}”` : "当前研究"}
+            </h1>
+            <p className="mt-2 text-sm text-slate-500">
+              {review?.counts.verified_claims
+                ? `已有 ${review.counts.verified_claims} 条可信结论，可以继续整理报告。`
+                : review?.counts.artifacts
+                  ? `已有 ${review.counts.artifacts} 个分析产物，下一步检查来源并形成结论。`
+                  : "资料已经准备好，下一步运行一次分析。"}
+            </p>
+          </div>
+          <Link
+            href={review?.counts.artifacts ? "/results" : "/analysis"}
+            className="btn-primary"
+          >
+            {review?.counts.artifacts ? "检查研究成果" : "继续分析"}
+            <ArrowRight size={15} />
+          </Link>
+        </header>
+      )}
 
       {error && (
         <div className="mt-5 flex items-center gap-3 border-l-2 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-700">

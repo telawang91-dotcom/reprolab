@@ -1,215 +1,711 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000/api/v1";
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000/api/v1";
 export const DEMO_PROJECT_ID = "00000000-0000-0000-0000-000000000101";
 const ACTIVE_PROJECT_KEY = "reprolab-active-project";
+const ACTIVITY_KEY = "reprolab-activities";
+export type ActivityItem = {
+  id: string;
+  title: string;
+  state: "running" | "success" | "error";
+  created_at: string;
+  href: string;
+};
+export function readActivities(): ActivityItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(ACTIVITY_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+function writeActivities(items: ActivityItem[]) {
+  if (typeof window === "undefined") return;
+  const next = items.slice(0, 8);
+  localStorage.setItem(ACTIVITY_KEY, JSON.stringify(next));
+  window.dispatchEvent(
+    new CustomEvent("reprolab-activities", { detail: next }),
+  );
+}
+function beginActivity(title: string, href: string) {
+  const item: ActivityItem = {
+    id: crypto.randomUUID(),
+    title,
+    state: "running",
+    created_at: new Date().toISOString(),
+    href,
+  };
+  writeActivities([item, ...readActivities()]);
+  return item.id;
+}
+function finishActivity(id: string, state: "success" | "error") {
+  writeActivities(
+    readActivities().map((item) =>
+      item.id === id ? { ...item, state } : item,
+    ),
+  );
+}
 
 export function activeProjectId(): string {
-  return typeof window === "undefined" ? DEMO_PROJECT_ID : localStorage.getItem(ACTIVE_PROJECT_KEY) || DEMO_PROJECT_ID;
+  return typeof window === "undefined"
+    ? DEMO_PROJECT_ID
+    : localStorage.getItem(ACTIVE_PROJECT_KEY) || DEMO_PROJECT_ID;
 }
 
 export function setActiveProjectId(projectId: string): void {
-  if (typeof window !== "undefined") localStorage.setItem(ACTIVE_PROJECT_KEY, projectId);
+  if (typeof window !== "undefined")
+    localStorage.setItem(ACTIVE_PROJECT_KEY, projectId);
 }
 
 export type DocumentItem = {
-  id: string; type: "paper" | "note" | "code" | "other"; filename: string;
-  title: string | null; year: number | null; created_at: string; collection_id: string | null;
+  id: string;
+  type: "paper" | "note" | "code" | "other";
+  filename: string;
+  title: string | null;
+  year: number | null;
+  created_at: string;
+  collection_id: string | null;
 };
 export type DocumentDetail = DocumentItem & {
-  project_id: string; storage_hash: string; authors: string[] | null; doi: string | null;
-  source_url: string | null; metadata: Record<string, unknown> | null; chunks_count: number;
-  dataset_id: string | null; schema_json: { columns?: { name: string; dtype: string }[]; row_count?: number; column_count?: number } | null;
+  project_id: string;
+  storage_hash: string;
+  authors: string[] | null;
+  doi: string | null;
+  source_url: string | null;
+  metadata: Record<string, unknown> | null;
+  chunks_count: number;
+  dataset_id: string | null;
+  schema_json: {
+    columns?: { name: string; dtype: string }[];
+    row_count?: number;
+    column_count?: number;
+  } | null;
 };
-export type SearchHit = { chunk_id: string; document_id: string; content: string; section: string | null; position: number | null; score: number };
-export type Citation = { document_id: string; chunk_id: string; anchor: string };
-export type CollectionItem = { id: string; project_id: string; name: string; description: string | null; document_count: number; created_at: string };
+export type SearchHit = {
+  chunk_id: string;
+  document_id: string;
+  content: string;
+  section: string | null;
+  position: number | null;
+  score: number;
+};
+export type Citation = {
+  document_id: string;
+  chunk_id: string;
+  anchor: string;
+};
+export type CollectionItem = {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string | null;
+  document_count: number;
+  created_at: string;
+};
 export type BatchStatus = {
-  batch_id: string; project_id: string; collection_id: string | null;
+  batch_id: string;
+  project_id: string;
+  collection_id: string | null;
   status: "queued" | "processing" | "success" | "partial" | "error";
-  total: number; completed: number; failed: number;
-  items: { filename: string; status: "queued" | "processing" | "success" | "error"; document_id: string | null; dataset_id: string | null; error: string | null }[];
+  total: number;
+  completed: number;
+  failed: number;
+  items: {
+    filename: string;
+    status: "queued" | "processing" | "success" | "error";
+    document_id: string | null;
+    dataset_id: string | null;
+    error: string | null;
+  }[];
 };
-export type Lineage = { nodes: { id: string; type: string; label: string; meta: Record<string, unknown> }[]; edges: { from: string; to: string; relation: string }[] };
+export type Lineage = {
+  nodes: {
+    id: string;
+    type: string;
+    label: string;
+    meta: Record<string, unknown>;
+  }[];
+  edges: { from: string; to: string; relation: string }[];
+};
 export type ReproduceResult = {
   status: "match" | "drift";
-  comparisons: { artifact_id: string; kind: string; old: unknown; new: unknown; within_tol: boolean; diff?: unknown }[];
+  comparisons: {
+    artifact_id: string;
+    kind: string;
+    old: unknown;
+    new: unknown;
+    within_tol: boolean;
+    diff?: unknown;
+  }[];
   new_run_id: string;
 };
-export type AttributionResult = { target_artifact_id: string; baseline: unknown; drifted: unknown; attributions: { dimension: string; contribution: number; direction: "up" | "down"; detail: string }[] };
-export type VerifyItem = { check: "citation" | "number" | "figure"; target_anchor: string | null; verdict: "pass" | "fail"; severity: "warn" | "error"; reason: string; locate: string; label?: "entailment" | "neutral" | "contradiction" | null; support_score?: number | null; evidence_span?: string | null };
-export type VerifyResult = { verdict: "pass" | "fail"; items: VerifyItem[]; claim_status?: "verified" | "flagged" | null; repaired_text?: string | null; iterations?: { round: number; fails: number; repair_action: string }[] | null };
-export type MemoryItem = { id: string; layer: "episodic" | "semantic" | "skill"; content: string; tags: string[]; importance: number; written_at: string };
-export type SuggestionItem = { id: string; type: "hypothesis" | "literature" | "next_step"; content: string; evidence: { kind: "document" | "artifact"; id: string; anchor: string }[] };
-export type SkillItem = {
-  id: string; project_id: string | null; name: string; discipline: string | null; template: string;
-  meta: Record<string, unknown> | null; intent: string; input_roles: Record<string, Record<string, unknown>>;
-  version: number; origin: "local" | "builtin" | "imported" | "hub"; package_hash: string | null; created_at: string;
+export type AttributionResult = {
+  target_artifact_id: string;
+  baseline: unknown;
+  drifted: unknown;
+  attributions: {
+    dimension: string;
+    contribution: number;
+    direction: "up" | "down";
+    detail: string;
+  }[];
 };
-export type SkillHubItem = { id: string; name: string; intent: string; discipline: string; version: number; author: string };
+export type VerifyItem = {
+  check: "citation" | "number" | "figure";
+  target_anchor: string | null;
+  verdict: "pass" | "fail";
+  severity: "warn" | "error";
+  reason: string;
+  locate: string;
+  label?: "entailment" | "neutral" | "contradiction" | null;
+  support_score?: number | null;
+  evidence_span?: string | null;
+};
+export type VerifyResult = {
+  verdict: "pass" | "fail";
+  items: VerifyItem[];
+  claim_status?: "verified" | "flagged" | null;
+  repaired_text?: string | null;
+  iterations?: { round: number; fails: number; repair_action: string }[] | null;
+};
+export type MemoryItem = {
+  id: string;
+  layer: "episodic" | "semantic" | "skill";
+  content: string;
+  tags: string[];
+  importance: number;
+  written_at: string;
+};
+export type SuggestionItem = {
+  id: string;
+  type: "hypothesis" | "literature" | "next_step";
+  content: string;
+  evidence: { kind: "document" | "artifact"; id: string; anchor: string }[];
+};
+export type SkillItem = {
+  id: string;
+  project_id: string | null;
+  name: string;
+  discipline: string | null;
+  template: string;
+  meta: Record<string, unknown> | null;
+  intent: string;
+  input_roles: Record<string, Record<string, unknown>>;
+  version: number;
+  origin: "local" | "builtin" | "imported" | "hub";
+  package_hash: string | null;
+  created_at: string;
+};
+export type SkillHubItem = {
+  id: string;
+  name: string;
+  intent: string;
+  discipline: string;
+  version: number;
+  author: string;
+};
 export type SkillApplyResult = {
-  skill_id: string; fallback_used: boolean; mapping: Record<string, string>; mapping_reason: string;
-  run_id: string | null; status: "success" | "error"; code: string | null; artifacts: Record<string, any>[];
-  conversation_id: string | null; events: ChatEvent[];
-  token_usage: { mapping_tokens: number; estimated_from_scratch_tokens: number; saved_tokens: number };
+  skill_id: string;
+  fallback_used: boolean;
+  mapping: Record<string, string>;
+  mapping_reason: string;
+  run_id: string | null;
+  status: "success" | "error";
+  code: string | null;
+  artifacts: Record<string, any>[];
+  conversation_id: string | null;
+  events: ChatEvent[];
+  token_usage: {
+    mapping_tokens: number;
+    estimated_from_scratch_tokens: number;
+    saved_tokens: number;
+  };
 };
 export type ModelConfig = {
-  provider: "deepseek" | "hunyuan" | "custom"; base_url: string;
-  analysis_model: string; review_model: string; api_key_configured: boolean; api_key_hint: string | null;
+  provider: "deepseek" | "hunyuan" | "custom";
+  base_url: string;
+  analysis_model: string;
+  review_model: string;
+  api_key_configured: boolean;
+  api_key_hint: string | null;
 };
-export type ModelTestResult = { ok: boolean; message: string; model: string; latency_ms: number };
-export type RuntimeComponent = { key: "database" | "model" | "sandbox"; title: string; state: "ready" | "action_required" | "offline"; message: string; action: string | null };
-export type RuntimeStatus = { state: "ready" | "degraded"; summary: string; components: RuntimeComponent[] };
-export type ProjectItem = { id: string; name: string; description: string | null; archived_at: string | null; created_at: string };
-export type TimelineItem = { kind: "document" | "run" | "claim" | "conversation"; title: string; detail: string; created_at: string; href: string | null; trusted: boolean };
-export type ReviewSummary = { project_id: string; project_name: string; counts: { documents: number; datasets: number; successful_runs: number; failed_runs: number; artifacts: number; verified_claims: number; flagged_claims: number }; risks: string[]; next_actions: string[] };
-export type EvidenceExcerpt = { section: string | null; position: number | null; content: string };
-export type RunReport = { run_id: string; status: string; created_at: string; code_hash: string; input_hash: string; seed: number | null; datasets: { id: string; name: string; storage_hash: string; schema: Record<string, unknown> | null }[]; environment: { python_version: string | null; env_hash: string | null; packages: string[] }; artifacts: { id: string; kind: string; title: string | null; value: unknown }[]; reproduction_note: string };
-export type RunCompare = { baseline_run_id: string; candidate_run_id: string; code_changed: boolean; input_changed: boolean; environment_changed: boolean; artifact_changes: { key: string; baseline: unknown; candidate: unknown; changed: boolean }[] };
+export type ModelTestResult = {
+  ok: boolean;
+  message: string;
+  model: string;
+  latency_ms: number;
+};
+export type RuntimeComponent = {
+  key: "database" | "model" | "sandbox";
+  title: string;
+  state: "ready" | "action_required" | "offline";
+  message: string;
+  action: string | null;
+};
+export type RuntimeStatus = {
+  state: "ready" | "degraded";
+  summary: string;
+  components: RuntimeComponent[];
+};
+export type ProjectItem = {
+  id: string;
+  name: string;
+  description: string | null;
+  archived_at: string | null;
+  created_at: string;
+};
+export type TimelineItem = {
+  kind: "document" | "run" | "claim" | "conversation";
+  title: string;
+  detail: string;
+  created_at: string;
+  href: string | null;
+  trusted: boolean;
+};
+export type ReviewSummary = {
+  project_id: string;
+  project_name: string;
+  counts: {
+    documents: number;
+    datasets: number;
+    successful_runs: number;
+    failed_runs: number;
+    artifacts: number;
+    verified_claims: number;
+    flagged_claims: number;
+  };
+  risks: string[];
+  next_actions: string[];
+};
+export type ArtifactSummary = {
+  id: string;
+  run_id: string | null;
+  kind: "number" | "coefficient" | "table" | "figure" | "conclusion";
+  title: string | null;
+  value: unknown;
+  content_hash: string | null;
+  created_at: string;
+  source_complete: boolean;
+  run_status: string | null;
+};
+export type EvidenceExcerpt = {
+  section: string | null;
+  position: number | null;
+  content: string;
+};
+export type RunReport = {
+  run_id: string;
+  status: string;
+  created_at: string;
+  code_hash: string;
+  input_hash: string;
+  seed: number | null;
+  datasets: {
+    id: string;
+    name: string;
+    storage_hash: string;
+    schema: Record<string, unknown> | null;
+  }[];
+  environment: {
+    python_version: string | null;
+    env_hash: string | null;
+    packages: string[];
+  };
+  artifacts: {
+    id: string;
+    kind: string;
+    title: string | null;
+    value: unknown;
+  }[];
+  reproduction_note: string;
+};
+export type RunCompare = {
+  baseline_run_id: string;
+  candidate_run_id: string;
+  code_changed: boolean;
+  input_changed: boolean;
+  environment_changed: boolean;
+  artifact_changes: {
+    key: string;
+    baseline: unknown;
+    candidate: unknown;
+    changed: boolean;
+  }[];
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}${path}`, { ...init, cache: "no-store" });
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      cache: "no-store",
+    });
   } catch {
-    throw new Error("无法连接 ReproLab 服务。请确认后端已启动，再在设置中查看运行状态。");
+    throw new Error(
+      "无法连接 ReproLab 服务。请确认后端已启动，再在设置中查看运行状态。",
+    );
   }
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    throw new Error(payload?.error?.message ?? payload?.detail ?? `请求失败 (${response.status})`);
+    throw new Error(
+      payload?.error?.message ??
+        payload?.detail ??
+        `请求失败 (${response.status})`,
+    );
   }
   return response.json() as Promise<T>;
 }
 
 export const api = {
-  projects: (includeArchived = false) => request<ProjectItem[]>(`/projects?include_archived=${includeArchived}`),
-  createProject: (name: string, description?: string) => request<ProjectItem>("/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description: description || null }) }),
+  projects: (includeArchived = false) =>
+    request<ProjectItem[]>(`/projects?include_archived=${includeArchived}`),
+  createProject: (name: string, description?: string) =>
+    request<ProjectItem>("/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description: description || null }),
+    }),
   prepareDemo: () => request<ProjectItem>("/projects/demo", { method: "POST" }),
-  updateProject: (id: string, payload: { name?: string; description?: string | null }) => request<ProjectItem>(`/projects/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }),
-  archiveProject: (id: string) => request<ProjectItem>(`/projects/${id}/archive`, { method: "POST" }),
-  restoreProject: (id: string) => request<ProjectItem>(`/projects/${id}/restore`, { method: "POST" }),
-  documents: (type?: string, collectionId?: string) => request<DocumentItem[]>(`/documents?project_id=${activeProjectId()}${type ? `&type=${type}` : ""}${collectionId ? `&collection_id=${collectionId}` : ""}`),
-  document: (id: string) => request<DocumentDetail>(`/documents/${id}?project_id=${activeProjectId()}`),
-  deleteDocument: (id: string) => request(`/documents/${id}?project_id=${activeProjectId()}`, { method: "DELETE" }),
+  updateProject: (
+    id: string,
+    payload: { name?: string; description?: string | null },
+  ) =>
+    request<ProjectItem>(`/projects/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  archiveProject: (id: string) =>
+    request<ProjectItem>(`/projects/${id}/archive`, { method: "POST" }),
+  restoreProject: (id: string) =>
+    request<ProjectItem>(`/projects/${id}/restore`, { method: "POST" }),
+  documents: (type?: string, collectionId?: string) =>
+    request<DocumentItem[]>(
+      `/documents?project_id=${activeProjectId()}${type ? `&type=${type}` : ""}${collectionId ? `&collection_id=${collectionId}` : ""}`,
+    ),
+  document: (id: string) =>
+    request<DocumentDetail>(`/documents/${id}?project_id=${activeProjectId()}`),
+  deleteDocument: (id: string) =>
+    request(`/documents/${id}?project_id=${activeProjectId()}`, {
+      method: "DELETE",
+    }),
   upload: async (file: File, collectionId?: string) => {
-    const body = new FormData(); body.append("file", file); body.append("project_id", activeProjectId());
+    const activity = beginActivity(`正在导入 ${file.name}`, "/knowledge");
+    const body = new FormData();
+    body.append("file", file);
+    body.append("project_id", activeProjectId());
     if (collectionId) body.append("collection_id", collectionId);
-    return request<{ id: string; chunks_count?: number; dataset_id?: string }>("/documents", { method: "POST", body });
+    try {
+      const result = await request<{
+        id: string;
+        chunks_count?: number;
+        dataset_id?: string;
+      }>("/documents", { method: "POST", body });
+      finishActivity(activity, "success");
+      return result;
+    } catch (error) {
+      finishActivity(activity, "error");
+      throw error;
+    }
   },
   batchUpload: async (files: File[], collectionId?: string) => {
-    const body = new FormData(); files.forEach((file) => body.append("files", file, file.webkitRelativePath || file.name)); body.append("project_id", activeProjectId());
+    const body = new FormData();
+    files.forEach((file) =>
+      body.append("files", file, file.webkitRelativePath || file.name),
+    );
+    body.append("project_id", activeProjectId());
     if (collectionId) body.append("collection_id", collectionId);
     return request<BatchStatus>("/documents/batch", { method: "POST", body });
   },
-  batchStatus: (batchId: string) => request<BatchStatus>(`/documents/batch/${batchId}?project_id=${activeProjectId()}`),
-  collections: () => request<CollectionItem[]>(`/collections?project_id=${activeProjectId()}`),
-  createCollection: (name: string, description?: string) => request<CollectionItem>("/collections", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: activeProjectId(), name, description: description || null })
-  }),
-  updateCollection: (id: string, payload: { name?: string; description?: string | null }) => request<CollectionItem>(`/collections/${id}`, {
-    method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
-  }),
-  deleteCollection: (id: string) => request<{ id: string; deleted: boolean }>(`/collections/${id}`, { method: "DELETE" }),
-  search: (query: string, mode: string, filters: Record<string, unknown>, collectionId?: string) => request<{ hits: SearchHit[] }>("/search", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: activeProjectId(), query, mode, filters, k: 8, collection_id: collectionId || null })
-  }),
-  qa: (query: string, collectionId?: string) => request<{ answer: string; citations: Citation[] }>("/qa", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: activeProjectId(), query, collection_id: collectionId || null })
-  }),
-  lineage: (artifactId: string) => request<Lineage>(`/artifacts/${artifactId}/lineage?project_id=${activeProjectId()}`),
-  artifactContentUrl: (artifactId: string) => `${API_BASE.replace(/\/api\/v1$/, "")}/api/v1/artifacts/${artifactId}/content?project_id=${activeProjectId()}`,
-  reproduce: (runId: string, datasetOverrides: Record<string, string> = {}) => request<ReproduceResult>(`/runs/${runId}/reproduce`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ dataset_overrides: datasetOverrides })
-  }),
-  attributeDrift: (runId: string, datasetOverrides: Record<string, string>, targetArtifactId?: string) => request<AttributionResult>(`/runs/${runId}/attribute-drift`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ dataset_overrides: datasetOverrides, target_artifact_id: targetArtifactId, granularity: "column", top_k: 5 })
-  }),
-  verify: (text: string, checks: ("citation" | "number" | "figure")[] = ["citation", "number", "figure"], repair = false) => request<VerifyResult>("/verify", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: activeProjectId(), text, checks, repair })
-  }),
-  postConclusion: (claimText: string, anchors: string[]) => request<{ document_id: string }>("/conclusions", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: activeProjectId(), claim_text: claimText, anchors, status: "verified" })
-  }),
-  memories: (layer?: string, query?: string) => request<MemoryItem[]>(
-    `/memories?project_id=${activeProjectId()}${layer ? `&layer=${layer}` : ""}${query ? `&q=${encodeURIComponent(query)}` : ""}&k=20`
-  ),
-  createMemory: (layer: MemoryItem["layer"], content: string, tags: string[]) => request<MemoryItem>("/memories", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: activeProjectId(), layer, content, tags })
-  }),
-  suggestions: () => request<SuggestionItem[]>(`/suggestions?project_id=${activeProjectId()}`),
-  refreshSuggestions: () => request<{ generated: number; items: SuggestionItem[] }>("/suggestions/refresh", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: activeProjectId() })
-  }),
-  skills: (discipline?: string) => request<SkillItem[]>(`/skills?project_id=${activeProjectId()}${discipline ? `&discipline=${encodeURIComponent(discipline)}` : ""}`),
-  createSkill: (payload: Omit<SkillItem, "id" | "created_at">) => request<SkillItem>("/skills", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
-  }),
-  harvestSkill: (artifactId: string, name: string, intent: string, discipline = "general") => request<SkillItem>("/skills/from-artifact", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ artifact_id: artifactId, name, intent, discipline })
-  }),
-  applySkill: (skillId: string, datasetIds: string[], conversationId?: string) => request<SkillApplyResult>(`/skills/${skillId}/apply`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: activeProjectId(), dataset_ids: datasetIds, conversation_id: conversationId })
-  }),
-  exportSkill: (skillId: string) => request<Record<string, unknown>>(`/skills/${skillId}/export`),
-  importSkill: (skillPackage: Record<string, unknown>) => request<SkillItem>("/skills/import", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: activeProjectId(), package: skillPackage })
-  }),
+  batchStatus: (batchId: string) =>
+    request<BatchStatus>(
+      `/documents/batch/${batchId}?project_id=${activeProjectId()}`,
+    ),
+  collections: () =>
+    request<CollectionItem[]>(`/collections?project_id=${activeProjectId()}`),
+  createCollection: (name: string, description?: string) =>
+    request<CollectionItem>("/collections", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: activeProjectId(),
+        name,
+        description: description || null,
+      }),
+    }),
+  updateCollection: (
+    id: string,
+    payload: { name?: string; description?: string | null },
+  ) =>
+    request<CollectionItem>(`/collections/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  deleteCollection: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`/collections/${id}`, {
+      method: "DELETE",
+    }),
+  search: (
+    query: string,
+    mode: string,
+    filters: Record<string, unknown>,
+    collectionId?: string,
+  ) =>
+    request<{ hits: SearchHit[] }>("/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: activeProjectId(),
+        query,
+        mode,
+        filters,
+        k: 8,
+        collection_id: collectionId || null,
+      }),
+    }),
+  qa: (query: string, collectionId?: string) =>
+    request<{ answer: string; citations: Citation[] }>("/qa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: activeProjectId(),
+        query,
+        collection_id: collectionId || null,
+      }),
+    }),
+  lineage: (artifactId: string) =>
+    request<Lineage>(
+      `/artifacts/${artifactId}/lineage?project_id=${activeProjectId()}`,
+    ),
+  artifactContentUrl: (artifactId: string) =>
+    `${API_BASE.replace(/\/api\/v1$/, "")}/api/v1/artifacts/${artifactId}/content?project_id=${activeProjectId()}`,
+  reproduce: (runId: string, datasetOverrides: Record<string, string> = {}) =>
+    request<ReproduceResult>(`/runs/${runId}/reproduce`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataset_overrides: datasetOverrides }),
+    }),
+  attributeDrift: (
+    runId: string,
+    datasetOverrides: Record<string, string>,
+    targetArtifactId?: string,
+  ) =>
+    request<AttributionResult>(`/runs/${runId}/attribute-drift`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        dataset_overrides: datasetOverrides,
+        target_artifact_id: targetArtifactId,
+        granularity: "column",
+        top_k: 5,
+      }),
+    }),
+  verify: (
+    text: string,
+    checks: ("citation" | "number" | "figure")[] = [
+      "citation",
+      "number",
+      "figure",
+    ],
+    repair = false,
+  ) =>
+    request<VerifyResult>("/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: activeProjectId(),
+        text,
+        checks,
+        repair,
+      }),
+    }),
+  postConclusion: (claimText: string, anchors: string[]) =>
+    request<{ document_id: string }>("/conclusions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: activeProjectId(),
+        claim_text: claimText,
+        anchors,
+        status: "verified",
+      }),
+    }),
+  memories: (layer?: string, query?: string) =>
+    request<MemoryItem[]>(
+      `/memories?project_id=${activeProjectId()}${layer ? `&layer=${layer}` : ""}${query ? `&q=${encodeURIComponent(query)}` : ""}&k=20`,
+    ),
+  createMemory: (layer: MemoryItem["layer"], content: string, tags: string[]) =>
+    request<MemoryItem>("/memories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: activeProjectId(),
+        layer,
+        content,
+        tags,
+      }),
+    }),
+  suggestions: () =>
+    request<SuggestionItem[]>(`/suggestions?project_id=${activeProjectId()}`),
+  refreshSuggestions: () =>
+    request<{ generated: number; items: SuggestionItem[] }>(
+      "/suggestions/refresh",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: activeProjectId() }),
+      },
+    ),
+  skills: (discipline?: string) =>
+    request<SkillItem[]>(
+      `/skills?project_id=${activeProjectId()}${discipline ? `&discipline=${encodeURIComponent(discipline)}` : ""}`,
+    ),
+  createSkill: (payload: Omit<SkillItem, "id" | "created_at">) =>
+    request<SkillItem>("/skills", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  harvestSkill: (
+    artifactId: string,
+    name: string,
+    intent: string,
+    discipline = "general",
+  ) =>
+    request<SkillItem>("/skills/from-artifact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        artifact_id: artifactId,
+        name,
+        intent,
+        discipline,
+      }),
+    }),
+  applySkill: (
+    skillId: string,
+    datasetIds: string[],
+    conversationId?: string,
+  ) =>
+    request<SkillApplyResult>(`/skills/${skillId}/apply`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: activeProjectId(),
+        dataset_ids: datasetIds,
+        conversation_id: conversationId,
+      }),
+    }),
+  exportSkill: (skillId: string) =>
+    request<Record<string, unknown>>(`/skills/${skillId}/export`),
+  importSkill: (skillPackage: Record<string, unknown>) =>
+    request<SkillItem>("/skills/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: activeProjectId(),
+        package: skillPackage,
+      }),
+    }),
   skillHub: () => request<SkillHubItem[]>("/skills/hub"),
-  importHubSkill: (hubId: string) => request<SkillItem>(`/skills/hub/${hubId}/import`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: activeProjectId() })
-  }),
+  importHubSkill: (hubId: string) =>
+    request<SkillItem>(`/skills/hub/${hubId}/import`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: activeProjectId() }),
+    }),
   modelConfig: () => request<ModelConfig>("/settings/model"),
   runtimeStatus: () => request<RuntimeStatus>("/settings/runtime"),
-  timeline: () => request<{ events: TimelineItem[] }>(`/projects/${activeProjectId()}/timeline`),
+  timeline: () =>
+    request<{ events: TimelineItem[] }>(
+      `/projects/${activeProjectId()}/timeline`,
+    ),
   review: () => request<ReviewSummary>(`/projects/${activeProjectId()}/review`),
-  runReport: (runId: string) => request<RunReport>(`/runs/${runId}/report?project_id=${activeProjectId()}`),
-  compareRuns: (runId: string, otherRunId: string) => request<RunCompare>(`/runs/${runId}/compare?project_id=${activeProjectId()}&other_run_id=${otherRunId}`),
-  documentEvidence: (documentId: string) => request<{ document_id: string; excerpts: EvidenceExcerpt[] }>(`/documents/${documentId}/evidence?project_id=${activeProjectId()}`),
-  saveModelConfig: (payload: Omit<ModelConfig, "api_key_configured" | "api_key_hint"> & { api_key?: string }) => request<ModelConfig>("/settings/model", {
-    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
-  }),
-  testModel: () => request<ModelTestResult>("/settings/model/test", { method: "POST" })
+  artifacts: (limit = 50) =>
+    request<{ items: ArtifactSummary[] }>(
+      `/projects/${activeProjectId()}/artifacts?limit=${limit}`,
+    ),
+  runReport: (runId: string) =>
+    request<RunReport>(`/runs/${runId}/report?project_id=${activeProjectId()}`),
+  compareRuns: (runId: string, otherRunId: string) =>
+    request<RunCompare>(
+      `/runs/${runId}/compare?project_id=${activeProjectId()}&other_run_id=${otherRunId}`,
+    ),
+  documentEvidence: (documentId: string) =>
+    request<{ document_id: string; excerpts: EvidenceExcerpt[] }>(
+      `/documents/${documentId}/evidence?project_id=${activeProjectId()}`,
+    ),
+  saveModelConfig: (
+    payload: Omit<ModelConfig, "api_key_configured" | "api_key_hint"> & {
+      api_key?: string;
+    },
+  ) =>
+    request<ModelConfig>("/settings/model", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  testModel: () =>
+    request<ModelTestResult>("/settings/model/test", { method: "POST" }),
 };
 
-export type ChatEvent = { event: "plan" | "thinking" | "code" | "run" | "artifact" | "message" | "done"; data: Record<string, any> };
+export type ChatEvent = {
+  event: "plan" | "thinking" | "code" | "run" | "artifact" | "message" | "done";
+  data: Record<string, any>;
+};
 
 export async function streamChat(
-  payload: { conversation_id?: string; message: string; dataset_ids: string[]; skill_id?: string },
+  payload: {
+    conversation_id?: string;
+    message: string;
+    dataset_ids: string[];
+    skill_id?: string;
+  },
   onEvent: (event: ChatEvent) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ) {
-  const response = await fetch(`${API_BASE}/chat`, {
-    method: "POST", headers: { "Content-Type": "application/json" }, signal,
-    body: JSON.stringify({ project_id: activeProjectId(), ...payload })
-  });
-  if (!response.ok || !response.body) {
-    const error = await response.json().catch(() => null);
-    throw new Error(error?.error?.message ?? error?.detail ?? `请求失败 (${response.status})`);
-  }
-  const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
-    const frames = buffer.split("\n\n"); buffer = frames.pop() ?? "";
-    for (const frame of frames) {
-      let name = ""; let data = "";
-      for (const line of frame.split("\n")) {
-        if (line.startsWith("event:")) name = line.slice(6).trim();
-        if (line.startsWith("data:")) data += line.slice(5).trim();
-      }
-      if (name && data) onEvent({ event: name as ChatEvent["event"], data: JSON.parse(data) });
+  const activity = beginActivity("正在运行科研分析", "/analysis");
+  try {
+    const response = await fetch(`${API_BASE}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify({ project_id: activeProjectId(), ...payload }),
+    });
+    if (!response.ok || !response.body) {
+      const error = await response.json().catch(() => null);
+      throw new Error(
+        error?.error?.message ??
+          error?.detail ??
+          `请求失败 (${response.status})`,
+      );
     }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
+      for (const frame of frames) {
+        let name = "";
+        let data = "";
+        for (const line of frame.split("\n")) {
+          if (line.startsWith("event:")) name = line.slice(6).trim();
+          if (line.startsWith("data:")) data += line.slice(5).trim();
+        }
+        if (name && data)
+          onEvent({
+            event: name as ChatEvent["event"],
+            data: JSON.parse(data),
+          });
+      }
+    }
+    finishActivity(activity, "success");
+  } catch (error) {
+    finishActivity(activity, "error");
+    throw error;
   }
 }

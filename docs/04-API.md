@@ -38,6 +38,8 @@ GET /projects/{project_id}/timeline
   -> { events: [{ kind, title, detail, created_at, href?, trusted }] }
 GET /projects/{project_id}/review
   -> { project, counts, risks: [], next_actions: [] }
+GET /projects/{project_id}/artifacts?limit=50
+  -> { items: [{ id, run_id?, kind, title?, value?, content_hash?, created_at, source_complete, run_status? }] }
 GET /runs/{run_id}/report?project_id={id}
   -> { run, datasets, environment, artifacts, reproduction_note }
 GET /runs/{run_id}/compare?project_id={id}&other_run_id={id}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Activity,
   BookOpen,
   Brain,
   ChevronDown,
@@ -30,7 +31,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
   activeProjectId,
   api,
+  readActivities,
   setActiveProjectId,
+  type ActivityItem,
   type ProjectItem,
   type RuntimeStatus,
 } from "@/lib/api";
@@ -110,6 +113,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileMenu, setMobileMenu] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [switchingProject, setSwitchingProject] = useState<ProjectItem>();
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [profile, setProfile] = useState<LocalProfile>(defaultProfile);
   const [modelLabel, setModelLabel] = useState("读取中…");
   const [runtime, setRuntime] = useState<RuntimeStatus | null>();
@@ -127,6 +133,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setDark(document.documentElement.classList.contains("dark"));
+    setActivities(readActivities());
+    const updateActivities = (event: Event) =>
+      setActivities(
+        (event as CustomEvent<ActivityItem[]>).detail || readActivities(),
+      );
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -136,10 +147,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         setCommand(false);
         setMobileMenu(false);
         setAccountOpen(false);
+        setActivityOpen(false);
       }
     };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener("reprolab-activities", updateActivities);
+    return () => {
+      window.removeEventListener("keydown", handler);
+      window.removeEventListener("reprolab-activities", updateActivities);
+    };
   }, []);
   useEffect(() => {
     setProfile(readProfile());
@@ -189,8 +205,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   const toggleTheme = () => {
-    document.documentElement.classList.toggle("dark");
-    setDark((value) => !value);
+    const next = !dark;
+    document.documentElement.classList.toggle("dark", next);
+    localStorage.setItem("reprolab-theme", next ? "dark" : "light");
+    setDark(next);
   };
   const open = (href: string) => {
     setCommand(false);
@@ -221,15 +239,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setProjectMenuOpen(false);
       return;
     }
+    setSwitchingProject(item);
+    setProjectMenuOpen(false);
     setActiveProjectId(item.id);
-    window.location.reload();
+    window.setTimeout(() => window.location.reload(), 180);
   };
-  const createProject = async () => {
-    const name = window.prompt("研究项目名称");
-    if (!name?.trim()) return;
-    const item = await api.createProject(name.trim());
-    setActiveProjectId(item.id);
-    window.location.reload();
+  const createProject = () => {
+    setProjectMenuOpen(false);
+    router.push("/projects?create=1");
   };
 
   const navigation = (
@@ -395,7 +412,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   )}
                 </div>
                 <button
-                  onClick={() => void createProject()}
+                  onClick={createProject}
                   className="mt-1 flex w-full items-center gap-2 rounded-xl border-t px-3 py-2.5 text-sm text-brand hover:bg-[#f5f5f7]"
                 >
                   <Plus size={15} />
@@ -413,6 +430,68 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <div className="relative">
+            <button
+              onClick={() => setActivityOpen((value) => !value)}
+              aria-label="查看后台任务"
+              aria-expanded={activityOpen}
+              className="relative grid h-8 w-8 place-items-center rounded-full text-white/80 transition hover:bg-white/10"
+            >
+              <Activity size={15} />
+              {activities.some((item) => item.state === "running") && (
+                <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-amber-300" />
+              )}
+            </button>
+            {activityOpen && (
+              <>
+                <button
+                  aria-label="关闭任务中心"
+                  onClick={() => setActivityOpen(false)}
+                  className="fixed inset-0 z-40 cursor-default"
+                />
+                <div className="absolute right-0 top-10 z-50 w-80 rounded-2xl border bg-white p-2 text-slate-900 shadow-xl dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+                  <div className="px-3 py-2">
+                    <div className="text-sm font-semibold">任务中心</div>
+                    <div className="mt-1 text-xs text-slate-400">
+                      上传与分析在这里持续反馈。
+                    </div>
+                  </div>
+                  {activities.length ? (
+                    <div className="max-h-72 overflow-y-auto">
+                      {activities.map((item) => (
+                        <Link
+                          key={item.id}
+                          href={item.href}
+                          onClick={() => setActivityOpen(false)}
+                          className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-900"
+                        >
+                          <span
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.state === "running" ? "animate-pulse bg-amber-400" : item.state === "success" ? "bg-emerald-500" : "bg-red-500"}`}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm">
+                              {item.title}
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              {item.state === "running"
+                                ? "正在运行"
+                                : item.state === "success"
+                                  ? "已完成"
+                                  : "需要处理"}
+                            </span>
+                          </span>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-3 py-6 text-center text-sm text-slate-400">
+                      暂时没有后台任务
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
           <button
             onClick={() => setCommand(true)}
             className="hidden h-8 items-center gap-2 rounded-full px-3 text-xs text-white/70 transition hover:bg-white/10 md:flex"
@@ -629,6 +708,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   没有匹配的功能，试试“分析”或“校验”。
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {switchingProject && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/35 backdrop-blur-sm"
+        >
+          <div className="card flex items-center gap-4 px-6 py-5">
+            <span className="h-3 w-3 animate-pulse rounded-full bg-brand" />
+            <div>
+              <div className="text-sm font-semibold">
+                正在进入“{switchingProject.name}”
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                正在重新读取该项目的资料与成果…
+              </div>
             </div>
           </div>
         </div>
