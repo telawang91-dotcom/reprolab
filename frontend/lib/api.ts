@@ -45,15 +45,28 @@ function finishActivity(id: string, state: "success" | "error") {
   );
 }
 
-export function activeProjectId(): string {
+export function selectedProjectId(): string | null {
   return typeof window === "undefined"
-    ? DEMO_PROJECT_ID
-    : localStorage.getItem(ACTIVE_PROJECT_KEY) || DEMO_PROJECT_ID;
+    ? null
+    : localStorage.getItem(ACTIVE_PROJECT_KEY);
+}
+
+export function activeProjectId(): string {
+  const projectId = selectedProjectId();
+  if (!projectId) {
+    throw new Error("请先创建或选择一个研究项目，再添加真实资料。");
+  }
+  return projectId;
 }
 
 export function setActiveProjectId(projectId: string): void {
   if (typeof window !== "undefined")
     localStorage.setItem(ACTIVE_PROJECT_KEY, projectId);
+}
+
+export function clearActiveProjectId(): void {
+  if (typeof window !== "undefined")
+    localStorage.removeItem(ACTIVE_PROJECT_KEY);
 }
 
 export type DocumentItem = {

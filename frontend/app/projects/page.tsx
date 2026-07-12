@@ -16,8 +16,8 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import {
-  activeProjectId,
   api,
+  selectedProjectId,
   setActiveProjectId,
   type ProjectItem,
 } from "@/lib/api";
@@ -49,7 +49,7 @@ export default function ProjectsPage() {
     }
   }, []);
   useEffect(() => {
-    setActiveId(activeProjectId());
+    setActiveId(selectedProjectId() || "");
     void load();
   }, [load]);
   useEffect(() => {
@@ -243,7 +243,7 @@ export default function ProjectsPage() {
               />
             ))}
           </div>
-        ) : (
+        ) : projects.length ? (
           <div className="grid gap-3 md:grid-cols-2">
             {projects.map((project) => {
               const active = project.id === activeId;
@@ -330,6 +330,14 @@ export default function ProjectsPage() {
                 </article>
               );
             })}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center dark:border-slate-700 dark:bg-slate-900">
+            <FolderKanban className="mx-auto text-slate-300" size={28} />
+            <h3 className="mt-3 text-sm font-semibold">还没有研究项目</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              上方创建项目后，只有你主动添加的资料才会出现在工作区中。
+            </p>
           </div>
         )}
       </section>

@@ -29,9 +29,11 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  activeProjectId,
+  clearActiveProjectId,
   api,
+  DEMO_PROJECT_ID,
   readActivities,
+  selectedProjectId,
   setActiveProjectId,
   type ActivityItem,
   type ProjectItem,
@@ -121,6 +123,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [runtime, setRuntime] = useState<RuntimeStatus | null>();
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [activeProject, setActiveProject] = useState<ProjectItem>();
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
+  const [preparingDemo, setPreparingDemo] = useState(false);
+  const [projectError, setProjectError] = useState("");
   const [query, setQuery] = useState("");
   const matches = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -184,14 +189,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       .projects(true)
       .then((items) => {
         setProjects(items);
-        const chosen =
-          items.find((item) => item.id === activeProjectId()) || items[0];
+        const storedProjectId = selectedProjectId();
+        const chosen = items.find((item) => item.id === storedProjectId);
         if (chosen) {
           setActiveProject(chosen);
-          setActiveProjectId(chosen.id);
+        } else if (storedProjectId) {
+          clearActiveProjectId();
         }
       })
-      .catch(() => undefined);
+      .catch(() => setProjectError("无法读取研究项目，请检查数据库状态。"))
+      .finally(() => setProjectsLoaded(true));
     window.addEventListener("reprolab-model-updated", updateModel);
     return () => {
       window.removeEventListener("reprolab-profile-updated", updateProfile);
@@ -243,6 +250,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setProjectMenuOpen(false);
     setActiveProjectId(item.id);
     window.setTimeout(() => window.location.reload(), 180);
+  };
+  const openDemo = async () => {
+    setPreparingDemo(true);
+    setProjectError("");
+    try {
+      const project = await api.prepareDemo();
+      setActiveProjectId(project.id);
+      window.location.reload();
+    } catch (reason) {
+      setProjectError(
+        reason instanceof Error ? reason.message : "隔离演示准备失败",
+      );
+      setPreparingDemo(false);
+    }
   };
   const createProject = () => {
     setProjectMenuOpen(false);
@@ -357,6 +378,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="truncate">
               {activeProject?.name || "选择研究项目"}
             </span>
+            {activeProject?.id === DEMO_PROJECT_ID && (
+              <span className="rounded bg-amber-300/20 px-1.5 py-0.5 text-[10px] text-amber-100">
+                演示
+              </span>
+            )}
             {activeProject?.archived_at && (
               <span className="rounded bg-white/15 px-1.5 py-0.5 text-[10px]">
                 只读
@@ -658,7 +684,47 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </Link>
         )}
-        {children}
+        {projectsLoaded && !activeProject && pathname !== "/projects" ? (
+          <section className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-3xl place-items-center px-5 py-16">
+            <div className="w-full rounded-[28px] border border-slate-200/80 bg-white p-8 text-center shadow-card dark:border-white/[.10] dark:bg-slate-900 sm:p-12">
+              <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-brand dark:bg-indigo-950">
+                <FolderKanban size={22} />
+              </span>
+              <div className="mt-5 text-xs font-semibold uppercase tracking-[.12em] text-brand">
+                干净的研究工作区
+              </div>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+                从你的真实项目开始
+              </h1>
+              <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-500">
+                当前没有选择研究项目。ReproLab 不会自动填充资料或把测试数据当作你的研究内容。
+              </p>
+              {projectError && (
+                <div className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {projectError}
+                </div>
+              )}
+              <div className="mt-7 flex flex-wrap justify-center gap-3">
+                <Link href="/projects" className="btn-primary">
+                  <Plus size={15} />
+                  创建或选择项目
+                </Link>
+                <button
+                  onClick={() => void openDemo()}
+                  disabled={preparingDemo}
+                  className="btn-secondary"
+                >
+                  {preparingDemo ? "准备隔离演示中…" : "体验隔离演示"}
+                </button>
+              </div>
+              <p className="mt-4 text-xs text-slate-400">
+                演示数据会带有明确标识，并与真实项目完全隔离。
+              </p>
+            </div>
+          </section>
+        ) : (
+          children
+        )}
       </main>
       {command && (
         <div

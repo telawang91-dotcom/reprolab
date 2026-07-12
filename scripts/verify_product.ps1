@@ -29,11 +29,26 @@ try {
         }
         finally { Pop-Location }
 
+        $previousDatabaseUrl = $env:DATABASE_URL
+        $testDatabase = "reprolab_test"
+        $exists = docker compose exec -T postgres psql -U reprolab -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$testDatabase'"
+        if ($LASTEXITCODE -ne 0) { throw "Test database lookup failed" }
+        if (($exists | Out-String).Trim() -ne "1") {
+            docker compose exec -T postgres createdb -U reprolab $testDatabase
+            if ($LASTEXITCODE -ne 0) { throw "Test database creation failed" }
+        }
+        $env:DATABASE_URL = "postgresql+psycopg://reprolab:reprolab@localhost:5432/$testDatabase"
         & $Python -m alembic upgrade head
         if ($LASTEXITCODE -ne 0) { throw "Database migration failed" }
         $env:RUN_INTEGRATION = "1"
-        & $Python -m pytest tests/integration/test_p0_e2e.py tests/integration/test_m12_projects_e2e.py -q
-        if ($LASTEXITCODE -ne 0) { throw "P0 integration acceptance failed" }
+        try {
+            & $Python -m pytest tests/integration/test_p0_e2e.py tests/integration/test_m12_projects_e2e.py -q
+            if ($LASTEXITCODE -ne 0) { throw "P0 integration acceptance failed" }
+        }
+        finally {
+            $env:RUN_INTEGRATION = $null
+            $env:DATABASE_URL = $previousDatabaseUrl
+        }
     }
 }
 finally { Pop-Location }

@@ -14,6 +14,8 @@ from sqlalchemy import delete, func, select
 
 if os.getenv("RUN_INTEGRATION") != "1":
     pytest.skip("set RUN_INTEGRATION=1 to run PostgreSQL/Docker acceptance", allow_module_level=True)
+if "test" not in os.getenv("DATABASE_URL", "").lower():
+    pytest.skip("integration tests require an isolated test DATABASE_URL", allow_module_level=True)
 
 from app.core.config import settings
 from app.core.db import SessionLocal

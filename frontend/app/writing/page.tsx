@@ -17,6 +17,7 @@ import { VerifiedPreview } from "@/components/writing/VerifiedPreview";
 import {
   activeProjectId,
   api,
+  selectedProjectId,
   type DocumentDetail,
   type EvidenceExcerpt,
   type Lineage,
@@ -48,10 +49,13 @@ export default function WritingPage() {
   const [artifactIds, setArtifactIds] = useState<Record<string, string>>({});
   const editor = useRef<HTMLTextAreaElement>(null);
   const hydrated = useRef(false);
-  const projectId = activeProjectId();
-  const draftKey = `reprolab-writing-draft:${projectId}`;
-  const artifactsKey = `reprolab-writing-artifacts:${projectId}`;
+  const projectId = selectedProjectId();
+  const draftKey = projectId ? `reprolab-writing-draft:${projectId}` : null;
+  const artifactsKey = projectId
+    ? `reprolab-writing-artifacts:${projectId}`
+    : null;
   useEffect(() => {
+    if (!draftKey || !artifactsKey) return;
     const saved = localStorage.getItem(draftKey);
     setText(saved || initialText);
     const map = localStorage.getItem(artifactsKey);
@@ -59,7 +63,7 @@ export default function WritingPage() {
     hydrated.current = true;
   }, [draftKey, artifactsKey]);
   useEffect(() => {
-    if (hydrated.current) localStorage.setItem(draftKey, text);
+    if (hydrated.current && draftKey) localStorage.setItem(draftKey, text);
   }, [text, draftKey]);
   const anchors = useMemo(
     () =>
@@ -123,7 +127,8 @@ export default function WritingPage() {
     const code = id.slice(0, 4).toLowerCase();
     const next = { ...artifactIds, [code]: id };
     setArtifactIds(next);
-    localStorage.setItem(artifactsKey, JSON.stringify(next));
+    if (artifactsKey)
+      localStorage.setItem(artifactsKey, JSON.stringify(next));
     insert(`⟦art_${code}⟧`);
   }
   async function anchorClick(anchor: string) {
