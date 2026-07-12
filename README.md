@@ -1,60 +1,200 @@
 # ReproLab
 
-面向研究生的研究工作台：在一个项目里管理资料、提出数据问题、整理结果并完成写作。
+> 面向研究生的可信、可复现科研工作台：从资料检索、数据分析到结果验证与论文写作，让每个数字和图表都能找到数据、代码与运行环境。
 
-> 从一个问题开始。资料、数据与结果始终留在同一个可继续的工作区。
+[![Product quality](https://github.com/telawang91-dotcom/reprolab/actions/workflows/quality.yml/badge.svg)](https://github.com/telawang91-dotcom/reprolab/actions/workflows/quality.yml)
+![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
+![Next.js 14](https://img.shields.io/badge/Next.js-14-black?logo=next.js)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi&logoColor=white)
+![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 
 ![ReproLab 工作台](docs/images/workbench-home.png)
 
-## 你可以用它做什么
+## 为什么需要 ReproLab
 
-| 场景 | 在 ReproLab 中完成 |
+研究生常见的问题不是缺少一个聊天机器人，而是科研过程“记不住、说不清、重不来”：
+
+- 半年前的分析不知道使用了哪份数据、哪段代码和哪个环境；
+- 导师追问“这个数字从哪里来”，无法快速回答；
+- 数据更新后，不知道旧图表和旧结论是否仍然成立；
+- 通用大模型可能生成无来源数字、错误引用或与代码不一致的图表。
+
+ReproLab 把这些问题变成系统约束：
+
+> **可信由架构保证，而不是由某个具体模型保证。**
+
+## 使用场景
+
+| 场景 | ReproLab 如何完成 |
 | --- | --- |
-| 整理资料 | 上传论文、笔记、数据或代码；按项目和知识空间管理，并检索原文。 |
-| 分析数据 | 用自然语言描述问题，选择数据后运行分析，查看图表、数值与过程。 |
-| 写作报告 | 将资料与分析结果整理进正文，在写作面板中检查引用与数字。 |
-| 回看项目 | 通过时间线、审阅摘要、运行报告和结果对比继续上一次工作。 |
+| 复现论文结果 | 上传论文与数据，生成或执行分析代码，对比新旧结果并定位漂移。 |
+| 自然语言数据分析 | 选择数据并描述研究问题，Agent 动态生成 Python 代码和图表。 |
+| 回答导师质疑 | 点击数字或图表，查看原始数据、执行代码、环境和完整血缘。 |
+| 数据更新后的复核 | 替换数据一键重跑，按照数值容差与绘图数据判断结果是否变化。 |
+| 投稿前质量检查 | 检查无来源数字、错误引用、正文与产物不一致、图码不一致。 |
+| 长期研究项目管理 | 按项目隔离资料、分析、成果、结论和科研记忆，随时继续上次工作。 |
 
-### 资料与检索
-
-![资料与检索](docs/images/knowledge-space.png)
-
-### 第一次使用
-
-新用户不需要预先理解所有概念。按照上传资料、提出问题、查看结果、完成写作四步即可跑通一次研究流程；项目的可回溯能力会在需要时自动参与。
-
-![新手引导](docs/images/getting-started.png)
-
-## 核心能力
-
-- **项目工作区**：项目隔离资料、数据、分析、结论与个人偏好；支持归档和恢复。
-- **知识空间**：支持文件、文件夹和 ZIP 入库，提供关键词、语义与混合检索，以及带原文定位的问答。
-- **动态分析**：根据用户问题和选中数据动态生成 Python 分析代码，在可控环境中运行并保存结果。
-- **结果与写作**：图表、数值和引用可回到来源；写作页支持检查、修复和保存结论。
-- **研究交付**：提供项目时间线、只读审阅摘要、可打印运行报告与两次运行的结果比较。
-
-## 工作方式
+## 核心工作流
 
 ```mermaid
 flowchart LR
-  A[添加资料或数据] --> B[检索与提出问题]
-  B --> C[运行分析]
-  C --> D[查看结果]
-  D --> E[整理写作]
-  E --> F[继续项目或导出报告]
+    A[添加论文与数据] --> B[检索证据]
+    B --> C[提出研究问题]
+    C --> D[Agent 生成并执行代码]
+    D --> E[登记数字、表格与图形]
+    E --> F[复现与可信校验]
+    F --> G[形成报告与结论]
 ```
 
-对于需要核对的结果，ReproLab 会保留数据、代码与环境之间的关系，用于结果回看、重跑和差异定位；这些细节不会阻挡日常使用。
+前端将工作流收敛为四步：
 
-## 技术栈
+```text
+添加资料 → 运行分析 → 检查成果 → 形成报告
+```
 
-- 前端：Next.js 14、React 18、TypeScript、Tailwind CSS、shadcn/ui、React Flow
-- 后端：FastAPI、SQLAlchemy、Alembic、Pydantic
-- 数据：PostgreSQL 16 + pgvector，本地内容寻址对象存储
-- 分析：持久 Jupyter kernel + Docker Python 3.11 科学计算沙箱
-- 检索：pgvector、BM25、bge-m3、bge-reranker-v2-m3
+## 产品能力
+
+### 资料与知识空间
+
+- 上传 PDF、CSV、Excel、代码、Markdown、文件夹和 ZIP；
+- 按研究项目与知识空间管理资料；
+- 关键词 BM25、向量语义检索和 RRF 混合检索；
+- bge-reranker-v2-m3 对候选证据进行交叉编码器精排；
+- 检索结果可以定位原文段落。
+
+![资料与检索](docs/images/knowledge-space.png)
+
+### 对话式数据分析
+
+- 自然语言描述统计、绘图或建模任务；
+- Planner → Executor → Critic 轻量 Agent 编排；
+- 根据问题和真实数据动态生成 Python，而不是固定学科菜单；
+- Docker/Jupyter 隔离执行，默认固定随机种子并捕获结构化产物；
+- 流式展示执行计划、代码、运行状态、产物和结论。
+
+### 成果箱与写作
+
+- 集中查看真实数字、表格、图形和可信状态；
+- 查看来源、导出产物、加入报告；
+- 写作草稿按项目隔离；
+- 数字使用 `⟦art_*⟧`、文献使用 `⟦src_*⟧` 机器可解析锚点；
+- 校验通过且包含真实分析产物后，才能回写为可信结论。
+
+### 项目与交付
+
+- 创建、切换、重命名、归档和恢复研究项目；
+- 归档项目只读保留历史资料与血缘；
+- 项目时间线、导师只读审阅、长期科研记忆；
+- 可打印复现报告、两次运行差异比较、图表与 JSON 产物导出；
+- 全局任务中心持续显示上传和 Agent 分析状态。
+
+## 技术核心
+
+### 1. 溯源账本
+
+```text
+Dataset ──reads──▶ Run ──produces──▶ Artifact ──supports──▶ Claim
+                                                   ▲
+Document ──────────────────────── cites ────────────┘
+```
+
+任何被结论引用的数字，都必须追溯到成功的代码执行和真实输入数据。缺少任意一环即视为来源不完整。
+
+### 2. 内容寻址与信任锚点
+
+```text
+env_hash   = SHA256(Python 版本 + 依赖包版本)
+input_hash = SHA256(所有输入数据内容哈希)
+code_hash  = SHA256(代码 + 语言 + input_hash + env_hash)
+```
+
+代码、输入数据或运行环境任一变化，信任锚点都会变化。数据和文件产物存储于 `backend/storage/<sha256>`。
+
+### 3. 一键复现与漂移检测
+
+- 数字与表格：按容差比较；
+- 图形：比较绘图底层结构化数据，而不是 PNG 字节；
+- 文件：比较内容哈希；
+- 复现前恢复随机种子、输入版本与环境快照；
+- 漂移后可进一步进行列级差异归因。
+
+### 4. 对抗式三查
+
+校验 Agent 以审稿人视角检查：
+
+1. 引用是否存在且真正支持当前论断；
+2. 正文数字是否绑定真实分析产物；
+3. 图表能否由原始代码、数据和环境重新生成。
+
+### 5. 模型无关运行时
+
+业务层统一调用：
+
+```python
+ModelAdapter.chat({"model": model, "messages": messages, "tools": tools})
+```
+
+当前支持 DeepSeek、腾讯混元及兼容 OpenAI 协议的模型服务。切换模型不改变溯源、执行和校验规则。
+
+## 系统架构
+
+```mermaid
+flowchart TB
+    UI[Next.js / React 科研工作台]
+    API[FastAPI REST + SSE]
+    AGENT[Planner / Executor / Critic + ModelAdapter]
+    SERVICES[RAG / Sandbox / Provenance / Memory / Skills]
+    PG[(PostgreSQL 16 + pgvector)]
+    FS[(本地 SHA-256 内容存储)]
+
+    UI --> API
+    API --> AGENT
+    AGENT --> SERVICES
+    SERVICES --> PG
+    SERVICES --> FS
+```
+
+- 前端：Next.js 14、React 18、TypeScript、Tailwind CSS、React Flow；
+- 后端：Python 3.11、FastAPI、Pydantic、SQLAlchemy、Alembic；
+- 数据：PostgreSQL 16 + pgvector；
+- 检索：bge-m3、BM25、RRF、bge-reranker-v2-m3；
+- 沙箱：持久 Jupyter kernel + Docker Python 3.11 科学计算镜像；
+- 存储：本地内容寻址，不依赖 MinIO；
+- Demo 异步：FastAPI BackgroundTasks，不引入 Celery、Redis。
+
+## 项目结构
+
+```text
+reprolab/
+├─ backend/
+│  ├─ app/
+│  │  ├─ api/          # REST/SSE 输入输出
+│  │  ├─ schemas/      # Pydantic 契约
+│  │  ├─ models/       # SQLAlchemy 数据模型
+│  │  └─ services/     # RAG、Agent、沙箱、溯源、记忆与技能
+│  ├─ alembic/         # 数据库迁移
+│  ├─ tests/           # 单元与真实集成验收
+│  └─ storage/         # 本地内容寻址存储，仅跟踪 .gitkeep
+├─ frontend/
+│  ├─ app/             # Next.js App Router 页面
+│  ├─ components/      # 领域组件与全局外壳
+│  └─ lib/             # API 客户端与本地状态
+├─ docker/             # 科学计算沙箱镜像
+├─ docs/               # 产品、架构、API、溯源和设计契约
+├─ tasks/              # 分模块任务卡与验收标准
+├─ scripts/            # 产品验证脚本
+├─ .github/workflows/  # CI 与手动完整集成验收
+└─ docker-compose.yml  # PostgreSQL + pgvector 与沙箱配置
+```
 
 ## 快速开始
+
+### 环境要求
+
+- Python 3.11
+- Node.js 20+
+- Docker Desktop
+- Windows PowerShell（当前主要开发环境）
 
 ### 1. 安装依赖
 
@@ -65,9 +205,7 @@ npm.cmd --prefix frontend install
 Copy-Item .env.example .env
 ```
 
-默认 embedding 与 reranker 分别使用 `BAAI/bge-m3`、`BAAI/bge-reranker-v2-m3`。离线部署时可将 `EMBEDDING_MODEL`、`RERANKER_MODEL` 改为本地模型目录。
-
-### 2. 启动基础服务
+### 2. 启动 PostgreSQL 并迁移
 
 ```powershell
 docker compose up -d postgres
@@ -75,11 +213,15 @@ docker compose up -d postgres
 Set-Location backend
 ..\.venv\Scripts\python.exe -m alembic upgrade head
 Set-Location ..
-
-docker compose --profile sandbox build sandbox
 ```
 
-### 3. 启动应用
+### 3. 构建分析沙箱
+
+```powershell
+docker compose build sandbox
+```
+
+### 4. 启动应用
 
 ```powershell
 # 终端 1：后端
@@ -90,11 +232,19 @@ Set-Location backend
 npm.cmd --prefix frontend run dev
 ```
 
-打开 [http://localhost:3000](http://localhost:3000)。后端 OpenAPI 文档位于 [http://localhost:8000/docs](http://localhost:8000/docs)。
+访问：
+
+- 产品界面：[http://localhost:3000](http://localhost:3000)
+- OpenAPI：[http://localhost:8000/docs](http://localhost:8000/docs)
+- 后端健康检查：[http://localhost:8000/health](http://localhost:8000/health)
+
+首次使用也可以选择隔离的 Palmer Penguins 演示项目，不会污染真实研究空间。
+
+![首次使用引导](docs/images/getting-started.png)
 
 ## 模型配置
 
-M1/M2 与 M4/M5 不依赖 LLM 密钥。问答、分析对话与 Agent 调用使用模型无关配置层，可按环境配置 DeepSeek、腾讯混元或兼容 OpenAI 的服务：
+资料入库、检索、代码执行和溯源复现不依赖 LLM 密钥。问答和 Agent 分析可在设置页面配置，也可使用环境变量：
 
 ```env
 LLM_MODEL=deepseek-v4-flash
@@ -106,15 +256,19 @@ EXECUTOR_MODEL=deepseek:deepseek-v4-flash
 CRITIC_MODEL=deepseek:deepseek-v4-pro
 ```
 
+不要提交 `.env` 或任何真实密钥。
+
 ## 验证
 
-快速验证：
+一键运行常规质量门禁：
 
 ```powershell
-.\scripts\verify_product.ps1 -Python .\.venv\Scripts\python.exe
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\verify_product.ps1 `
+  -Python "$PWD\.venv\Scripts\python.exe"
 ```
 
-或分别执行：
+分别运行：
 
 ```powershell
 $env:PYTHONPATH="$PWD\backend"
@@ -124,21 +278,37 @@ npm.cmd --prefix frontend run typecheck
 npm.cmd --prefix frontend run build
 ```
 
-Docker/PostgreSQL 可用后，可运行完整集成验收：
+PostgreSQL 与 Docker 可用后运行真实集成验收：
 
 ```powershell
 $env:RUN_INTEGRATION="1"
+$env:SANDBOX_BACKEND="docker"
 .\.venv\Scripts\python.exe -m pytest backend\tests\integration -q -s
 ```
+
+GitHub Actions 会在推送和 Pull Request 时执行单元测试、类型检查、生产构建和可信核心集成测试；完整 P0 验收可手动触发。
+
+## 三分钟演示建议
+
+1. 创建研究项目并上传论文与 CSV；
+2. 用自然语言提出分析问题，展示计划、代码和产物；
+3. 打开图表来源，查看 Dataset → Run → Artifact；
+4. 替换数据重新运行，展示自动标红的结果漂移；
+5. 在写作页加入一个错误数字或引用，运行校验并查看拦截；
+6. 将通过校验的结论保存并导出复现报告。
 
 ## 文档
 
 - [产品需求](docs/01-PRD.md)
+- [技术架构](docs/02-ARCHITECTURE.md)
 - [数据模型](docs/03-DATA-MODEL.md)
 - [REST API](docs/04-API.md)
-- [溯源与复现](docs/05-PROVENANCE.md)
+- [溯源、复现与校验](docs/05-PROVENANCE.md)
 - [UI / UX 设计规范](docs/06-DESIGN.md)
+- [评审与技术深度](docs/07-SCORING.md)
 
-## 开发约定
+开发前请阅读 [AGENTS.md](AGENTS.md)。契约冲突时，以 `docs/03-DATA-MODEL.md`、`docs/04-API.md`、`docs/05-PROVENANCE.md` 和 `docs/06-DESIGN.md` 为准。
 
-开始改动前请阅读 [AGENTS.md](AGENTS.md)。数据表变更必须经 Alembic 迁移；对外接口使用 Pydantic schema；所有主分支提交应保持可启动、可演示。
+## 当前定位
+
+ReproLab 当前适合作为科研工作流 Demo、比赛展示、课程项目与内部 Beta 使用。面向公开多用户生产环境前，还需要补充身份认证、权限模型、备份恢复、监控与并发压测。
