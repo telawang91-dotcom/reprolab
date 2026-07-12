@@ -306,6 +306,7 @@ GitHub Actions 会在推送和 Pull Request 时执行单元测试、类型检查
 - [溯源、复现与校验](docs/05-PROVENANCE.md)
 - [UI / UX 设计规范](docs/06-DESIGN.md)
 - [评审与技术深度](docs/07-SCORING.md)
+- [智能体详细设计](docs/08-AGENT-DESIGN.md)
 
 开发前请阅读 [AGENTS.md](AGENTS.md)。契约冲突时，以 `docs/03-DATA-MODEL.md`、`docs/04-API.md`、`docs/05-PROVENANCE.md` 和 `docs/06-DESIGN.md` 为准。
 

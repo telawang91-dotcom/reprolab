@@ -34,7 +34,8 @@
 4. docs/05-PROVENANCE.md —— 招牌机制深挖：溯源账本、复现引擎、对抗式质检（路演技术亮点）。
 5. docs/03-DATA-MODEL.md/docs/04-API.md —— 契约参考，随用随查。
 6. docs/06-DESIGN.md —— UI 规范。
-7. tasks/ —— 逐模块施工。
+7. docs/08-AGENT-DESIGN.md —— 智能体角色、编排、模型路由、错误恢复与扩展设计。
+8. tasks/ —— 逐模块施工。
 
 ### 🗂 目录结构（monorepo）
 
@@ -59,7 +60,8 @@ reprolab/
 │   ├── 04-API.md
 │   ├── 05-PROVENANCE.md
 │   ├── 06-DESIGN.md
-│   └── 07-SCORING.md          # 评审对齐（四维权重 → 机制/抓手；技术深度算法增强）
+│   ├── 07-SCORING.md          # 评审对齐（四维权重 → 机制/抓手；技术深度算法增强）
+│   └── 08-AGENT-DESIGN.md     # 智能体详细设计与当前实现边界
 ├── tasks/                     # 逐张任务卡（每次做一张）
 │   ├── M1-ingest.md ... M11-skills.md, M-Platform.md
 │   ├── M5b-drift-attribution.md   # 算法增强(P1)：差异归因，扩展 M5
