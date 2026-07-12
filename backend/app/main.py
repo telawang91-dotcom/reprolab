@@ -105,10 +105,10 @@ def archived_project_exception(_: Request, exc: ProjectArchivedError) -> JSONRes
 
 
 @app.exception_handler(Exception)
-async def unhandled_exception(_: Request, exc: Exception) -> JSONResponse:
+async def unhandled_exception(_: Request, __: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=500,
-        content={"error": {"code": "internal_error", "message": str(exc)}},
+        content={"error": {"code": "internal_error", "message": "服务暂时无法完成请求，请稍后重试或前往设置检查运行状态。"}},
     )
 
 
