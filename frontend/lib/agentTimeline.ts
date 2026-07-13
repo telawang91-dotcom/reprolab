@@ -1,0 +1,97 @@
+import type { ChatEvent } from "./api";
+
+export type TimelineArtifact = {
+  artifact_id: string;
+  kind: string;
+  value_json?: unknown;
+  figure_url?: string | null;
+  anchor?: string;
+};
+
+export type TimelineRun = { run_id?: string; status: "success" | "error"; stdout?: string };
+export type TimelineAttempt = {
+  id: string;
+  code?: string;
+  lang?: string;
+  reasoning: string[];
+  run?: TimelineRun;
+  artifacts: TimelineArtifact[];
+  status: "working" | "success" | "error";
+};
+export type TimelineStep = {
+  id: string;
+  title: string;
+  rationale?: string;
+  implicit?: boolean;
+  notes: string[];
+  attempts: TimelineAttempt[];
+  status: "pending" | "working" | "repairing" | "success";
+};
+export type AgentTimeline = { steps: TimelineStep[]; conclusion?: { text: string; citations: string[] }; activeStepId?: string };
+
+const emptyTimeline = (): AgentTimeline => ({ steps: [] });
+const id = (prefix: string, index: number) => `${prefix}-${index + 1}`;
+const text = (value: unknown) => typeof value === "string" ? value : "";
+
+function implicitStep(state: AgentTimeline): TimelineStep {
+  return { id: id("step", state.steps.length), title: `执行步骤 ${state.steps.length + 1}`, implicit: true, notes: [], attempts: [], status: "pending" };
+}
+
+function currentIndex(state: AgentTimeline, advance = false) {
+  const active = state.activeStepId ? state.steps.findIndex((step) => step.id === state.activeStepId) : -1;
+  if (active >= 0 && (!advance || state.steps[active].status !== "success")) return active;
+  const working = state.steps.findIndex((step) => step.status === "working" || step.status === "repairing");
+  if (working >= 0) return working;
+  return state.steps.findIndex((step) => step.status === "pending");
+}
+
+function withCurrent(state: AgentTimeline, update: (step: TimelineStep) => TimelineStep, advance = false) {
+  let steps = [...state.steps];
+  let index = currentIndex(state, advance);
+  if (index < 0) { steps.push(implicitStep(state)); index = steps.length - 1; }
+  steps[index] = update(steps[index]);
+  return { ...state, steps, activeStepId: steps[index].id };
+}
+
+export function reduceAgentTimeline(events: readonly ChatEvent[] | null | undefined): AgentTimeline {
+  try {
+    return (Array.isArray(events) ? events : []).reduce<AgentTimeline>((state, event) => {
+      if (!event || typeof event !== "object" || !event.data || typeof event.data !== "object") return state;
+      if (event.event === "plan") {
+        const raw: unknown[] = Array.isArray(event.data.steps) ? event.data.steps : [];
+        if (!raw.length) return state;
+        return { ...state, activeStepId: undefined, steps: raw.map((step, index) => { const record = step && typeof step === "object" ? step as Record<string, unknown> : undefined; return { id: id("step", index), title: typeof step === "string" ? step : text(record?.title) || `步骤 ${index + 1}`, rationale: text(record?.rationale) || undefined, notes: [], attempts: [], status: "pending" as const }; }) };
+      }
+      if (event.event === "thinking") return withCurrent(state, (step) => {
+        const note = text(event.data.text);
+        const attempts = [...step.attempts];
+        if (attempts.length) { const last = attempts.length - 1; attempts[last] = { ...attempts[last], reasoning: note ? [...attempts[last].reasoning, note] : attempts[last].reasoning }; }
+        return { ...step, notes: attempts.length || !note ? step.notes : [...step.notes, note], attempts, status: step.status === "pending" ? "working" : step.status };
+      });
+      if (event.event === "code") return withCurrent(state, (step) => {
+        const repairing = step.attempts.some((attempt) => attempt.status === "error");
+        const attempt: TimelineAttempt = { id: `${step.id}-attempt-${step.attempts.length + 1}`, code: text(event.data.code), lang: text(event.data.lang) || "python", reasoning: [], artifacts: [], status: "working" };
+        return { ...step, attempts: [...step.attempts, attempt], status: repairing ? "repairing" : "working" };
+      }, true);
+      if (event.event === "run") return withCurrent(state, (step) => {
+        const attempts = [...step.attempts];
+        if (!attempts.length) attempts.push({ id: `${step.id}-attempt-1`, reasoning: [], artifacts: [], status: "working" });
+        const last = attempts.length - 1;
+        const success = event.data.status === "success";
+        attempts[last] = { ...attempts[last], run: { run_id: text(event.data.run_id) || undefined, status: success ? "success" : "error", stdout: text(event.data.stdout) || undefined }, status: success ? "success" : "error" };
+        return { ...step, attempts, status: success ? "success" : "repairing" };
+      });
+      if (event.event === "artifact") return withCurrent(state, (step) => {
+        const attempts = [...step.attempts];
+        if (!attempts.length) attempts.push({ id: `${step.id}-attempt-1`, reasoning: [], artifacts: [], status: "working" });
+        const last = attempts.length - 1;
+        attempts[last] = { ...attempts[last], artifacts: [...attempts[last].artifacts, event.data as TimelineArtifact] };
+        return { ...step, attempts };
+      });
+      if (event.event === "message" && !event.data.user) return { ...state, conclusion: { text: text(event.data.text), citations: Array.isArray(event.data.citations) ? (event.data.citations as unknown[]).filter((item): item is string => typeof item === "string") : [] } };
+      return state;
+    }, emptyTimeline());
+  } catch {
+    return emptyTimeline();
+  }
+}
