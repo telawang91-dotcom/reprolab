@@ -2,12 +2,14 @@
 
 import { AlertTriangle, ArrowDown, BarChart3, FolderOpen, Send, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AgentTimelineView } from "@/components/agent/AgentTimelineView";
 import { ArtifactPanel } from "@/components/agent/ArtifactPanel";
 import { DataPanel } from "@/components/agent/DataPanel";
 import { LiveStatus } from "@/components/agent/LiveStatus";
 import { useAnalysisSession } from "@/components/agent/useAnalysisSession";
+import { ConversationList } from "@/components/agent/ConversationList";
 import { Sheet } from "@/components/ui/Sheet";
 import { useWorkspaceScope } from "@/components/workspace/WorkspaceScope";
 
@@ -17,8 +19,11 @@ export default function AnalysisPage() {
 
 function AnalysisWorkspace() {
   const scope = useWorkspaceScope();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const collectionId = scope.activeId || undefined;
-  const session = useAnalysisSession(collectionId);
+  const requestedConversation = searchParams.get("conversation") || undefined;
+  const session = useAnalysisSession(collectionId, requestedConversation);
   const [dataOpen, setDataOpen] = useState(false);
   const [artifactOpen, setArtifactOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -28,6 +33,13 @@ function AnalysisWorkspace() {
     const requested = new URLSearchParams(window.location.search).get("collection");
     if (requested && requested !== scope.activeId) scope.selectCollection(requested);
   }, []); // 兼容旧的 /analysis?collection= 链接，后续范围由全局左栏维护。
+  useEffect(() => {
+    if (!session.conversation || session.conversation === requestedConversation) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("conversation", session.conversation);
+    if (collectionId) params.set("collection", collectionId);
+    router.replace(`/analysis?${params.toString()}`, { scroll: false });
+  }, [collectionId, requestedConversation, router, searchParams, session.conversation]);
   useEffect(() => {
     if (!session.events.length || !following) return;
     const frame = window.requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }));
@@ -47,6 +59,8 @@ function AnalysisWorkspace() {
   return (
     <div className={`grid h-[calc(100dvh-3.5rem)] min-h-0 overflow-hidden bg-canvas ${session.activeCollection ? "xl:grid-cols-[240px_minmax(0,1fr)] 2xl:grid-cols-[240px_minmax(0,1fr)_300px]" : "2xl:grid-cols-[minmax(0,1fr)_300px]"}`}>
       {session.activeCollection && <aside className="material hidden min-h-0 overflow-y-auto overscroll-contain border-r p-4 xl:block">
+        <ConversationList activeId={session.conversation} collectionId={collectionId} refreshKey={session.conversation} />
+        <div className="my-4 border-t" />
         <DataPanel datasets={session.datasets} selected={session.selected} onToggle={session.toggleDataset} skill={session.skill} onSelectSkill={session.setSkill} onApplySkill={session.applySkill} refreshKey={session.skillRefresh} />
       </aside>}
       <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
@@ -76,7 +90,7 @@ function AnalysisWorkspace() {
       </main>
       <aside className="material hidden min-h-0 overflow-y-auto overscroll-contain border-l p-4 2xl:block"><ArtifactPanel artifact={session.activeArtifact} total={session.artifacts.length} onLineage={session.showLineage} onSave={session.saveAsSkill} /></aside>
 
-      <Sheet open={dataOpen} onOpenChange={setDataOpen} title="数据与技能" side="bottom"><div className="mx-auto max-w-xl">{session.activeCollection && <DataPanel datasets={session.datasets} selected={session.selected} onToggle={session.toggleDataset} skill={session.skill} onSelectSkill={session.setSkill} onApplySkill={session.applySkill} refreshKey={session.skillRefresh} />}</div></Sheet>
+      <Sheet open={dataOpen} onOpenChange={setDataOpen} title="数据、会话与技能" side="bottom"><div className="mx-auto max-w-xl">{session.activeCollection && <><ConversationList activeId={session.conversation} collectionId={collectionId} refreshKey={session.conversation} /><div className="my-5 border-t" /><DataPanel datasets={session.datasets} selected={session.selected} onToggle={session.toggleDataset} skill={session.skill} onSelectSkill={session.setSkill} onApplySkill={session.applySkill} refreshKey={session.skillRefresh} /></>}</div></Sheet>
       <Sheet open={artifactOpen} onOpenChange={setArtifactOpen} title="可信产物" side="right"><ArtifactPanel artifact={session.activeArtifact} total={session.artifacts.length} onLineage={session.showLineage} onSave={session.saveAsSkill} /></Sheet>
       <Sheet open={confirmOpen} onOpenChange={setConfirmOpen} title="确认分析范围" side="bottom">
         <div className="mx-auto max-w-2xl space-y-3"><div className="rounded-apple bg-ink/[.04] p-4"><div className="text-xs font-semibold text-muted">研究问题</div><p className="mt-2 text-sm leading-6">{session.message}</p></div><div className="rounded-apple bg-ink/[.04] p-4"><div className="text-xs font-semibold text-muted">输入数据</div><div className="mt-2 space-y-1 text-sm">{session.selectedDatasets.map((item) => <div key={item.id}>{item.filename} <span className="text-xs text-muted">· {item.schema_json?.row_count ?? 0} 行 / {item.schema_json?.column_count ?? 0} 列</span></div>)}</div></div><div className="flex items-start gap-2 rounded-apple bg-status-ok/[.08] p-4 text-sm text-status-ok"><ShieldCheck size={16} className="mt-0.5" /><span><strong>将被记录：</strong>输入数据版本、生成代码、固定随机种子和环境快照。</span></div><div className="flex justify-end gap-2"><button onClick={() => setConfirmOpen(false)} className="btn-secondary">返回修改</button><button onClick={() => { setConfirmOpen(false); void session.send(); }} className="btn-primary"><Send size={14} />确认并运行</button></div></div>

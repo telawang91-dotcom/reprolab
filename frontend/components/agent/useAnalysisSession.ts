@@ -6,7 +6,7 @@ import { api, streamChat, type ChatEvent, type CollectionItem, type DocumentDeta
 
 export type AnalysisEvent = ChatEvent & { id: string };
 
-export function useAnalysisSession(collectionId?: string) {
+export function useAnalysisSession(collectionId?: string, replayId?: string) {
   const [collections, setCollections] = useState<CollectionItem[]>([]);
   const [datasets, setDatasets] = useState<DocumentDetail[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -32,6 +32,12 @@ export function useAnalysisSession(collectionId?: string) {
         const scopes = await api.collections();
         if (!live) return;
         setCollections(scopes);
+        if (replayId) {
+          const replay = await api.conversation(replayId);
+          if (!live) return;
+          setEvents(replay.events.map((event) => ({ ...event, id: crypto.randomUUID() })));
+          setConversation(replay.id);
+        }
         if (!collectionId) return;
         if (!scopes.some((item) => item.id === collectionId)) {
           setError("当前文件夹不存在或已被删除，请重新选择研究文件夹。");
@@ -46,7 +52,7 @@ export function useAnalysisSession(collectionId?: string) {
       } catch (reason) { if (live) setError(reason instanceof Error ? reason.message : "数据集加载失败"); }
     })();
     return () => { live = false; abortRef.current?.abort(); };
-  }, [collectionId]);
+  }, [collectionId, replayId]);
 
   const timeline = useMemo(() => reduceAgentTimeline(events), [events]);
   const artifacts = useMemo(() => timeline.steps.flatMap((step) => step.attempts.flatMap((attempt) => attempt.artifacts)), [timeline]);

@@ -8,6 +8,7 @@ import {
   type CollectionItem,
   type DocumentItem,
 } from "@/lib/api";
+import { useProjectScope } from "./ProjectScope";
 
 type WorkspaceScopeValue = {
   collections: CollectionItem[];
@@ -32,6 +33,7 @@ function storageKey() {
 }
 
 export function WorkspaceScopeProvider({ children }: { children: React.ReactNode }) {
+  const project = useProjectScope();
   const [collections, setCollections] = useState<CollectionItem[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [activeId, setActiveId] = useState("");
@@ -83,9 +85,10 @@ export function WorkspaceScopeProvider({ children }: { children: React.ReactNode
   }, [activeId]);
 
   useEffect(() => {
+    if (project.loading) return;
     void refresh();
     if (new URLSearchParams(window.location.search).get("manage") === "1") setManagerOpen(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [project.loading, project.active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const value = useMemo<WorkspaceScopeValue>(() => ({
     collections,

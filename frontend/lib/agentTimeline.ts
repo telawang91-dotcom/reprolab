@@ -27,9 +27,10 @@ export type TimelineStep = {
   attempts: TimelineAttempt[];
   status: "pending" | "working" | "repairing" | "success";
 };
-export type AgentTimeline = { steps: TimelineStep[]; conclusion?: { text: string; citations: string[] }; activeStepId?: string };
+export type AgentConclusion = { text: string; citations: string[] };
+export type AgentTimeline = { steps: TimelineStep[]; conclusion?: AgentConclusion; conclusions: AgentConclusion[]; activeStepId?: string };
 
-const emptyTimeline = (): AgentTimeline => ({ steps: [] });
+const emptyTimeline = (): AgentTimeline => ({ steps: [], conclusions: [] });
 const id = (prefix: string, index: number) => `${prefix}-${index + 1}`;
 const text = (value: unknown) => typeof value === "string" ? value : "";
 
@@ -60,7 +61,9 @@ export function reduceAgentTimeline(events: readonly ChatEvent[] | null | undefi
       if (event.event === "plan") {
         const raw: unknown[] = Array.isArray(event.data.steps) ? event.data.steps : [];
         if (!raw.length) return state;
-        return { ...state, activeStepId: undefined, steps: raw.map((step, index) => { const record = step && typeof step === "object" ? step as Record<string, unknown> : undefined; return { id: id("step", index), title: typeof step === "string" ? step : text(record?.title) || `步骤 ${index + 1}`, rationale: text(record?.rationale) || undefined, notes: [], attempts: [], status: "pending" as const }; }) };
+        const offset = state.steps.length;
+        const next = raw.map((step, index) => { const record = step && typeof step === "object" ? step as Record<string, unknown> : undefined; return { id: id("step", offset + index), title: typeof step === "string" ? step : text(record?.title) || `步骤 ${offset + index + 1}`, rationale: text(record?.rationale) || undefined, notes: [], attempts: [], status: "pending" as const }; });
+        return { ...state, activeStepId: next[0]?.id, steps: [...state.steps, ...next] };
       }
       if (event.event === "thinking") return withCurrent(state, (step) => {
         const note = text(event.data.text);
@@ -88,7 +91,7 @@ export function reduceAgentTimeline(events: readonly ChatEvent[] | null | undefi
         attempts[last] = { ...attempts[last], artifacts: [...attempts[last].artifacts, event.data as TimelineArtifact] };
         return { ...step, attempts };
       });
-      if (event.event === "message" && !event.data.user) return { ...state, conclusion: { text: text(event.data.text), citations: Array.isArray(event.data.citations) ? (event.data.citations as unknown[]).filter((item): item is string => typeof item === "string") : [] } };
+      if (event.event === "message" && !event.data.user) { const conclusion = { text: text(event.data.text), citations: Array.isArray(event.data.citations) ? (event.data.citations as unknown[]).filter((item): item is string => typeof item === "string") : [] }; return { ...state, conclusion, conclusions: [...state.conclusions, conclusion] }; }
       return state;
     }, emptyTimeline());
   } catch {

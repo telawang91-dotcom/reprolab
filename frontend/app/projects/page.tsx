@@ -134,7 +134,7 @@ export default function ProjectsPage() {
       <header>
         <div className="label">研究上下文</div>
         <h1 className="mt-1 text-2xl font-semibold">研究项目</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
           项目是资料、数据、分析、结论与科研记忆的隔离边界。归档只读保留历史血缘，不会删除研究记录。
         </p>
       </header>
@@ -162,20 +162,20 @@ export default function ProjectsPage() {
           <Link
             key={href}
             href={href}
-            className="group flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 transition hover:border-indigo-200 hover:shadow-card dark:border-white/[.10] dark:bg-slate-900"
+            className="interactive-card group flex items-center gap-3 rounded-2xl border bg-surface p-4"
           >
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-indigo-50 text-brand dark:bg-indigo-950">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand/10 text-brand">
               <Icon size={16} />
             </span>
             <span className="min-w-0 flex-1">
               <strong className="block text-sm">{label}</strong>
-              <span className="mt-0.5 block truncate text-xs text-slate-500">
+              <span className="mt-0.5 block truncate text-xs text-muted">
                 {detail}
               </span>
             </span>
             <ArrowRight
               size={14}
-              className="text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand"
+              className="text-subtle transition group-hover:translate-x-0.5 group-hover:text-brand"
             />
           </Link>
         ))}
@@ -183,19 +183,19 @@ export default function ProjectsPage() {
       {error && (
         <div
           role="alert"
-          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          className="rounded-xl border border-status-error/20 bg-status-error/[.06] px-4 py-3 text-sm text-status-error"
         >
           {error}
         </div>
       )}
       <section className="card p-5">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-brand">
+          <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand/10 text-brand">
             <Plus size={18} />
           </span>
           <div>
             <h2 className="font-semibold">新建研究项目</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted">
               从一个课题、论文或实验目标开始。
             </p>
           </div>
@@ -230,7 +230,7 @@ export default function ProjectsPage() {
       <section>
         <div className="mb-3">
           <h2 className="font-semibold">全部项目</h2>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-1 text-sm text-muted">
             切换后，所有页面会重新读取该项目范围内的内容。
           </p>
         </div>
@@ -239,7 +239,7 @@ export default function ProjectsPage() {
             {[1, 2].map((item) => (
               <div
                 key={item}
-                className="h-32 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800"
+                className="h-32 animate-pulse rounded-xl bg-ink/[.06]"
               />
             ))}
           </div>
@@ -255,7 +255,7 @@ export default function ProjectsPage() {
                 >
                   <div className="flex gap-3">
                     <span
-                      className={`grid h-10 w-10 place-items-center rounded-xl ${archived ? "bg-slate-100 text-slate-500" : "bg-blue-50 text-brand"}`}
+                      className={`grid h-10 w-10 place-items-center rounded-xl ${archived ? "bg-ink/[.06] text-muted" : "bg-brand/10 text-brand"}`}
                     >
                       <FolderKanban size={18} />
                     </span>
@@ -265,17 +265,17 @@ export default function ProjectsPage() {
                           {project.name}
                         </h3>
                         {active && (
-                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                          <span className="rounded-full bg-status-ok/10 px-2 py-0.5 text-[11px] font-medium text-status-ok">
                             当前项目
                           </span>
                         )}
                         {archived && (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">
+                          <span className="rounded-full bg-ink/[.06] px-2 py-0.5 text-[11px] font-medium text-muted">
                             已归档
                           </span>
                         )}
                       </div>
-                      <p className="mt-2 min-h-10 text-sm leading-5 text-slate-500">
+                      <p className="mt-2 min-h-10 text-sm leading-5 text-muted">
                         {project.description || "尚未添加项目说明。"}
                       </p>
                     </div>
@@ -332,10 +332,10 @@ export default function ProjectsPage() {
             })}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center dark:border-slate-700 dark:bg-slate-900">
-            <FolderKanban className="mx-auto text-slate-300" size={28} />
+          <div className="rounded-2xl border border-dashed bg-surface px-6 py-10 text-center">
+            <FolderKanban className="mx-auto text-subtle" size={28} />
             <h3 className="mt-3 text-sm font-semibold">还没有研究项目</h3>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted">
               上方创建项目后，只有你主动添加的资料才会出现在工作区中。
             </p>
           </div>
@@ -343,7 +343,7 @@ export default function ProjectsPage() {
       </section>
       {dialog && (
         <div
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 p-4"
+          className="fixed inset-0 z-50 grid place-items-center bg-ink/35 p-4 backdrop-blur-sm"
           onMouseDown={() => setDialog(undefined)}
         >
           <section
@@ -362,7 +362,7 @@ export default function ProjectsPage() {
             </h2>
             {dialog.type === "rename" ? (
               <>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
+                <p className="mt-2 text-sm leading-6 text-muted">
                   修改名称不会影响项目中的资料、运行和血缘。
                 </p>
                 <input
@@ -379,7 +379,7 @@ export default function ProjectsPage() {
                 />
               </>
             ) : (
-              <p className="mt-3 text-sm leading-6 text-slate-500">
+              <p className="mt-3 text-sm leading-6 text-muted">
                 归档“{dialog.project.name}
                 ”后将禁止继续写入，但所有历史资料、产物和血缘都会保留，可随时恢复。
               </p>
@@ -403,7 +403,7 @@ export default function ProjectsPage() {
                 }
                 className={
                   dialog.type === "archive"
-                    ? "btn bg-red-600 text-white hover:bg-red-700"
+                    ? "btn bg-status-error text-white hover:opacity-90"
                     : "btn-primary"
                 }
               >
@@ -421,7 +421,7 @@ export default function ProjectsPage() {
         <div
           role="status"
           aria-live="polite"
-          className="fixed bottom-6 right-6 z-50 rounded-xl bg-slate-950 px-4 py-3 text-sm text-white shadow-xl"
+          className="material fixed bottom-6 right-6 z-50 rounded-xl bg-ink px-4 py-3 text-sm text-canvas"
         >
           {toast}
         </div>

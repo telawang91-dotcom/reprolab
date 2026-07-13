@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckSquare2, Database, FileCode2, FileText, Search, Trash2 } from "lucide-react";
+import { Check, CheckSquare2, Database, FileCode2, FileText, FolderInput, FolderPlus, Pencil, Search, Trash2, X } from "lucide-react";
 
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Sheet } from "@/components/ui/Sheet";
@@ -18,6 +18,12 @@ export function DocumentManager() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [deleting, setDeleting] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [targetCollection, setTargetCollection] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [editingId, setEditingId] = useState("");
+  const [editingTitle, setEditingTitle] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -26,6 +32,9 @@ export function DocumentManager() {
       setSelected([]);
       setQuery("");
       setError("");
+      setTargetCollection(scope.activeId || "");
+      setCreatingFolder(false);
+      setEditingId("");
     }
   }, [scope.managerOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -59,6 +68,38 @@ export function DocumentManager() {
     }
   };
 
+  const moveSelected = async (collectionId: string | null) => {
+    if (!selected.length) return;
+    setMoving(true); setError("");
+    try {
+      await api.organizeDocuments(selected, collectionId);
+      setSelected([]);
+      await scope.refresh(collectionId || scope.activeId);
+      if (collectionId) scope.selectCollection(collectionId);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "资料移动失败");
+    } finally { setMoving(false); }
+  };
+  const createAndMove = async () => {
+    if (!newFolderName.trim() || !selected.length) return;
+    setMoving(true); setError("");
+    try {
+      const created = await api.createCollection(newFolderName.trim());
+      await api.organizeDocuments(selected, created.id);
+      setSelected([]); setNewFolderName(""); setCreatingFolder(false);
+      await scope.refresh(created.id); scope.selectCollection(created.id);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "无法创建文件夹并移动资料"); }
+    finally { setMoving(false); }
+  };
+  const saveTitle = async (document: DocumentItem) => {
+    const title = editingTitle.trim();
+    if (!title) return;
+    setMoving(true); setError("");
+    try { await api.updateDocument(document.id, { title }); setEditingId(""); await scope.refresh(scope.activeId); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "重命名失败"); }
+    finally { setMoving(false); }
+  };
+
   return (
     <Sheet open={scope.managerOpen} onOpenChange={(open) => open ? scope.openManager() : scope.closeManager()} title="资料管理" side="right">
       <div className="flex min-h-[calc(100vh-92px)] flex-col">
@@ -76,12 +117,12 @@ export function DocumentManager() {
           {visible.map((document) => {
             const Icon = icons[document.type];
             const checked = selected.includes(document.id);
-            return <div key={document.id} className={`group flex min-h-[72px] items-center gap-3 py-3 transition-colors ${checked ? "bg-brand/[.06]" : "hover:bg-ink/[.025]"}`}><input type="checkbox" checked={checked} onChange={() => toggle(document.id)} aria-label={`选择${document.title || document.filename}`} className="h-4 w-4 accent-brand" /><span className="grid h-9 w-9 shrink-0 place-items-center rounded-appleSm bg-ink/[.045] text-muted"><Icon size={16} /></span><button onClick={() => toggle(document.id)} className="min-w-0 flex-1 text-left"><strong className="block truncate text-[14px] font-semibold tracking-[-.01em]">{document.title || document.filename}</strong><span className="mt-1 block truncate text-xs text-subtle">{document.filename}</span></button><button onClick={() => void remove([document])} disabled={deleting} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-subtle transition hover:bg-status-err/10 hover:text-status-err active:scale-95" aria-label={`删除${document.title || document.filename}`}><Trash2 size={15} /></button></div>;
+            return <div key={document.id} className={`group flex min-h-[72px] items-center gap-3 py-3 transition-colors ${checked ? "bg-brand/[.06]" : "hover:bg-ink/[.025]"}`}><input type="checkbox" checked={checked} onChange={() => toggle(document.id)} aria-label={`选择${document.title || document.filename}`} className="h-4 w-4 accent-brand" /><span className="grid h-9 w-9 shrink-0 place-items-center rounded-appleSm bg-ink/[.045] text-muted"><Icon size={16} /></span>{editingId === document.id ? <div className="flex min-w-0 flex-1 items-center gap-1"><input autoFocus value={editingTitle} onChange={(event) => setEditingTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void saveTitle(document); if (event.key === "Escape") setEditingId(""); }} className="h-9 min-w-0 flex-1 rounded-full border bg-surface px-3 text-sm outline-none focus:border-brand" aria-label="资料标题" /><button onClick={() => void saveTitle(document)} className="grid h-9 w-9 place-items-center rounded-full text-status-ok hover:bg-status-ok/10" aria-label="保存标题"><Check size={14} /></button><button onClick={() => setEditingId("")} className="grid h-9 w-9 place-items-center rounded-full text-muted hover:bg-ink/[.05]" aria-label="取消重命名"><X size={14} /></button></div> : <button onClick={() => toggle(document.id)} className="min-w-0 flex-1 text-left"><strong className="block truncate text-[14px] font-semibold tracking-[-.01em]">{document.title || document.filename}</strong><span className="mt-1 block truncate text-xs text-subtle">{document.filename}</span></button>}<button onClick={() => { setEditingId(document.id); setEditingTitle(document.title || document.filename); }} disabled={moving} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-subtle hover:bg-brand/10 hover:text-brand" aria-label={`重命名${document.title || document.filename}`}><Pencil size={14} /></button><button onClick={() => void remove([document])} disabled={deleting} className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-subtle transition hover:bg-status-err/10 hover:text-status-err active:scale-95" aria-label={`删除${document.title || document.filename}`}><Trash2 size={15} /></button></div>;
           })}
           {!visible.length && <div className="grid min-h-52 place-items-center text-center"><div><FileText className="mx-auto text-subtle" size={24} /><p className="mt-3 text-sm text-muted">当前范围没有资料</p></div></div>}
         </div>
 
-        <div className="material sticky bottom-0 -mx-5 mt-4 flex min-h-16 items-center border-t px-5"><span className="text-sm text-muted">已选择 {selected.length} 项</span><button onClick={() => void remove(scope.documents.filter((document) => selected.includes(document.id)))} disabled={!selected.length || deleting} className="btn ml-auto bg-status-err text-white hover:bg-status-err/90"><Trash2 size={14} />{deleting ? "删除中…" : "删除所选"}</button></div>
+        <div className="material sticky bottom-0 -mx-5 mt-4 border-t px-5 py-3"><div className="flex flex-wrap items-center gap-2"><span className="mr-auto text-sm text-muted">已选择 {selected.length} 项</span>{selected.length > 0 && <><select value={targetCollection} onChange={(event) => setTargetCollection(event.target.value)} className="h-9 max-w-48 rounded-full border bg-surface px-3 text-xs"><option value="">移到未归档</option>{scope.collections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button onClick={() => void moveSelected(targetCollection || null)} disabled={moving} className="btn-secondary h-9 px-3"><FolderInput size={14} />{moving ? "处理中…" : "移动"}</button><button onClick={() => setCreatingFolder((value) => !value)} className="btn-secondary h-9 px-3"><FolderPlus size={14} />新建并移入</button></>}<button onClick={() => void remove(scope.documents.filter((document) => selected.includes(document.id)))} disabled={!selected.length || deleting} className="btn h-9 bg-status-err px-3 text-white hover:bg-status-err/90"><Trash2 size={14} />{deleting ? "删除中…" : "删除"}</button></div>{creatingFolder && <div className="mt-3 flex gap-2"><input autoFocus value={newFolderName} onChange={(event) => setNewFolderName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void createAndMove()} className="h-10 min-w-0 flex-1 rounded-full border bg-surface px-4 text-sm outline-none focus:border-brand" placeholder="输入新文件夹名称" /><button onClick={() => void createAndMove()} disabled={!newFolderName.trim() || moving} className="btn-primary h-10">创建并移动</button></div>}</div>
       </div>
     </Sheet>
   );

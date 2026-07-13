@@ -142,13 +142,13 @@ a:focus-visible {
     @apply overflow-hidden rounded-appleLg border border-line/[.08] bg-surface transition duration-200 dark:border-line/[.12];
   }
   .section-heading {
-    @apply flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800;
+    @apply flex flex-wrap items-end justify-between gap-3 border-b border-line/[.08] px-5 py-4;
   }
   .section-heading h2 {
     @apply text-[17px] font-semibold;
   }
   .section-heading p {
-    @apply mt-1 text-[13px] text-slate-500;
+    @apply mt-1 text-[13px] text-muted;
   }
   .text-link {
     @apply inline-flex items-center gap-1.5 text-[14px] text-brand hover:text-brand-hover;
@@ -163,7 +163,7 @@ a:focus-visible {
     @apply block text-2xl font-semibold tracking-[-.04em];
   }
   .metric-card span {
-    @apply block text-[13px] text-slate-500;
+    @apply block text-[13px] text-muted;
   }
   .result-row {
     @apply flex items-center gap-4 px-5 py-4 transition duration-200 hover:bg-elevated active:bg-brand/[.06];
@@ -172,34 +172,34 @@ a:focus-visible {
     @apply text-[15px] font-semibold;
   }
   .result-row p {
-    @apply mt-1 line-clamp-2 text-[13px] leading-5 text-slate-500;
+    @apply mt-1 line-clamp-2 text-[13px] leading-5 text-muted;
   }
   .result-status {
-    @apply grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-50 text-amber-600;
+    @apply grid h-9 w-9 shrink-0 place-items-center rounded-appleSm bg-status-warn/10 text-status-warn;
   }
   .result-status-trusted {
-    @apply bg-emerald-50 text-emerald-600;
+    @apply bg-status-ok/10 text-status-ok;
   }
   .artifact-card {
     @apply rounded-[18px] border border-line/[.08] bg-surface p-4 transition duration-200 hover:-translate-y-0.5 hover:border-brand/30 active:scale-[.985] dark:border-line/[.12];
   }
   .badge-success {
-    @apply rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700;
+    @apply rounded-full bg-status-ok/10 px-2 py-0.5 text-[11px] text-status-ok;
   }
   .badge-pending {
-    @apply rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700;
+    @apply rounded-full bg-status-warn/10 px-2 py-0.5 text-[11px] text-status-warn;
   }
   .status-error {
-    @apply flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700;
+    @apply flex items-center gap-2 rounded-apple border border-status-err/25 bg-status-err/10 px-4 py-3 text-sm text-status-err;
   }
   .empty-panel {
-    @apply grid min-h-72 place-items-center gap-3 px-6 py-12 text-center text-slate-400;
+    @apply grid min-h-72 place-items-center gap-3 px-6 py-12 text-center text-subtle;
   }
   .empty-panel h3 {
-    @apply text-lg font-semibold text-slate-800 dark:text-white;
+    @apply text-lg font-semibold text-ink;
   }
   .empty-panel p {
-    @apply max-w-md text-sm leading-6 text-slate-500;
+    @apply max-w-md text-sm leading-6 text-muted;
   }
   .flow-strip {
     @apply grid grid-cols-4 overflow-hidden rounded-appleLg border border-line/[.08] bg-surface px-2 py-2 dark:border-line/[.12];
@@ -211,13 +211,13 @@ a:focus-visible {
     @apply font-medium text-brand;
   }
   .flow-dot {
-    @apply grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-100 text-slate-400 dark:bg-slate-800;
+    @apply grid h-7 w-7 shrink-0 place-items-center rounded-full bg-ink/[.06] text-subtle;
   }
   .flow-dot-current {
-    @apply bg-indigo-100 text-brand dark:bg-indigo-950;
+    @apply bg-brand/10 text-brand;
   }
   .flow-dot-complete {
-    @apply bg-emerald-100 text-emerald-700;
+    @apply bg-status-ok/10 text-status-ok;
   }
   .flow-line {
     @apply ml-auto hidden h-px min-w-5 flex-1 bg-line/[.10] sm:block;
@@ -241,7 +241,7 @@ a:focus-visible {
     @apply transition duration-200 ease-out hover:-translate-y-px hover:border-brand/20 hover:bg-elevated;
   }
   .aurora-hero {
-    @apply relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#111827] via-[#25366E] to-[#5E65A9] text-white shadow-[0_24px_60px_rgba(30,41,59,.22)];
+    @apply relative overflow-hidden rounded-appleXl bg-ink text-white;
   }
   .aurora-orb {
     @apply absolute rounded-full blur-3xl;
@@ -322,20 +322,5 @@ a:focus-visible {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .aurora-orb {
-    animation: aurora-float 9s ease-in-out infinite alternate;
-  }
-}
-
-@keyframes aurora-float {
-  from {
-    transform: translate3d(-8px, -6px, 0) scale(0.96);
-  }
-  to {
-    transform: translate3d(12px, 10px, 0) scale(1.06);
   }
 }

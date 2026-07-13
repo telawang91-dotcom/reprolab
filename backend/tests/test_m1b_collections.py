@@ -29,6 +29,8 @@ def test_m1b_routes_and_backward_compatible_optional_contracts():
     assert "/api/v1/collections" in paths
     assert "/api/v1/documents/batch" in paths
     assert "/api/v1/documents/batch/{batch_id}" in paths
+    assert "patch" in paths["/api/v1/documents/{document_id}"]
+    assert "patch" in paths["/api/v1/documents/organize"]
     assert SearchRequest(project_id=uuid.uuid4(), query="q").collection_id is None
     assert QARequest(project_id=uuid.uuid4(), query="q").collection_id is None
     assert inspect.signature(ingest).parameters["collection_id"].default is None

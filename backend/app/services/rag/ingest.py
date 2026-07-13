@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.knowledge import Chunk, Collection, Dataset, Document
+from app.schemas.documents import DocumentOrganizeRequest, DocumentUpdate
 from app.services.rag import chunker, embedder, parser, storage
 
 
@@ -32,7 +33,16 @@ def infer_type(filename: str) -> str:
 
 def _metadata(text: str, filename: str) -> tuple[str | None, int | None, str | None]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
-    title = lines[0][:500] if lines else filename.rsplit(".", 1)[0]
+    fallback = filename.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    candidate = lines[0][:500] if lines else ""
+    looks_like_content = (
+        not candidate
+        or len(candidate) < 4
+        or candidate.isdigit()
+        or candidate.startswith(("from ", "import ", "#", "//", "{"))
+        or candidate.count("=") > 2
+    )
+    title = fallback if looks_like_content else candidate
     year_match = re.search(r"\b(19|20)\d{2}\b", text[:5000])
     doi_match = re.search(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+", text[:10000], re.IGNORECASE)
     return title, int(year_match.group()) if year_match else None, doi_match.group().rstrip(".,") if doi_match else None
@@ -164,3 +174,51 @@ def delete_document(db: Session, document_id: uuid.UUID) -> bool:
     db.delete(document)
     db.commit()
     return True
+
+
+def update_document(
+    db: Session, document_id: uuid.UUID, request: DocumentUpdate
+) -> Document:
+    document = db.get(Document, document_id)
+    if document is None or document.project_id != request.project_id:
+        raise LookupError("document not found")
+    if "collection_id" in request.model_fields_set and request.collection_id is not None:
+        collection = db.get(Collection, request.collection_id)
+        if collection is None or collection.project_id != request.project_id:
+            raise LookupError("collection not found")
+    if "title" in request.model_fields_set:
+        document.title = request.title.strip() if request.title else None
+    if "collection_id" in request.model_fields_set:
+        document.collection_id = request.collection_id
+        dataset = db.scalar(select(Dataset).where(
+            Dataset.project_id == document.project_id,
+            Dataset.storage_hash == document.storage_hash,
+        ))
+        if dataset is not None:
+            dataset.collection_id = request.collection_id
+    db.commit()
+    db.refresh(document)
+    return document
+
+
+def organize_documents(db: Session, request: DocumentOrganizeRequest) -> int:
+    if request.collection_id is not None:
+        collection = db.get(Collection, request.collection_id)
+        if collection is None or collection.project_id != request.project_id:
+            raise LookupError("collection not found")
+    documents = list(db.scalars(select(Document).where(
+        Document.project_id == request.project_id,
+        Document.id.in_(request.document_ids),
+    )))
+    if len(documents) != len(set(request.document_ids)):
+        raise LookupError("one or more documents were not found")
+    hashes = {document.storage_hash for document in documents}
+    for document in documents:
+        document.collection_id = request.collection_id
+    for dataset in db.scalars(select(Dataset).where(
+        Dataset.project_id == request.project_id,
+        Dataset.storage_hash.in_(hashes),
+    )):
+        dataset.collection_id = request.collection_id
+    db.commit()
+    return len(documents)

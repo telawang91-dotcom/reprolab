@@ -46,6 +46,25 @@ class DeleteResponse(BaseModel):
     deleted: bool
 
 
+class DocumentUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project_id: uuid.UUID
+    title: str | None = Field(default=None, max_length=500)
+    collection_id: uuid.UUID | None = None
+
+
+class DocumentOrganizeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project_id: uuid.UUID
+    document_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
+    collection_id: uuid.UUID | None = None
+
+
+class DocumentOrganizeResponse(BaseModel):
+    updated: int
+    collection_id: uuid.UUID | None = None
+
+
 class BatchItem(BaseModel):
     filename: str
     status: Literal["queued", "processing", "success", "error"]

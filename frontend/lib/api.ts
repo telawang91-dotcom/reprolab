@@ -93,6 +93,18 @@ export type DocumentDetail = DocumentItem & {
     column_count?: number;
   } | null;
 };
+export type ConversationSummary = {
+  id: string;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+};
+export type ConversationReplay = {
+  id: string;
+  title: string | null;
+  events: ChatEvent[];
+};
 export type SearchHit = {
   chunk_id: string;
   document_id: string;
@@ -401,6 +413,18 @@ export const api = {
     request(`/documents/${id}?project_id=${activeProjectId()}`, {
       method: "DELETE",
     }),
+  updateDocument: (id: string, payload: { title?: string | null; collection_id?: string | null }) =>
+    request<DocumentItem>(`/documents/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: activeProjectId(), ...payload }),
+    }),
+  organizeDocuments: (documentIds: string[], collectionId: string | null) =>
+    request<{ updated: number; collection_id: string | null }>("/documents/organize", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: activeProjectId(), document_ids: documentIds, collection_id: collectionId }),
+    }),
   upload: async (file: File, collectionId?: string) => {
     const activity = beginActivity(`正在导入 ${file.name}`, "/knowledge");
     const body = new FormData();
@@ -660,6 +684,10 @@ export const api = {
     }),
   testModel: () =>
     request<ModelTestResult>("/settings/model/test", { method: "POST" }),
+  conversations: () =>
+    request<ConversationSummary[]>(`/conversations?project_id=${activeProjectId()}`),
+  conversation: (id: string) =>
+    request<ConversationReplay>(`/conversations/${id}?project_id=${activeProjectId()}`),
 };
 
 export type ChatEvent = {

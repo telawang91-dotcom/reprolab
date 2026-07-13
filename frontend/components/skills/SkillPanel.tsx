@@ -73,22 +73,22 @@ export function SkillPanel({ selected, onSelect, onApply, refreshKey = 0 }: Prop
   }
 
   return <div className="mt-7 border-t pt-5">
-    <div className="flex items-center gap-2 text-sm font-medium"><Blocks size={15} className="text-violet-600"/>我的技能<span className="ml-auto text-[10px] text-slate-400">可复用</span></div>
+    <div className="flex items-center gap-2 text-sm font-semibold"><Blocks size={15} className="text-brand"/>我的技能<span className="ml-auto text-[10px] text-subtle">可复用</span></div>
     <select value={discipline} onChange={(event) => setDiscipline(event.target.value)} className="input mt-2 h-8 w-full text-xs"><option value="">全部领域</option><option value="general">通用</option><option value="materials">材料</option><option value="biology">生物</option></select>
     <div className="mt-2 grid grid-cols-2 gap-2">
       <button onClick={() => inputRef.current?.click()} className="btn-secondary h-8 text-xs"><Upload size={12}/>导入</button>
       <button onClick={() => void toggleHub()} className="btn-secondary h-8 text-xs"><Store size={12}/>SkillHub</button>
       <input ref={inputRef} type="file" accept=".json" className="hidden" onChange={(event) => void importFile(event.target.files?.[0])}/>
     </div>
-    {loading ? <div className="mt-3 flex items-center gap-2 text-xs text-slate-400"><Loader2 size={13} className="animate-spin"/>加载技能…</div> : <div className="mt-2 space-y-2">
-      <button onClick={() => onSelect(undefined)} className={`w-full rounded-lg border p-2 text-left text-xs ${!selected ? "border-blue-300 bg-blue-50" : "hover:bg-slate-50"}`}><span className="font-medium">根据问题自动分析</span><span className="mt-1 block text-[10px] text-slate-400">没有合适技能时使用</span></button>
-      {items.map((item) => <div key={item.id} className={`rounded-lg border p-2 text-xs ${selected === item.id ? "border-violet-300 bg-violet-50" : ""}`}>
-        <button onClick={() => onSelect(item)} className="w-full text-left"><span className="flex items-center gap-2 font-medium">{item.name}{selected === item.id && <Check size={12} className="ml-auto text-violet-600"/>}</span><span className="mt-1 block text-[10px] leading-4 text-slate-400">{item.intent || `${item.discipline || "通用"}模板`} · v{item.version}</span></button>
-        <div className="mt-2 flex gap-1 border-t pt-2"><button disabled={busy === item.id || !onApply} onClick={() => void applyItem(item)} className="flex flex-1 items-center justify-center gap-1 rounded px-1 py-1 text-[10px] text-violet-700 hover:bg-violet-100 disabled:opacity-50">{busy === item.id ? <Loader2 size={10} className="animate-spin"/> : <Play size={10}/>}应用</button><button onClick={() => void exportItem(item)} className="flex items-center gap-1 rounded px-2 py-1 text-[10px] text-slate-500 hover:bg-slate-100"><Download size={10}/>导出</button></div>
+    {loading ? <div className="mt-3 flex items-center gap-2 text-xs text-subtle"><Loader2 size={13} className="animate-spin"/>加载技能…</div> : <div className="mt-2 space-y-2">
+      <button onClick={() => onSelect(undefined)} className={`w-full rounded-appleSm border p-2 text-left text-xs ${!selected ? "border-brand/35 bg-brand/[.06]" : "hover:bg-ink/[.04]"}`}><span className="font-semibold">根据问题自动分析</span><span className="mt-1 block text-[10px] text-subtle">没有合适技能时使用</span></button>
+      {items.map((item) => <div key={item.id} className={`rounded-appleSm border p-2 text-xs ${selected === item.id ? "border-brand/35 bg-brand/[.06]" : ""}`}>
+        <button onClick={() => onSelect(item)} className="w-full text-left"><span className="flex items-center gap-2 font-semibold">{item.name}{selected === item.id && <Check size={12} className="ml-auto text-brand"/>}</span><span className="mt-1 block text-[10px] leading-4 text-subtle">{item.intent || `${item.discipline || "通用"}模板`} · v{item.version}</span></button>
+        <div className="mt-2 flex gap-1 border-t pt-2"><button disabled={busy === item.id || !onApply} onClick={() => void applyItem(item)} className="flex flex-1 items-center justify-center gap-1 rounded-appleSm px-1 py-1 text-[10px] text-brand hover:bg-brand/10 disabled:opacity-50">{busy === item.id ? <Loader2 size={10} className="animate-spin"/> : <Play size={10}/>}应用</button><button onClick={() => void exportItem(item)} className="flex items-center gap-1 rounded-appleSm px-2 py-1 text-[10px] text-muted hover:bg-ink/[.05]"><Download size={10}/>导出</button></div>
       </div>)}
     </div>}
-    {hubOpen && <div className="mt-3 rounded-lg border bg-slate-50 p-2"><div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">SkillHub</div>{hub.map((item) => <div key={item.id} className="mt-2 rounded-md bg-white p-2 text-xs"><div className="font-medium">{item.name}</div><div className="mt-1 text-[10px] leading-4 text-slate-400">{item.intent} · {item.author}</div><button onClick={() => void importHub(item)} className="mt-2 text-[10px] font-medium text-brand">导入到我的技能</button></div>)}</div>}
-    {error && <div className="mt-2 text-xs text-red-600">{error}</div>}
-    <p className="mt-2 text-[10px] leading-4 text-slate-400">复用仍会重新执行并登记完整溯源；字段不匹配时自动回退动态分析。</p>
+    {hubOpen && <div className="mt-3 rounded-appleSm border bg-ink/[.04] p-2"><div className="text-[10px] font-semibold uppercase tracking-wide text-muted">SkillHub</div>{hub.map((item) => <div key={item.id} className="mt-2 rounded-appleSm bg-surface p-2 text-xs"><div className="font-semibold">{item.name}</div><div className="mt-1 text-[10px] leading-4 text-subtle">{item.intent} · {item.author}</div><button onClick={() => void importHub(item)} className="mt-2 text-[10px] font-semibold text-brand">导入到我的技能</button></div>)}</div>}
+    {error && <div className="mt-2 text-xs text-status-err">{error}</div>}
+    <p className="mt-2 text-[10px] leading-4 text-subtle">复用仍会重新执行并登记完整溯源；字段不匹配时自动回退动态分析。</p>
   </div>;
 }

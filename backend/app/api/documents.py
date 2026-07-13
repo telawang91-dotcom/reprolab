@@ -5,7 +5,16 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.models.knowledge import Project
-from app.schemas.documents import BatchStatus, DeleteResponse, DocumentDetail, DocumentListItem, DocumentUploadResponse
+from app.schemas.documents import (
+    BatchStatus,
+    DeleteResponse,
+    DocumentDetail,
+    DocumentListItem,
+    DocumentOrganizeRequest,
+    DocumentOrganizeResponse,
+    DocumentUpdate,
+    DocumentUploadResponse,
+)
 from app.services.rag import ingest as ingest_service
 from app.services.rag import batch_ingest
 from app.services.rag.collections import require_collection
@@ -131,6 +140,31 @@ def get_document(document_id: uuid.UUID, project_id: uuid.UUID, db: Session = De
         schema_json=dataset.schema_json if dataset else None,
         collection_id=document.collection_id,
     )
+
+
+@router.patch("/organize", response_model=DocumentOrganizeResponse)
+def organize_documents(
+    request: DocumentOrganizeRequest, db: Session = Depends(get_db)
+) -> DocumentOrganizeResponse:
+    try:
+        updated = ingest_service.organize_documents(db, request)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return DocumentOrganizeResponse(updated=updated, collection_id=request.collection_id)
+
+
+@router.patch("/{document_id}", response_model=DocumentListItem)
+def patch_document(
+    document_id: uuid.UUID,
+    request: DocumentUpdate,
+    db: Session = Depends(get_db),
+) -> DocumentListItem:
+    try:
+        return DocumentListItem.model_validate(
+            ingest_service.update_document(db, document_id, request)
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.delete("/{document_id}", response_model=DeleteResponse)

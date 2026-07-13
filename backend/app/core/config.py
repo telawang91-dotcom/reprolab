@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     critic_model: str = "deepseek:deepseek-v4-pro"
     model_max_retries: int = Field(default=2, ge=0, le=5)
     agent_max_steps: int = Field(default=10, ge=1, le=30)
+    agent_api_token: str = ""
+    agent_rate_limit_per_minute: int = Field(default=30, ge=1, le=1000)
     llm_temperature: float = Field(default=0.2, ge=0, le=2)
     llm_max_tokens: int = Field(default=4096, ge=64, le=32768)
     siliconflow_enable_thinking: bool = False

@@ -46,30 +46,30 @@ export default function DemoPage() {
 
   return <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-5 py-8 lg:px-8">
     <header className="flex items-center justify-between">
-      <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 dark:hover:text-white"><ArrowLeft size={15}/>退出演示</Link>
-      <div className="inline-flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-400"><ShieldCheck size={13}/>不会创建或修改任何资料</div>
+      <Link href="/" className="interactive inline-flex items-center gap-2 text-sm text-muted hover:text-ink"><ArrowLeft size={15}/>退出演示</Link>
+      <div className="inline-flex items-center gap-2 text-xs font-medium text-status-ok"><ShieldCheck size={13}/>不会创建或修改任何资料</div>
     </header>
 
     <main className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[0.9fr_1.1fr]">
       <section>
         <div className="text-xs font-semibold uppercase tracking-[.16em] text-brand">{step.eyebrow}</div>
         <h1 className="mt-4 max-w-lg text-3xl font-semibold leading-tight tracking-tight md:text-4xl">{step.title}</h1>
-        <p className="mt-5 max-w-lg text-sm leading-7 text-slate-500">{step.text}</p>
-        <div className="mt-8 flex items-center gap-2">{steps.map((_, index) => <button key={index} onClick={() => setCurrent(index)} aria-label={`查看第 ${index + 1} 步`} className={`h-1.5 rounded-full transition-all ${index === current ? "w-8 bg-brand" : "w-4 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700"}`}/>)}</div>
+        <p className="mt-5 max-w-lg text-sm leading-7 text-muted">{step.text}</p>
+        <div className="mt-8 flex items-center gap-2">{steps.map((_, index) => <button key={index} onClick={() => setCurrent(index)} aria-label={`查看第 ${index + 1} 步`} className={`interactive h-1.5 rounded-full transition-all ${index === current ? "w-8 bg-brand" : "w-4 bg-ink/10 hover:bg-ink/20"}`}/>)}</div>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border bg-white shadow-xl shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-950 dark:shadow-none">
-        <div className="flex h-12 items-center border-b px-4 dark:border-slate-800"><span className="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-brand dark:bg-blue-950"><Icon size={15}/></span><span className="ml-3 text-sm font-medium">{step.preview}</span><span className="ml-auto flex items-center gap-1 text-[11px] text-emerald-600"><Check size={12}/>演示预览</span></div>
-        <div className="min-h-[330px] bg-slate-50/70 p-6 dark:bg-slate-900/40 md:p-8">
-          <div className="mx-auto max-w-md rounded-xl border bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-950">
-            <div className="mb-5 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900"><Icon size={18}/></span><div><div className="text-sm font-semibold">{step.preview}</div><div className="mt-0.5 text-xs text-slate-400">ReproLab 工作流</div></div></div>
-            <div className="divide-y dark:divide-slate-800">{step.rows.map((row, index) => <div key={row} className="flex items-center gap-3 py-3.5"><span className={`grid h-6 w-6 place-items-center rounded-full text-xs ${index === step.rows.length - 1 ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950" : "bg-slate-100 text-slate-500 dark:bg-slate-800"}`}>{index + 1}</span><span className="text-sm">{row}</span>{index < step.rows.length - 1 && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-slate-200 dark:bg-slate-700"/>}</div>)}</div>
+      <section className="interactive-card overflow-hidden rounded-2xl border bg-surface">
+        <div className="flex h-12 items-center border-b px-4"><span className="grid h-7 w-7 place-items-center rounded-lg bg-brand/10 text-brand"><Icon size={15}/></span><span className="ml-3 text-sm font-medium">{step.preview}</span><span className="ml-auto flex items-center gap-1 text-[11px] text-status-ok"><Check size={12}/>演示预览</span></div>
+        <div className="min-h-[330px] bg-ink/[.025] p-6 md:p-8">
+          <div className="mx-auto max-w-md rounded-xl border bg-surface p-5">
+            <div className="mb-5 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-ink text-canvas"><Icon size={18}/></span><div><div className="text-sm font-semibold">{step.preview}</div><div className="mt-0.5 text-xs text-subtle">ReproLab 工作流</div></div></div>
+            <div className="divide-y">{step.rows.map((row, index) => <div key={row} className="flex items-center gap-3 py-3.5"><span className={`grid h-6 w-6 place-items-center rounded-full text-xs ${index === step.rows.length - 1 ? "bg-status-ok/10 text-status-ok" : "bg-ink/[.06] text-muted"}`}>{index + 1}</span><span className="text-sm">{row}</span>{index < step.rows.length - 1 && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-ink/10"/>}</div>)}</div>
           </div>
         </div>
       </section>
     </main>
 
-    <footer className="flex items-center justify-between border-t pt-5 dark:border-slate-800">
+    <footer className="flex items-center justify-between border-t pt-5">
       <button onClick={() => setCurrent((value) => Math.max(0, value - 1))} disabled={current === 0} className="btn-secondary disabled:invisible"><ArrowLeft size={14}/>上一步</button>
       {current < steps.length - 1 ? <button onClick={() => setCurrent((value) => value + 1)} className="btn-primary">下一步<ArrowRight size={14}/></button> : <Link href="/knowledge" className="btn-primary"><PlayCircle size={14}/>开始使用</Link>}
     </footer>

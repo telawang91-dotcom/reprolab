@@ -8,7 +8,7 @@
 
 ### 约定
 
-1. 认证：demo 阶段可省略或用固定 token；保留 project_id 作为作用域参数。
+1. 认证：站内接口在 demo 阶段可省略；对外 `POST /agent/invoke` 支持固定 Bearer token（`AGENT_API_TOKEN`）并按来源限流。生产部署必须配置 token，轮换环境变量即可撤销旧 token；保留 project_id 作为作用域参数。
 2. 错误：统一 `{ "error": {"code": str, "message": str} }`，HTTP 4xx/5xx。
 3. 时间：ISO8601 UTC。
 4. 锚点：正文里的 ⟦art_xxxx⟧ / ⟦src_xxxx⟧ 为机器可解析标记（xxxx = artifact/document id 短码）。
@@ -73,6 +73,8 @@ GET  /documents            # 列表/筛选
 
 GET  /documents/{id}       # 详情 + 预览元数据
 DELETE /documents/{id}
+PATCH /documents/{id}      # body: { project_id, title?, collection_id? }；支持重命名或移动/取消归档
+PATCH /documents/organize  # body: { project_id, document_ids: [], collection_id? }；批量移动资料
 ```
 
 ### M1b 知识空间与批量入库
@@ -146,6 +148,13 @@ POST /chat                 # 自然语言 → 规划 → 执行 → 返回图/�
      event: message  data: { text, citations }
      event: done     data: { conversation_id }
   # 多轮迭代：带 conversation_id 继续，如"横坐标改对数"
+
+GET /conversations?project_id={id}
+  -> [{ id, title, created_at, updated_at, message_count }]
+GET /conversations/{id}?project_id={id}
+  -> { id, title, events: [{ event, data }] }
+
+历史回放事件复用 POST /chat 的 SSE event/data schema；只从已持久化的 Message、Run、Artifact 还原，不新增第二套事件模型。
 ```
 
 ### M4 代码执行沙箱
@@ -343,6 +352,8 @@ plaintext
 POST /agent/invoke         # headless 调用：脱离前端，走完"输入→分析→带溯源结论"
   body: { project_id, task: str, inputs?: {} }
   -> { result, artifacts, lineage, verify_report }
+
+当 `AGENT_API_TOKEN` 非空时，请求必须携带 `Authorization: Bearer <token>`；单来源默认每分钟最多 `AGENT_RATE_LIMIT_PER_MINUTE` 次。服务记录请求 ID、项目、状态与耗时，但不记录 token、原始数据或完整任务文本。
 ```
 
 ### 运行状态与可恢复错误（产品体验 P0）
