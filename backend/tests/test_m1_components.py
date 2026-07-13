@@ -3,6 +3,7 @@ import json
 
 import fitz
 import pandas as pd
+import pytest
 
 from app.core.config import settings
 from app.services.rag import chunker, parser, storage
@@ -26,6 +27,23 @@ def test_csv_parser_extracts_complete_schema():
     assert parsed.dataset_schema["row_count"] == 10
     assert parsed.dataset_schema["column_count"] == 3
     assert [column["name"] for column in parsed.dataset_schema["columns"]] == ["species", "mass", "valid"]
+
+
+def test_csv_parser_reports_inconsistent_row_without_silently_dropping_it():
+    raw = b"a,b,c\n1,2,3\n4,5,6,7\n"
+    with pytest.raises(ValueError) as caught:
+        parser.parse("broken.csv", raw)
+    message = str(caught.value)
+    assert "第 3 行有 4 列" in message
+    assert "表头应为 3 列" in message
+    assert "不会静默丢弃" in message
+
+
+def test_csv_parser_accepts_common_gb18030_encoding():
+    raw = "姓名,数值\n样本甲,1\n".encode("gb18030")
+    parsed = parser.parse("中文数据.csv", raw)
+    assert parsed.dataset_schema["row_count"] == 1
+    assert parsed.dataset_schema["columns"][0]["name"] == "姓名"
 
 
 def test_notebook_and_markdown_are_chunked():

@@ -1,13 +1,22 @@
-from functools import lru_cache
+import threading
 
 from app.core.config import settings
 
 
-@lru_cache(maxsize=1)
-def get_model():
-    from sentence_transformers import SentenceTransformer
+_model = None
+_model_lock = threading.Lock()
 
-    return SentenceTransformer(settings.embedding_model)
+
+def get_model():
+    global _model
+    if _model is not None:
+        return _model
+    with _model_lock:
+        if _model is None:
+            from sentence_transformers import SentenceTransformer
+
+            _model = SentenceTransformer(settings.embedding_model)
+    return _model
 
 
 def encode(texts: list[str]) -> list[list[float]]:
@@ -23,3 +32,13 @@ def encode(texts: list[str]) -> list[list[float]]:
 def preheat() -> None:
     encode(["ReproLab embedding warm-up"])
 
+
+def start_preheat() -> None:
+    def warm() -> None:
+        try:
+            preheat()
+        except Exception:
+            # A later semantic request can retry and surface a recoverable error.
+            return
+
+    threading.Thread(target=warm, name="reprolab-embedding-preheat", daemon=True).start()

@@ -22,7 +22,7 @@ from app.api.projects import router as projects_router
 from app.api.workbench import router as workbench_router
 from app.core.db import ProjectArchivedError, SessionLocal
 from app.core.config import settings
-from app.services.rag.embedder import preheat
+from app.services.rag.embedder import start_preheat
 from app.services.sandbox.kernel import kernel_registry
 from app.services.skills.store import ensure_builtins
 from sqlalchemy import text
@@ -33,7 +33,7 @@ from sqlalchemy.exc import SQLAlchemyError
 async def lifespan(_: FastAPI):
     settings.storage_dir.mkdir(parents=True, exist_ok=True)
     if settings.embedding_preload:
-        preheat()
+        start_preheat()
     try:
         with SessionLocal() as db:
             ensure_builtins(db)

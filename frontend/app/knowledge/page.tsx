@@ -17,6 +17,7 @@ import {
 const modes = [{ id: "hybrid", label: "智能混合" }, { id: "semantic", label: "语义" }, { id: "keyword", label: "关键词" }];
 const icons = { paper: FileText, note: BookOpen, code: FileCode2, other: Database };
 const typeNames = { paper: "论文", note: "笔记", code: "代码", other: "数据/其他" };
+const folderPickerAttributes = { webkitdirectory: "", directory: "" };
 
 export default function KnowledgePage() {
   const [collections, setCollections] = useState<CollectionItem[]>([]);
@@ -119,7 +120,11 @@ export default function KnowledgePage() {
       if (job.failed) setError(`${job.failed} 个文件入库失败，可展开批次查看原因。`);
       await Promise.all([loadDocuments(), loadCollections()]);
     } catch (reason) { setError((reason as Error).message); }
-    finally { setUploading([]); setDragging(false); }
+    finally {
+      setUploading([]); setDragging(false);
+      if (fileRef.current) fileRef.current.value = "";
+      if (folderRef.current) folderRef.current.value = "";
+    }
   }
 
   async function search() {
@@ -132,8 +137,9 @@ export default function KnowledgePage() {
       if (type) filters.type = type;
       if (year) filters.year_gte = Number(year);
       setHits((await api.search(query, mode, filters, collection || undefined)).hits);
+      if (needsWarmup) setSemanticPrepared(true);
     } catch (reason) { setError((reason as Error).message); }
-    finally { setSearching(false); setWarmingRetrieval(false); if (needsWarmup) setSemanticPrepared(true); }
+    finally { setSearching(false); setWarmingRetrieval(false); }
   }
 
   async function ask() {
@@ -144,8 +150,9 @@ export default function KnowledgePage() {
     try {
       const response = await api.qa(query, collection || undefined);
       setAnswer(response.answer); setCitations(response.citations);
+      if (needsWarmup) setSemanticPrepared(true);
     } catch (reason) { setError((reason as Error).message); }
-    finally { setSearching(false); setWarmingRetrieval(false); if (needsWarmup) setSemanticPrepared(true); }
+    finally { setSearching(false); setWarmingRetrieval(false); }
   }
 
   async function openDocument(id: string, hit: SearchHit | null = null) {
@@ -195,7 +202,7 @@ export default function KnowledgePage() {
 
         <div className="mb-5 lg:hidden"><select value={collection} onChange={(event) => chooseCollection(event.target.value)} className="input h-10 w-full"><option value="">全部资料</option>{collections.map((item) => <option key={item.id} value={item.id}>{item.name}（{item.document_count}）</option>)}</select></div>
         <input ref={fileRef} className="hidden" type="file" multiple accept=".pdf,.csv,.xlsx,.py,.ipynb,.md,.txt,.zip" onChange={(event) => event.target.files && void upload(event.target.files)}/>
-        <input ref={folderRef} className="hidden" type="file" multiple onChange={(event) => event.target.files && void upload(event.target.files)}/>
+        <input ref={folderRef} className="hidden" type="file" multiple {...folderPickerAttributes} onChange={(event) => event.target.files && void upload(event.target.files)}/>
 
         {hasDocuments && <><section className="overflow-hidden rounded-xl bg-slate-900 text-white shadow-sm dark:bg-slate-800">
           <div className="flex min-h-16 items-center gap-3 px-4 md:px-5"><Search size={18} className="shrink-0 text-slate-400"/><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void ask()} className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-slate-500" placeholder={activeCollection ? `向“${activeCollection.name}”提问…` : "向全部资料提问，或输入关键词检索…"}/>{searching && <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400"/>}<button onClick={() => void search()} disabled={searching || !query.trim()} className="hidden h-9 rounded-lg px-3 text-sm text-slate-300 hover:bg-white/10 disabled:opacity-40 sm:block">检索</button><button onClick={() => void ask()} disabled={searching || !query.trim()} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-white px-3.5 text-sm font-medium text-slate-900 hover:bg-slate-100 disabled:opacity-40"><Sparkles size={14}/>问知识库</button></div>
@@ -207,7 +214,7 @@ export default function KnowledgePage() {
 
         {error && <div role="alert" className="mt-4 flex items-start border-l-2 border-red-500 bg-red-50 px-3 py-2.5 text-sm text-red-700"><span className="flex-1">{error}</span><button onClick={() => setError("")}><X size={14}/></button></div>}
 
-        {batch && <section className="mt-4 border-b border-slate-200 pb-4 dark:border-slate-800"><div className="flex items-center gap-3 text-sm"><UploadCloud size={15} className={["queued", "processing"].includes(batch.status) ? "animate-pulse text-brand" : "text-emerald-600"}/><span className="font-medium">{["queued", "processing"].includes(batch.status) ? "正在整理资料" : "资料已入库"}</span><div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className="h-full bg-brand transition-all" style={{ width: `${batch.total ? ((batch.completed + batch.failed) / batch.total) * 100 : 0}%` }}/></div><span className="text-xs text-slate-400">{batch.completed + batch.failed}/{batch.total}</span></div>{batch.failed > 0 && <details className="mt-2 text-xs text-red-600"><summary className="cursor-pointer">{batch.failed} 个文件失败</summary><div className="mt-2 space-y-1 pl-5">{batch.items.filter((item) => item.status === "error").map((item) => <div key={item.filename}>{item.filename}：{item.error}</div>)}</div></details>}</section>}
+        {batch && <section className="mt-4 border-b border-slate-200 pb-4 dark:border-slate-800"><div className="flex items-center gap-3 text-sm"><UploadCloud size={15} className={["queued", "processing"].includes(batch.status) ? "animate-pulse text-brand" : batch.failed ? "text-red-600" : "text-emerald-600"}/><span className="font-medium">{["queued", "processing"].includes(batch.status) ? "正在校验并整理资料" : batch.status === "success" ? `已导入 ${batch.completed} 个文件` : batch.status === "partial" ? `已导入 ${batch.completed} 个，${batch.failed} 个需修正` : "文件未导入，请修正后重试"}</span><div className="h-1 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div className={`h-full transition-all ${batch.failed ? "bg-red-500" : "bg-brand"}`} style={{ width: `${batch.total ? ((batch.completed + batch.failed) / batch.total) * 100 : 0}%` }}/></div><span className="text-xs text-slate-400">{batch.completed + batch.failed}/{batch.total}</span></div>{batch.failed > 0 && <details open className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950/20 dark:text-red-300"><summary className="cursor-pointer font-medium">{batch.failed} 个文件需要修正</summary><div className="mt-2 space-y-2">{batch.items.filter((item) => item.status === "error").map((item) => <div key={item.filename}><div className="font-medium">{item.filename}</div><div className="mt-0.5 leading-5 opacity-90">{item.error}</div></div>)}</div><p className="mt-2 border-t border-red-200 pt-2 dark:border-red-900">修正文件后可重新选择同一文件夹；已经成功的文件不会因其他文件失败而回滚。</p></details>}</section>}
 
         {answer && <section className="mt-7 border-b border-slate-200 pb-7 dark:border-slate-800"><div className="mb-4 flex items-center gap-2"><Sparkles size={15} className="text-brand"/><h3 className="font-semibold">回答</h3><span className="text-xs text-slate-400">基于 {activeCollection?.name || "全部资料"}</span></div><div className="max-w-3xl"><AnchoredMarkdown text={answer} onAnchor={anchorClick}/></div><div className="mt-4 flex flex-wrap gap-2">{citations.map((item) => <button onClick={() => void openDocument(item.document_id)} key={item.chunk_id} className="rounded-md bg-slate-100 px-2 py-1 font-mono text-xs text-slate-500 hover:text-brand dark:bg-slate-800">{item.anchor} 查看原文</button>)}</div></section>}
 

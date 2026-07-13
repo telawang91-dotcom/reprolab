@@ -339,6 +339,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       : runtime?.state === "degraded"
         ? runtime.components.find((item) => item.state !== "ready")
         : null;
+  const canOpenWithoutProject = ["/projects", "/settings", "/guide", "/profile"].some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
 
   return (
     <div className="min-h-screen bg-canvas dark:bg-[#0B0F17]">
@@ -684,7 +687,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </Link>
         )}
-        {projectsLoaded && !activeProject && pathname !== "/projects" ? (
+        {projectsLoaded && !activeProject && !canOpenWithoutProject ? (
           <section className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-3xl place-items-center px-5 py-16">
             <div className="w-full rounded-[28px] border border-slate-200/80 bg-white p-8 text-center shadow-card dark:border-white/[.10] dark:bg-slate-900 sm:p-12">
               <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-brand dark:bg-indigo-950">
