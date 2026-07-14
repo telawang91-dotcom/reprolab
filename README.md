@@ -1,14 +1,40 @@
 # ReproLab
 
-> 面向研究生的可信、可复现科研工作台：从资料检索、数据分析到结果验证与论文写作，让每个数字和图表都能找到数据、代码与运行环境。
+> 面向研究生的可信、可复现科研工作台：把多源资料、复杂 RAG、动态数据分析和长期记忆连成一条可核查、可重跑的研究链。
 
-[![Product quality](https://github.com/telawang91-dotcom/reprolab/actions/workflows/quality.yml/badge.svg)](https://github.com/telawang91-dotcom/reprolab/actions/workflows/quality.yml)
+[![Product quality](https://github.com/telawang91-dotcom/reprolab/actions/workflows/quality.yml/badge.svg?branch=dev)](https://github.com/telawang91-dotcom/reprolab/actions/workflows/quality.yml?query=branch%3Adev)
 ![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
 ![Next.js 14](https://img.shields.io/badge/Next.js-14-black?logo=next.js)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 
+**赛道 A · AI4S 基础设施及工具（Infrastructure & Tools）**
+
+ReproLab 不是给科研流程再套一层聊天界面，而是把“结论是否有证据、数字能否重算、数据变化后结果是否仍成立”变成系统必须执行的检查。
+
 ![ReproLab 工作台](docs/images/workbench-home.png)
+
+## 赛道能力覆盖
+
+| 赛道要求 | 当前实现 | 可验证入口 |
+| --- | --- | --- |
+| 复杂检索（RAG） | 元数据预过滤、BM25、pgvector、RRF 融合、交叉编码重排、原文锚点 | `/knowledge` |
+| 数据分析 | Planner / Executor / Critic 按真实数据动态生成并执行 Python | `/analysis` |
+| 长期记忆 | 项目隔离的情节、语义、技能三层记忆，使用前核验 | `/memory` |
+| 多源异构管理 | PDF、CSV、XLSX、Markdown、TXT、Python、Notebook 统一入库和查询 | `/knowledge`、`/projects` |
+| 科研建议与写作 | 建议绑定证据；数字与引用使用机器可解析锚点，校验通过后才能回写 | `/results` |
+
+从 `/demo` 可以先查看真实运行状态和六步能力证据，再进入明确标识、与真实研究空间隔离的 Palmer Penguins 演示项目。
+
+## 核心差异
+
+| 常见科研 AI | ReproLab |
+| --- | --- |
+| 返回一段看似合理的回答 | 回答中的引用可回到原文片段 |
+| 生成图表，但输入与代码容易丢失 | 每个产物绑定 Dataset → Run → Artifact 与环境快照 |
+| 数据更新后依赖人工重新检查 | 一键重跑、容差比较、漂移标红并定位贡献来源 |
+| 发现错误后只提示用户重试 | 引用 NLI、数字/图表三查与 Reflexion 多轮自修复 |
+| 记忆跨任务混用，来源不清 | 记忆按项目隔离，召回前检查来源与适用范围 |
 
 ## 为什么需要 ReproLab
 
@@ -88,6 +114,14 @@ flowchart LR
 - 可打印复现报告、两次运行差异比较、图表与 JSON 产物导出；
 - 全局任务中心持续显示上传和 Agent 分析状态。
 
+### 长期记忆与技能复用
+
+- 情节记忆记录做过什么，语义记忆保存已核验偏好与事实；
+- 技能记忆沉淀可复用分析方法，不把分析限制成固定学科菜单；
+- 记忆、技能、建议和产物都以项目为隔离边界；
+- 技能可导入、导出、应用到新数据，字段映射不确定时安全回退动态分析；
+- 新会话召回前检查来源和适用范围，避免把旧结论直接当作当前事实。
+
 ## 技术核心
 
 ### 1. 溯源账本
@@ -126,7 +160,16 @@ code_hash  = SHA256(代码 + 语言 + input_hash + env_hash)
 2. 正文数字是否绑定真实分析产物；
 3. 图表能否由原始代码、数据和环境重新生成。
 
-### 5. 模型无关运行时
+三查不是字符串规则集合：引用检查使用 NLI 输出 `entailment / neutral / contradiction`，失败后可进入 Reflexion 修复循环，并记录每轮问题、修复动作与最终状态。
+
+### 5. 漂移归因与反思式修复
+
+- **Drift Attribution**：通过受控消融、逐项回放与敏感性分析，估算字段或分组对结果变化的贡献；
+- **Citation NLI**：判断证据是否真正蕴含当前论断，而不只检查引用是否存在；
+- **Reflexion Repair**：把质检失败反馈给写作或执行 Agent，多轮修正后重新校验；
+- 所有算法输出保留可解释理由和中间状态，便于评委或导师复核。
+
+### 6. 模型无关运行时
 
 业务层统一调用：
 
@@ -135,6 +178,8 @@ ModelAdapter.chat({"model": model, "messages": messages, "tools": tools})
 ```
 
 当前支持 DeepSeek、腾讯混元及兼容 OpenAI 协议的模型服务。切换模型不改变溯源、执行和校验规则。
+
+同一套 Agent 核心同时服务前端 SSE 会话和 `POST /agent/invoke`，核心能力可以脱离 UI 被脚本或平台调用。
 
 ## 系统架构
 
@@ -237,6 +282,7 @@ npm.cmd --prefix frontend run dev
 - 产品界面：[http://localhost:3000](http://localhost:3000)
 - OpenAPI：[http://localhost:8000/docs](http://localhost:8000/docs)
 - 后端健康检查：[http://localhost:8000/health](http://localhost:8000/health)
+- 运行环境诊断：[http://localhost:8000/api/v1/settings/runtime](http://localhost:8000/api/v1/settings/runtime)
 
 首次使用也可以打开 `/demo`：页面会先展示赛道必备能力与真实运行状态，再创建或复用隔离的 Palmer Penguins 演示项目和研究文件夹，不会污染真实研究空间。
 
@@ -281,22 +327,30 @@ npm.cmd --prefix frontend run build
 PostgreSQL 与 Docker 可用后运行真实集成验收：
 
 ```powershell
+# 首次运行时创建专用测试库；禁止让自动化测试连接开发数据库
+docker compose exec -T postgres createdb -U reprolab reprolab_test
+
 $env:RUN_INTEGRATION="1"
 $env:SANDBOX_BACKEND="docker"
+$env:DATABASE_URL="postgresql+psycopg://reprolab:reprolab@localhost:5432/reprolab_test"
+Set-Location backend
+..\.venv\Scripts\python.exe -m alembic upgrade head
+Set-Location ..
 .\.venv\Scripts\python.exe -m pytest backend\tests\integration -q -s
 ```
+
+如果 `reprolab_test` 已存在，可以跳过 `createdb`。集成测试在数据库 URL 不含 `test` 时会主动拒绝运行，避免污染真实研究状态。
 
 GitHub Actions 会在推送和 Pull Request 时执行单元测试、类型检查、生产构建和可信核心集成测试；完整 P0 验收可手动触发。
 
 ## 三分钟演示建议
 
-1. 从 `/demo` 检查运行环境并进入隔离演示研究文件夹；
-2. 在知识空间展示混合 RAG 与可回到原文的 `⟦src_*⟧` 引用；
-3. 用自然语言提出未预设的分析问题，展示真实计划、代码和产物；
-4. 打开图表来源，查看 Dataset → Run → Artifact 与环境快照；
-5. 替换数据重新运行，展示自动标红的结果漂移与根因贡献；
-6. 在写作页加入错误数字或弱引用，运行 NLI 校验与反思式修复；
-7. 最后展示项目长期记忆和可导出的复现报告。
+1. **0:00–0:25｜问题与定位**：从 `/demo` 检查真实运行环境，说明“科研需要能追责、能重跑的 AI 结论”；
+2. **0:25–0:50｜资料与检索**：进入隔离研究文件夹，展示混合 RAG 与可回到原文的 `⟦src_*⟧` 引用；
+3. **0:50–1:35｜真实分析**：提出未预设问题，确认输入数据，展示真实计划、动态代码和产物；
+4. **1:35–2:15｜招牌动作**：打开 Dataset → Run → Artifact，替换数据重跑，展示漂移标红与根因贡献；
+5. **2:15–2:45｜现场找茬**：加入错误数字或弱引用，运行 NLI 校验与 Reflexion 修复；
+6. **2:45–3:00｜长期价值**：展示项目记忆与复现报告，收束到“越用越懂你，但每次复用仍可核验”。
 
 ## 文档
 
@@ -308,6 +362,7 @@ GitHub Actions 会在推送和 Pull Request 时执行单元测试、类型检查
 - [UI / UX 设计规范](docs/06-DESIGN.md)
 - [评审与技术深度](docs/07-SCORING.md)
 - [智能体详细设计](docs/08-AGENT-DESIGN.md)
+- [Agent REST 调用](docs/09-AGENT-API.md)
 
 开发前请阅读 [AGENTS.md](AGENTS.md)。契约冲突时，以 `docs/03-DATA-MODEL.md`、`docs/04-API.md`、`docs/05-PROVENANCE.md` 和 `docs/06-DESIGN.md` 为准。
 
