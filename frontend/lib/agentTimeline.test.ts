@@ -18,15 +18,17 @@ const event = (name: ChatEvent["event"], data: Record<string, unknown>): ChatEve
 }
 {
   const result = reduceAgentTimeline([{ event: "mystery", data: { anything: true } } as unknown as ChatEvent, null as unknown as ChatEvent]);
-  assert.deepEqual(result, { steps: [], conclusions: [] });
+  assert.deepEqual(result, { steps: [], questions: [], conclusions: [] });
 }
 
 {
   const result = reduceAgentTimeline([
+    event("message", { text: "第一个问题", user: true }),
     event("plan", { steps: [{ title: "第一轮" }] }),
     event("code", { code: "one()" }),
     event("run", { status: "success" }),
     event("message", { text: "第一轮结论" }),
+    event("message", { text: "第二个问题", user: true }),
     event("plan", { steps: [{ title: "第二轮" }] }),
     event("code", { code: "two()" }),
     event("run", { status: "success" }),
@@ -34,6 +36,7 @@ const event = (name: ChatEvent["event"], data: Record<string, unknown>): ChatEve
   ]);
   assert.equal(result.steps.length, 2);
   assert.deepEqual(result.conclusions.map((item) => item.text), ["第一轮结论", "第二轮结论"]);
+  assert.deepEqual(result.conclusions.map((item) => item.question), ["第一个问题", "第二个问题"]);
 }
 
 console.log("agentTimeline: 5 cases passed");

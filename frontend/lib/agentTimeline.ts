@@ -3,6 +3,7 @@ import type { ChatEvent } from "./api";
 export type TimelineArtifact = {
   artifact_id: string;
   kind: string;
+  title?: string | null;
   value_json?: unknown;
   figure_url?: string | null;
   anchor?: string;
@@ -27,10 +28,10 @@ export type TimelineStep = {
   attempts: TimelineAttempt[];
   status: "pending" | "working" | "repairing" | "success";
 };
-export type AgentConclusion = { text: string; citations: string[] };
-export type AgentTimeline = { steps: TimelineStep[]; conclusion?: AgentConclusion; conclusions: AgentConclusion[]; activeStepId?: string };
+export type AgentConclusion = { text: string; citations: string[]; question?: string };
+export type AgentTimeline = { steps: TimelineStep[]; questions: string[]; conclusion?: AgentConclusion; conclusions: AgentConclusion[]; activeStepId?: string };
 
-const emptyTimeline = (): AgentTimeline => ({ steps: [], conclusions: [] });
+const emptyTimeline = (): AgentTimeline => ({ steps: [], questions: [], conclusions: [] });
 const id = (prefix: string, index: number) => `${prefix}-${index + 1}`;
 const text = (value: unknown) => typeof value === "string" ? value : "";
 
@@ -58,6 +59,10 @@ export function reduceAgentTimeline(events: readonly ChatEvent[] | null | undefi
   try {
     return (Array.isArray(events) ? events : []).reduce<AgentTimeline>((state, event) => {
       if (!event || typeof event !== "object" || !event.data || typeof event.data !== "object") return state;
+      if (event.event === "message" && event.data.user) {
+        const question = text(event.data.text);
+        return question ? { ...state, questions: [...state.questions, question] } : state;
+      }
       if (event.event === "plan") {
         const raw: unknown[] = Array.isArray(event.data.steps) ? event.data.steps : [];
         if (!raw.length) return state;
@@ -91,7 +96,7 @@ export function reduceAgentTimeline(events: readonly ChatEvent[] | null | undefi
         attempts[last] = { ...attempts[last], artifacts: [...attempts[last].artifacts, event.data as TimelineArtifact] };
         return { ...step, attempts };
       });
-      if (event.event === "message" && !event.data.user) { const conclusion = { text: text(event.data.text), citations: Array.isArray(event.data.citations) ? (event.data.citations as unknown[]).filter((item): item is string => typeof item === "string") : [] }; return { ...state, conclusion, conclusions: [...state.conclusions, conclusion] }; }
+      if (event.event === "message" && !event.data.user) { const conclusion = { text: text(event.data.text), citations: Array.isArray(event.data.citations) ? (event.data.citations as unknown[]).filter((item): item is string => typeof item === "string") : [], question: state.questions.at(-1) }; return { ...state, conclusion, conclusions: [...state.conclusions, conclusion] }; }
       return state;
     }, emptyTimeline());
   } catch {

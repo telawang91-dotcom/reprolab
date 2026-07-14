@@ -11,6 +11,7 @@ export function useAnalysisSession(collectionId?: string, replayId?: string) {
   const [datasets, setDatasets] = useState<DocumentDetail[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [events, setEvents] = useState<AnalysisEvent[]>([]);
+  const [liveEvents, setLiveEvents] = useState<AnalysisEvent[]>([]);
   const [message, setMessage] = useState("");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
@@ -25,7 +26,7 @@ export function useAnalysisSession(collectionId?: string, replayId?: string) {
   useEffect(() => {
     let live = true;
     abortRef.current?.abort();
-    setDatasets([]); setSelected([]); setEvents([]); setConversation(undefined);
+    setDatasets([]); setSelected([]); setEvents([]); setLiveEvents([]); setConversation(undefined);
     setActiveArtifact(undefined); setLineage(undefined); setSkillResult(undefined); setError("");
     void (async () => {
       try {
@@ -55,19 +56,24 @@ export function useAnalysisSession(collectionId?: string, replayId?: string) {
   }, [collectionId, replayId]);
 
   const timeline = useMemo(() => reduceAgentTimeline(events), [events]);
+  const liveTimeline = useMemo(() => reduceAgentTimeline(liveEvents), [liveEvents]);
   const artifacts = useMemo(() => timeline.steps.flatMap((step) => step.attempts.flatMap((attempt) => attempt.artifacts)), [timeline]);
   const selectedDatasets = useMemo(() => datasets.filter((item) => item.dataset_id && selected.includes(item.dataset_id)), [datasets, selected]);
 
   const send = useCallback(async (text = message) => {
     if (!text.trim() || running || !selected.length) return;
     setMessage(""); setError(""); setRunning(true);
-    setEvents((items) => [...items, { id: crypto.randomUUID(), event: "message", data: { text: text.trim(), citations: [], user: true } }]);
+    const userEvent: AnalysisEvent = { id: crypto.randomUUID(), event: "message", data: { text: text.trim(), citations: [], user: true } };
+    setLiveEvents([userEvent]);
+    setEvents((items) => [...items, userEvent]);
     const controller = new AbortController(); abortRef.current = controller;
     try {
       await streamChat({ conversation_id: conversation, message: text.trim(), dataset_ids: selected, skill_id: skill?.id }, (incoming) => {
-        setEvents((items) => [...items, { ...incoming, id: crypto.randomUUID() }]);
+        const event = { ...incoming, id: crypto.randomUUID() };
+        setEvents((items) => [...items, event]);
+        setLiveEvents((items) => [...items, event]);
         if (incoming.event === "artifact") setActiveArtifact(incoming.data as TimelineArtifact);
-        if (incoming.event === "done") setConversation(incoming.data.conversation_id);
+        if (incoming.event === "done" || incoming.event === "error") setConversation(incoming.data.conversation_id);
       }, controller.signal);
     } catch (reason) { if ((reason as Error).name !== "AbortError") setError(reason instanceof Error ? reason.message : "分析失败"); }
     finally { setRunning(false); abortRef.current = undefined; }
@@ -112,5 +118,5 @@ export function useAnalysisSession(collectionId?: string, replayId?: string) {
   const toggleDataset = (datasetId: string) => setSelected((items) => items.includes(datasetId) ? items.filter((item) => item !== datasetId) : [...items, datasetId]);
 
   const activeCollection = collections.find((item) => item.id === collectionId);
-  return { collections, activeCollection, datasets, selected, toggleDataset, selectedDatasets, events, timeline, artifacts, message, setMessage, running, error, setError, conversation, activeArtifact, setActiveArtifact, lineage, setLineage, skill, setSkill, skillRefresh, skillResult, send, stop: () => abortRef.current?.abort(), showLineage, anchorClick, saveAsSkill, applySkill };
+  return { collections, activeCollection, datasets, selected, toggleDataset, selectedDatasets, events, timeline, liveTimeline, artifacts, message, setMessage, running, error, setError, conversation, activeArtifact, setActiveArtifact, lineage, setLineage, skill, setSkill, skillRefresh, skillResult, send, stop: () => abortRef.current?.abort(), showLineage, anchorClick, saveAsSkill, applySkill };
 }

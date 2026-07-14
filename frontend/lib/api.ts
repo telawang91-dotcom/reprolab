@@ -304,7 +304,7 @@ export type ReviewSummary = {
 export type ArtifactSummary = {
   id: string;
   run_id: string | null;
-  kind: "number" | "coefficient" | "table" | "figure" | "conclusion";
+  kind: "number" | "coefficient" | "table" | "figure" | "text" | "conclusion";
   title: string | null;
   value: unknown;
   content_hash: string | null;

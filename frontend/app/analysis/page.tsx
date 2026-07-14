@@ -54,7 +54,7 @@ function AnalysisWorkspace() {
     setFollowing(true);
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   };
-  const activeStep = session.timeline.steps.find((step) => step.status === "working" || step.status === "repairing");
+  const activeStep = session.liveTimeline.steps.find((step) => step.status === "working" || step.status === "repairing");
   const requestAnalysis = () => { if (session.message.trim() && session.selected.length && !session.running) setConfirmOpen(true); };
   return (
     <div className={`grid h-[calc(100dvh-3.5rem)] min-h-0 overflow-hidden bg-canvas ${session.activeCollection ? "xl:grid-cols-[240px_minmax(0,1fr)] 2xl:grid-cols-[240px_minmax(0,1fr)_300px]" : "2xl:grid-cols-[minmax(0,1fr)_300px]"}`}>
@@ -75,7 +75,7 @@ function AnalysisWorkspace() {
         {session.skillResult && <div className={`mx-4 mt-4 rounded-apple border px-4 py-3 text-sm md:mx-6 ${session.skillResult.fallback ? "bg-status-warn/[.08] text-status-warn" : "bg-status-ok/[.08] text-status-ok"}`}>{session.skillResult.fallback ? `字段映射不确定，已安全回退动态分析：${session.skillResult.reason}` : `技能复用完成，估算节省 ${session.skillResult.saved.toLocaleString()} token。${session.skillResult.reason}`}</div>}
         <div ref={scrollRef} onScroll={updateFollowState} data-analysis-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 [scrollbar-gutter:stable] md:px-6">
           <div className="mx-auto max-w-3xl">
-            {session.activeCollection ? <AgentTimelineView timeline={session.timeline} hasDatasets={session.datasets.length > 0} hasSelection={session.selected.length > 0} onExample={session.setMessage} onAnchor={session.anchorClick} onArtifact={session.setActiveArtifact} /> : <NoScope hasCollections={scope.collections.length > 0} />}
+            {session.activeCollection ? <AgentTimelineView timeline={session.timeline} liveTimeline={session.liveTimeline} running={session.running} hasDatasets={session.datasets.length > 0} hasSelection={session.selected.length > 0} onExample={session.setMessage} onAnchor={session.anchorClick} onArtifact={session.setActiveArtifact} /> : <NoScope hasCollections={scope.collections.length > 0} />}
             {session.running && <div className="mt-4"><LiveStatus running step={activeStep?.title} /></div>}
             {session.error && <div role="alert" className="mt-4 flex items-start gap-2 rounded-apple border border-status-err/25 bg-status-err/[.08] p-3 text-sm text-status-err"><AlertTriangle size={15} className="mt-0.5 shrink-0" />{session.error}<button onClick={() => session.setError("")} className="ml-auto" aria-label="关闭错误"><X size={14} /></button></div>}
           </div>

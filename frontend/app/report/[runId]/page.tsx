@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { api, type RunCompare, type RunReport } from "@/lib/api";
+import { ArtifactValue } from "@/components/agent/ArtifactValue";
 
 const changeTone = (changed: boolean) => changed ? "text-status-error" : "text-status-ok";
 
@@ -35,7 +36,7 @@ export default function ReportPage() {
     </section>
 
     <section className="card p-5"><h2 className="font-semibold">输入数据</h2><div className="mt-3 space-y-2">{report.datasets.length ? report.datasets.map((item) => <div key={item.id} className="rounded-lg bg-ink/[.04] p-3 text-sm"><strong>{item.name}</strong><span className="ml-2 font-mono text-xs text-subtle">{item.storage_hash.slice(0, 12)}</span></div>) : <p className="text-sm text-muted">本次运行未读取数据集。</p>}</div></section>
-    <section className="card p-5"><h2 className="font-semibold">结果产物</h2><div className="mt-3 space-y-2">{report.artifacts.map((item) => <div key={item.id} className="rounded-lg border p-3"><div className="text-sm font-medium">{item.title || item.kind}</div><pre className="mt-2 overflow-auto text-xs text-muted">{JSON.stringify(item.value, null, 2)}</pre></div>)}</div></section>
+    <section className="card p-5"><h2 className="font-semibold">结果产物</h2><div className="mt-3 space-y-2">{report.artifacts.map((item) => <div key={item.id} className="overflow-hidden rounded-lg border"><div className="border-b px-3 py-2 text-sm font-medium">{item.title || item.kind}</div><ArtifactValue artifact={{ artifact_id: item.id, kind: item.kind, title: item.title, value_json: item.value }} /></div>)}</div></section>
     <section className="card p-5"><h2 className="font-semibold">环境</h2><p className="mt-2 text-sm text-muted">Python {report.environment.python_version || "—"} · 环境哈希 {report.environment.env_hash?.slice(0, 12) || "—"}</p></section>
 
     <section className="card p-5">

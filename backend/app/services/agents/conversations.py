@@ -35,6 +35,7 @@ def _artifact_data(artifact: Artifact) -> dict[str, Any]:
     return {
         "artifact_id": artifact.id,
         "kind": artifact.kind,
+        "title": artifact.title,
         "value_json": artifact.value_json,
         "figure_url": f"/api/v1/artifacts/{artifact.id}/content" if artifact.content_hash else None,
         "anchor": f"⟦art_{str(artifact.id)[:4]}⟧",
@@ -74,7 +75,8 @@ def replay_conversation(
             continue
         meta = message.extra_metadata or {}
         plan = meta.get("plan") or []
-        events.append(ConversationEvent(event="plan", data={"steps": plan}))
+        if plan:
+            events.append(ConversationEvent(event="plan", data={"steps": plan}))
         tools = tools_by_turn[turn_index] if 0 <= turn_index < len(tools_by_turn) else []
         for index, tool in enumerate(tools):
             tool_meta = tool.extra_metadata or {}
@@ -92,6 +94,16 @@ def replay_conversation(
                 select(Artifact).where(Artifact.run_id == run.id).order_by(Artifact.created_at, Artifact.id)
             ))
             events.extend(ConversationEvent(event="artifact", data=_artifact_data(item)) for item in artifacts)
+        if meta.get("error_code"):
+            events.append(ConversationEvent(event="error", data={
+                "stage": "execution",
+                "step": meta.get("failed_step"),
+                "code": meta["error_code"],
+                "message": message.content or "分析执行失败，请重试。",
+                "retryable": True,
+                "conversation_id": conversation.id,
+            }))
+            continue
         text = message.content or ""
         citations = [f"⟦art_{str(item)[:4]}⟧" for item in meta.get("artifact_ids") or [] if f"⟦art_{str(item)[:4]}⟧" in text]
         events.append(ConversationEvent(event="message", data={"text": text, "citations": citations}))
