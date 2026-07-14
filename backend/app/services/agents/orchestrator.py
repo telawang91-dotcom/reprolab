@@ -17,6 +17,14 @@ from app.services.memory.recall import memory_context, recall_memories
 from app.services.skills.store import ensure_builtins
 
 
+FINAL_ANSWER_SYSTEM_PROMPT = (
+    "你是面向用户的科研分析回答者。必须直接回答用户当前提出的问题，只依据真实执行结果，"
+    "不得编造数字；所有数字必须紧跟给定产物锚点。输出自然、简洁的 Markdown。"
+    "只呈现与问题相关的答案、关键证据和必要的数据限制；不得提及智能体、规划、执行步骤、"
+    "Python 代码、工具、stdout、重试或其他内部运行过程。"
+)
+
+
 def _json_object(text: str) -> dict[str, Any]:
     stripped = text.strip()
     fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", stripped, re.DOTALL | re.IGNORECASE)
@@ -132,15 +140,21 @@ def _generate_code(
     error_context = f"\n上次执行错误，请修复：\n{previous_error}" if previous_error else ""
     return _code(
         run_agent(
-            "你是通用科研分析执行器。根据用户请求动态生成Python，禁止固定学科菜单。只返回代码。",
+            (
+                "你是通用科研分析执行器。根据用户请求动态生成Python，禁止固定学科菜单。"
+                "运行环境已提供 load_dataset 和 emit_artifact；不得重新定义系统能力。只返回代码。"
+            ),
             (
                 f"历史：{json.dumps(history, ensure_ascii=False)}\n当前请求：{request.message}\n"
                 f"已核验长期记忆：{memories}\n"
                 f"可选技能上下文：{skill}\n"
                 f"当前步骤：{step.model_dump_json()}\n数据集：{datasets}\n"
-                "数据文件路径按数据集 index 对应 DATASET_PATHS[index]，不得硬编码路径。"
+                "必须使用 df = load_dataset(index) 读取所选数据集；不得读取或猜测文件路径。"
+                "不得定义、赋值或删除 load_dataset、emit_artifact、DATASET_PATHS、SEED。"
                 "使用 pandas/numpy/scipy/statsmodels/sklearn/matplotlib。"
-                "重要标量、系数、表格必须调用 emit_artifact(kind, value, title, tol)；"
+                "重要结果必须调用 emit_artifact(kind, value, title, tol)，kind 仅可为 "
+                "number、coefficient、table、figure、text、conclusion；"
+                "table 可直接传 DataFrame、Series 或二维列表。"
                 "绘图需 plt.show()，并可额外 emit_artifact('figure', 结构化绘图数据, title)。"
                 "不要安装依赖、不要联网、不要伪造结果。" + error_context
             ), adapter=adapter, route="executor",
@@ -156,9 +170,22 @@ def _artifact_event(db: Session, artifact_id: uuid.UUID) -> dict[str, Any]:
     return {
         "artifact_id": artifact.id,
         "kind": artifact.kind,
+        "title": artifact.title,
         "value_json": artifact.value_json,
         "figure_url": f"/api/v1/artifacts/{artifact.id}/content" if artifact.content_hash else None,
         "anchor": anchor,
+    }
+
+
+def _artifact_evidence(data: dict[str, Any], limit: int = 2_000) -> dict[str, Any]:
+    serialized = json.dumps(data.get("value_json"), ensure_ascii=False, default=str)
+    if len(serialized) > limit:
+        serialized = serialized[:limit] + "…"
+    return {
+        "anchor": data["anchor"],
+        "kind": data["kind"],
+        "title": data.get("title"),
+        "value_json": serialized,
     }
 
 
@@ -188,6 +215,7 @@ async def run_chat(
     for step in steps:
         yield _event("thinking", {"text": step.rationale})
         previous_error: str | None = None
+        step_evidence: list[dict[str, Any]] = []
         for attempt in range(2):
             code = _generate_code(
                 history, request, datasets, step, memories, skill, adapter, previous_error
@@ -223,20 +251,55 @@ async def run_chat(
                     artifact_ids.append(str(capture.artifact_id))
                     data = _artifact_event(db, capture.artifact_id)
                     anchors.append(data["anchor"])
+                    if len(step_evidence) < 12:
+                        step_evidence.append(_artifact_evidence(data))
                     yield _event("artifact", data)
-                tool_summaries.append({"step": step.title, "stdout": run.stdout, "artifacts": anchors[:]})
+                tool_summaries.append(
+                    {
+                        "step": step.title,
+                        "stdout": run.stdout[-2_000:],
+                        "artifacts": step_evidence,
+                    }
+                )
                 break
             previous_error = run.stdout
             if attempt == 0:
                 yield _event("thinking", {"text": "执行失败，依据完整报错修正代码后重试。"})
         else:
-            raise RuntimeError(f"analysis step failed after repair: {step.title}")
+            failure_message = "分析代码连续两次执行失败，数据和运行记录已保留，可以调整问题后重试。"
+            db.add(
+                Message(
+                    conversation_id=conversation.id,
+                    role="assistant",
+                    content=failure_message,
+                    extra_metadata={
+                        "error_code": "analysis_execution_failed",
+                        "failed_step": step.title,
+                        "run_ids": run_ids,
+                    },
+                )
+            )
+            db.commit()
+            yield _event(
+                "error",
+                {
+                    "stage": "execution",
+                    "step": step.title,
+                    "code": "analysis_execution_failed",
+                    "message": failure_message,
+                    "retryable": True,
+                    "conversation_id": conversation.id,
+                },
+            )
+            return
 
     final_text = run_agent(
-        "你是科研分析审阅者。仅依据真实工具结果总结，不得编造数字；所有数字必须紧跟给定产物锚点。",
+        FINAL_ANSWER_SYSTEM_PROMPT,
         (
-            f"用户请求：{request.message}\n工具结果：{json.dumps(tool_summaries, ensure_ascii=False)}\n"
-            f"可用锚点：{anchors}\n请生成简洁Markdown结论，并至少引用一个可用锚点。"
+            f"用户请求：{request.message}\n数据集结构：{datasets}\n"
+            f"真实成果：{json.dumps(tool_summaries, ensure_ascii=False)}\n"
+            f"可用锚点：{anchors}\n请针对用户请求直接作答，不复述分析过程；"
+            "存在可用锚点时至少引用一个，但不要向用户解释锚点或内部机制。"
         ), adapter=adapter, route="critic",
     )
     used_anchors = [anchor for anchor in anchors if anchor in final_text]

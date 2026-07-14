@@ -81,7 +81,9 @@ flowchart TB
 
 执行约束：
 
-- 数据路径只能使用 `DATASET_PATHS[index]`；
+- 数据读取必须使用系统注入的 `load_dataset(index)`；系统负责解析内容寻址路径并识别 CSV/XLSX；
+- `load_dataset`、`emit_artifact`、`DATASET_PATHS`、`SEED` 为保留符号，Executor 不得定义、赋值或删除；
+- `DATASET_PATHS[index]` 仅作为历史代码的只读兼容入口，不再提供给模型作为首选方案；
 - 不得硬编码本机路径、联网或安装依赖；
 - 使用预装的 pandas、NumPy、SciPy、statsmodels、scikit-learn、matplotlib；
 - 重要标量、系数和表格必须调用 `emit_artifact(kind, value, title, tol)`；
@@ -217,7 +219,7 @@ ModelAdapter.chat({"model":"deepseek:deepseek-v4-flash","messages":[...],"tools"
 
 ## 9. 执行沙箱与产物
 
-沙箱接收 Python、内容哈希输入、固定随机种子（默认 42）、环境信息、30 秒超时和可选 Conversation ID。
+沙箱接收 Python、内容哈希输入、固定随机种子（默认 42）、环境信息、30 秒超时和可选 Conversation ID。执行前通过 AST 检查系统保留符号，随后注入 `load_dataset(index)`、`emit_artifact(...)` 与只读兼容路径；数据路径不由模型生成。
 
 ```text
 input_hash = merge(dataset.storage_hash...)
@@ -232,6 +234,7 @@ code_hash  = SHA256(code + lang + input_hash + env_hash)
 | `coefficient` | 系数、效应量 | 数值容差 |
 | `table` | 统计表 | 逐元素比较 |
 | `figure` | 图形与绘图数据 | 比较底层数据，不比较 PNG 字节 |
+| `text` | 字段说明等已执行文本结果 | 内容比较 |
 | `conclusion` | 结构化结论 | 内容与锚点校验 |
 
 ## 10. 会话与记忆

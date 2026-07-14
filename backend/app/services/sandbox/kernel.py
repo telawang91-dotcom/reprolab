@@ -12,6 +12,7 @@ from typing import Any
 from jupyter_client import KernelManager
 
 from app.services.sandbox.seed import seed_prefix
+from app.services.sandbox.policy import CodePolicyError, validate_user_code
 
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
@@ -189,6 +190,10 @@ def execute_code(
     conversation_id: uuid.UUID | None = None,
     dataset_paths: list[str] | None = None,
 ) -> ExecResult:
+    try:
+        validate_user_code(code)
+    except CodePolicyError as exc:
+        return ExecResult("error", f"CODE_POLICY_VIOLATION: {exc}")
     if conversation_id is not None:
         return execute(kernel_registry.get_or_create(conversation_id), code, seed, timeout, dataset_paths)
     handle = _new_handle()

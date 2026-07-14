@@ -12,6 +12,7 @@ __pycache__/
 .coverage
 htmlcov/
 .env
+.env.local
 backend/storage/*
 !backend/storage/.gitkeep
 backend/.runtime/

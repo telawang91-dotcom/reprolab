@@ -184,7 +184,7 @@ CREATE TABLE artifacts (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id   UUID REFERENCES projects(id),
   run_id       UUID REFERENCES runs(id),      -- 由哪次执行产出（图/表/数字）；文献引用类结论可为空
-  kind         TEXT NOT NULL,                 -- number | coefficient | table | figure | conclusion
+  kind         TEXT NOT NULL,                 -- number | coefficient | table | figure | text | conclusion
   title        TEXT,
   value_json   JSONB,                         -- 标量值或结构化内容（系数/统计量/表数据）
   content_hash TEXT,                          -- 图/文件型产物的内容哈希；storage/<hash>

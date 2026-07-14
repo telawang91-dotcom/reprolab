@@ -6,7 +6,7 @@ GENERAL_CODE = """import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import stats
 
-df = pd.read_csv(DATASET_PATHS[0])
+df = load_dataset(0)
 numeric = list(df.select_dtypes(include='number').columns)
 if not numeric:
     raise ValueError('数据集中没有数值列')

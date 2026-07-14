@@ -4,7 +4,14 @@ import pytest
 
 from app.core.config import settings
 from app.services.agents.model_adapter import ModelAdapter, ModelResponse, ToolCall
-from app.services.agents.orchestrator import _code, _json_object
+from app.schemas.chat import ChatRequest, PlanStep, SSEEvent
+from app.services.agents.orchestrator import (
+    FINAL_ANSWER_SYSTEM_PROMPT,
+    _artifact_evidence,
+    _code,
+    _generate_code,
+    _json_object,
+)
 from app.services.agents.runtime import run_agent
 
 
@@ -113,3 +120,54 @@ def test_model_adapter_retries_transient_provider_failure():
 def test_planner_json_and_python_fence_parsing():
     assert _json_object('```json\n{"steps": [{"title": "A", "rationale": "B"}]}\n```')["steps"][0]["title"] == "A"
     assert _code("```python\nprint(42)\n```") == "print(42)"
+
+
+def test_executor_prompt_uses_managed_dataset_loader():
+    adapter = ScriptedAdapter([ModelResponse(content="df = load_dataset(0)")])
+    request = ChatRequest(
+        project_id="00000000-0000-0000-0000-000000000001",
+        message="summarize",
+        dataset_ids=[],
+    )
+    code = _generate_code(
+        [],
+        request,
+        '[{"index": 0, "name": "sample"}]',
+        PlanStep(title="inspect", rationale="understand data"),
+        "none",
+        "none",
+        adapter,
+    )
+    assert code == "df = load_dataset(0)"
+    prompt = adapter.requests[0]["messages"]
+    assert "load_dataset(index)" in prompt[1]["content"]
+    assert "不得定义、赋值或删除" in prompt[1]["content"]
+
+
+def test_error_is_a_valid_sse_event():
+    event = SSEEvent(
+        event="error",
+        data={"code": "analysis_execution_failed", "retryable": True},
+    )
+    assert event.event == "error"
+
+
+def test_final_answer_prompt_hides_internal_agent_process():
+    assert "直接回答用户当前提出的问题" in FINAL_ANSWER_SYSTEM_PROMPT
+    assert "不得提及智能体" in FINAL_ANSWER_SYSTEM_PROMPT
+    assert "执行步骤" in FINAL_ANSWER_SYSTEM_PROMPT
+
+
+def test_artifact_evidence_includes_value_and_limits_prompt_size():
+    evidence = _artifact_evidence(
+        {
+            "anchor": "⟦art_abcd⟧",
+            "kind": "text",
+            "title": "数据内容概述",
+            "value_json": {"text": "企鹅观测数据" * 20},
+        },
+        limit=30,
+    )
+    assert evidence["title"] == "数据内容概述"
+    assert "企鹅观测数据" in evidence["value_json"]
+    assert evidence["value_json"].endswith("…")

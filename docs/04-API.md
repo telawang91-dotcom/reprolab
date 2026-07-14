@@ -144,17 +144,18 @@ POST /chat                 # 自然语言 → 规划 → 执行 → 返回图/�
      event: thinking data: { text }
      event: code     data: { code, lang }
      event: run      data: { run_id, status, stdout }
-     event: artifact data: { artifact_id, kind, value_json | figure_url, anchor }
+     event: artifact data: { artifact_id, kind, title?, value_json | figure_url, anchor }
      event: message  data: { text, citations }
+     event: error    data: { stage, step?, code, message, retryable, conversation_id? }
      event: done     data: { conversation_id }
   # 多轮迭代：带 conversation_id 继续，如"横坐标改对数"
-
 GET /conversations?project_id={id}
   -> [{ id, title, created_at, updated_at, message_count }]
 GET /conversations/{id}?project_id={id}
   -> { id, title, events: [{ event, data }] }
 
 历史回放事件复用 POST /chat 的 SSE event/data schema；只从已持久化的 Message、Run、Artifact 还原，不新增第二套事件模型。
+  # error 为流内结构化失败；已创建的 Run 和 Conversation 保留，可带 conversation_id 重试
 ```
 
 ### M4 代码执行沙箱
@@ -173,7 +174,7 @@ plaintext
 POST /runs                 # 执行一段代码（登记 run + 产物 + 血缘，见 M5）
   body: { project_id, conversation_id?, code, lang?="python", dataset_ids?: [], seed? }
   -> { run_id, status, stdout, artifacts: [ {artifact_id, kind, ...} ], code_hash }
-  # 内部：固定 seed → 沙箱执行 → 捕获产物 → 存 env 快照 → 建血缘边
+  # 内部：校验保留符号 → 注入 load_dataset(index) 与固定 seed → 沙箱执行 → 捕获产物 → 存 env 快照 → 建血缘边
 ```
 
 ### M5 溯源 / 复现

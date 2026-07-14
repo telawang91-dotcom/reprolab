@@ -93,7 +93,7 @@ def from_artifact(
                 "role": "system",
                 "content": (
                     "你把已成功运行的科研 Python 代码固化为可复用技能。只返回 JSON；"
-                    "保留分析逻辑、emit_artifact 和 DATASET_PATHS，不运行代码。"
+                    "保留分析逻辑、emit_artifact 和 load_dataset，不运行代码。"
                 ),
             },
             {

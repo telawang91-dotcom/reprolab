@@ -22,7 +22,7 @@ def _community_boxplot() -> dict[str, Any]:
             "template": """import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import stats
-df = pd.read_csv(DATASET_PATHS[0])
+df = load_dataset(0)
 group_col = {{group}}
 value_col = {{value}}
 groups = [part[value_col].dropna().to_numpy() for _, part in df.groupby(group_col)]

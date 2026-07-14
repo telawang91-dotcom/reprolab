@@ -64,6 +64,34 @@ def test_dataset_paths_are_real_execution_inputs(tmp_path):
     assert result.stdout == "original"
 
 
+def test_load_dataset_reads_content_addressed_csv_without_extension(tmp_path):
+    dataset = tmp_path / ("a" * 64)
+    dataset.write_text("species,mass\nAdelie,3700\nGentoo,5000\n", encoding="utf-8")
+    result = execute_code(
+        "df = load_dataset(0)\nprint(df.shape, df['mass'].sum())",
+        dataset_paths=[str(dataset)],
+        timeout=15,
+    )
+    assert result.status == "success"
+    assert result.stdout == "(2, 2) 8700"
+
+
+@pytest.mark.parametrize(
+    "code,name",
+    [
+        ("DATASET_PATHS = ['/tmp/fake.csv']", "DATASET_PATHS"),
+        ("def load_dataset(index):\n    return None", "load_dataset"),
+        ("emit_artifact = lambda *args: None", "emit_artifact"),
+        ("for SEED in [1]:\n    pass", "SEED"),
+    ],
+)
+def test_generated_code_cannot_replace_system_managed_symbols(code, name):
+    result = execute_code(code, timeout=15)
+    assert result.status == "error"
+    assert result.stdout.startswith("CODE_POLICY_VIOLATION:")
+    assert name in result.stdout
+
+
 def test_explicit_coefficient_artifact_is_structured():
     result = execute_code("emit_artifact('coefficient', 0.083, title='mass effect', tol=1e-5)", timeout=15)
     assert result.status == "success"
@@ -73,3 +101,17 @@ def test_explicit_coefficient_artifact_is_structured():
     assert artifact.value == 0.083
     assert artifact.title == "mass effect"
     assert artifact.tol == 1e-5
+
+
+def test_text_and_dataframe_artifacts_are_normalized():
+    result = execute_code(
+        "import pandas as pd\n"
+        "emit_artifact('text', 'field meaning', title='description')\n"
+        "emit_artifact('table', pd.DataFrame({'species': ['Adelie'], 'count': [1]}), title='counts')",
+        timeout=15,
+    )
+    assert result.status == "success"
+    assert result.artifacts[0].kind == "text"
+    assert result.artifacts[0].value == "field meaning"
+    assert result.artifacts[1].value["columns"] == ["species", "count"]
+    assert result.artifacts[1].value["data"] == [["Adelie", 1]]

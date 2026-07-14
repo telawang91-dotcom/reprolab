@@ -47,7 +47,7 @@ def register_run_outputs(db: Session, run: Run, captures: list[ArtifactCapture])
 
     registered: list[ArtifactCapture] = []
     for index, capture in enumerate(captures, start=1):
-        kind = "conclusion" if capture.kind == "text" else capture.kind
+        kind = capture.kind
         artifact = Artifact(
             project_id=run.project_id,
             run_id=run.id,

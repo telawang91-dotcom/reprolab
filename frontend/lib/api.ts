@@ -691,7 +691,15 @@ export const api = {
 };
 
 export type ChatEvent = {
-  event: "plan" | "thinking" | "code" | "run" | "artifact" | "message" | "done";
+  event:
+    | "plan"
+    | "thinking"
+    | "code"
+    | "run"
+    | "artifact"
+    | "message"
+    | "error"
+    | "done";
   data: Record<string, any>;
 };
 
@@ -737,11 +745,19 @@ export async function streamChat(
           if (line.startsWith("event:")) name = line.slice(6).trim();
           if (line.startsWith("data:")) data += line.slice(5).trim();
         }
-        if (name && data)
-          onEvent({
+        if (name && data) {
+          const event: ChatEvent = {
             event: name as ChatEvent["event"],
             data: JSON.parse(data),
-          });
+          };
+          onEvent(event);
+          if (event.event === "error")
+            throw new Error(
+              typeof event.data.message === "string"
+                ? event.data.message
+                : "分析执行失败，请稍后重试。",
+            );
+        }
       }
     }
     finishActivity(activity, "success");

@@ -43,6 +43,7 @@ class RunEvent(StrictModel):
 class ArtifactEvent(StrictModel):
     artifact_id: uuid.UUID
     kind: str
+    title: str | None = None
     value_json: Any | None = None
     figure_url: str | None = None
     anchor: str
@@ -58,5 +59,5 @@ class DoneEvent(StrictModel):
 
 
 class SSEEvent(StrictModel):
-    event: Literal["plan", "thinking", "code", "run", "artifact", "message", "done"]
+    event: Literal["plan", "thinking", "code", "run", "artifact", "message", "error", "done"]
     data: dict[str, Any]

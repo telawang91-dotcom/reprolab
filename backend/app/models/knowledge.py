@@ -116,7 +116,7 @@ class Artifact(Base):
     __tablename__ = "artifacts"
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('number','coefficient','table','figure','conclusion')",
+            "kind IN ('number','coefficient','table','figure','text','conclusion')",
             name="ck_artifacts_kind",
         ),
     )
