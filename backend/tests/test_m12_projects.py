@@ -10,6 +10,7 @@ from app.schemas.projects import ProjectCreate, ProjectRead
 def test_m12_project_routes_and_schema_contract():
     paths = app.openapi()["paths"]
     assert "/api/v1/projects" in paths
+    assert "/api/v1/projects/demo" in paths
     assert "/api/v1/projects/{project_id}/archive" in paths
     assert "/api/v1/projects/{project_id}/restore" in paths
     with pytest.raises(ValidationError):

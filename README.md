@@ -238,7 +238,7 @@ npm.cmd --prefix frontend run dev
 - OpenAPI：[http://localhost:8000/docs](http://localhost:8000/docs)
 - 后端健康检查：[http://localhost:8000/health](http://localhost:8000/health)
 
-首次使用也可以选择隔离的 Palmer Penguins 演示项目，不会污染真实研究空间。
+首次使用也可以打开 `/demo`：页面会先展示赛道必备能力与真实运行状态，再创建或复用隔离的 Palmer Penguins 演示项目和研究文件夹，不会污染真实研究空间。
 
 ![首次使用引导](docs/images/getting-started.png)
 
@@ -290,12 +290,13 @@ GitHub Actions 会在推送和 Pull Request 时执行单元测试、类型检查
 
 ## 三分钟演示建议
 
-1. 创建研究项目并上传论文与 CSV；
-2. 用自然语言提出分析问题，展示计划、代码和产物；
-3. 打开图表来源，查看 Dataset → Run → Artifact；
-4. 替换数据重新运行，展示自动标红的结果漂移；
-5. 在写作页加入一个错误数字或引用，运行校验并查看拦截；
-6. 将通过校验的结论保存并导出复现报告。
+1. 从 `/demo` 检查运行环境并进入隔离演示研究文件夹；
+2. 在知识空间展示混合 RAG 与可回到原文的 `⟦src_*⟧` 引用；
+3. 用自然语言提出未预设的分析问题，展示真实计划、代码和产物；
+4. 打开图表来源，查看 Dataset → Run → Artifact 与环境快照；
+5. 替换数据重新运行，展示自动标红的结果漂移与根因贡献；
+6. 在写作页加入错误数字或弱引用，运行 NLI 校验与反思式修复；
+7. 最后展示项目长期记忆和可导出的复现报告。
 
 ## 文档
 

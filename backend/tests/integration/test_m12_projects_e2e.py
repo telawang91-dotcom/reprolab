@@ -12,7 +12,43 @@ if "test" not in os.getenv("DATABASE_URL", "").lower():
 
 from app.core.db import SessionLocal
 from app.main import app
-from app.models.knowledge import Artifact, Dataset, Document, Edge, Project, Run
+from app.models.knowledge import Artifact, Collection, Dataset, Document, Edge, Project, Run
+
+
+def test_demo_project_opens_with_an_analysis_ready_collection():
+    demo_project_id = uuid.UUID("00000000-0000-0000-0000-000000000101")
+    demo_collection_id = uuid.UUID("00000000-0000-0000-0000-000000000102")
+    try:
+        with TestClient(app) as client:
+            prepared = client.post("/api/v1/projects/demo")
+            assert prepared.status_code == 200, prepared.text
+            assert prepared.json()["id"] == str(demo_project_id)
+
+            collections = client.get(
+                "/api/v1/collections", params={"project_id": str(demo_project_id)}
+            )
+            assert collections.status_code == 200, collections.text
+            demo_collection = next(
+                item for item in collections.json() if item["id"] == str(demo_collection_id)
+            )
+            assert demo_collection["name"] == "企鹅形态差异研究"
+            assert demo_collection["document_count"] == 1
+
+            documents = client.get(
+                "/api/v1/documents",
+                params={"project_id": str(demo_project_id), "collection_id": str(demo_collection_id)},
+            )
+            assert documents.status_code == 200, documents.text
+            assert len(documents.json()) == 1
+            assert documents.json()[0]["filename"] == "palmer_penguins_demo.csv"
+            assert documents.json()[0]["collection_id"] == str(demo_collection_id)
+    finally:
+        with SessionLocal() as db:
+            db.query(Dataset).filter(Dataset.project_id == demo_project_id).delete()
+            db.query(Document).filter(Document.project_id == demo_project_id).delete()
+            db.query(Collection).filter(Collection.project_id == demo_project_id).delete()
+            db.query(Project).filter(Project.id == demo_project_id).delete()
+            db.commit()
 
 
 def test_project_archive_blocks_writes_and_restore_reopens_workspace():

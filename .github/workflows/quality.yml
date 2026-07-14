@@ -43,6 +43,8 @@ jobs:
 
   core-integration:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg://reprolab:reprolab@localhost:5432/reprolab_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -61,6 +63,8 @@ jobs:
             sleep 2
           done
           exit 1
+      - name: Create isolated test database
+        run: docker compose exec -T postgres createdb -U reprolab reprolab_test
       - name: Apply migrations
         working-directory: backend
         run: python -m alembic upgrade head
@@ -80,6 +84,8 @@ jobs:
   p0-integration:
     if: github.event_name == 'workflow_dispatch' && inputs.integration
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql+psycopg://reprolab:reprolab@localhost:5432/reprolab_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -98,6 +104,8 @@ jobs:
             sleep 2
           done
           exit 1
+      - name: Create isolated test database
+        run: docker compose exec -T postgres createdb -U reprolab reprolab_test
       - name: Apply migrations
         working-directory: backend
         run: python -m alembic upgrade head

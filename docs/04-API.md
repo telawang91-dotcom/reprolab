@@ -24,12 +24,12 @@ PATCH /projects/{id}
   body: { name?, description? }
 POST /projects/{id}/archive
 POST /projects/{id}/restore
-POST /projects/demo              # 创建/复用隔离演示项目，并准备 Palmer Penguins CSV
+POST /projects/demo              # 创建/复用隔离演示项目、研究文件夹与 Palmer Penguins CSV
 ```
 
 前端保存当前项目 ID 并将它作为所有既有项目作用域接口的 `project_id`。归档项目可被列表和只读查看，但任何上传、分析、写作回写、记忆或建议写入必须返回 409；不得物理删除项目及其血缘。
 
-`POST /projects/demo` 只操作固定的演示项目；它不得向当前真实项目写入资料、记忆、建议或产物。
+`POST /projects/demo` 只操作固定的演示项目；它会创建/修复固定的演示研究文件夹，并将 Palmer Penguins 文档与数据集放入该范围。它不得向当前真实项目写入资料、记忆、建议或产物。
 
 ### 研究交付与审阅（P1）
 
