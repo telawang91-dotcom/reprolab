@@ -3,6 +3,7 @@ import json
 import re
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.knowledge import Project
@@ -70,6 +71,12 @@ def import_skill(db: Session, project_id, payload: dict[str, Any], origin: str =
     if db.get(Project, project_id) is None:
         raise ValueError("project not found")
     skill = validate_package(payload)
+    existing = db.scalar(select(Skill).where(
+        Skill.project_id == project_id,
+        Skill.package_hash == payload["package_hash"],
+    ))
+    if existing is not None:
+        return existing
     meta = dict(skill.get("meta") or {})
     if "source_run_id" in meta:
         meta["upstream_source_run_id"] = meta.pop("source_run_id")

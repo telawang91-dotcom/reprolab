@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
-from app.schemas.settings import ModelConfigRead, ModelConfigUpdate, ModelTestResult, RuntimeStatusRead
+from app.core.telemetry import snapshot
+from app.schemas.settings import MetricsRead, ModelConfigRead, ModelConfigUpdate, ModelTestResult, RuntimeStatusRead
 from app.services.config.runtime import get_model_config, get_runtime_status, save_model_config, test_model_connection
 
 
@@ -25,3 +26,8 @@ def check_model_connection() -> ModelTestResult:
 @router.get("/runtime", response_model=RuntimeStatusRead)
 def read_runtime_status() -> RuntimeStatusRead:
     return get_runtime_status()
+
+
+@router.get("/metrics", response_model=MetricsRead)
+def read_metrics() -> MetricsRead:
+    return MetricsRead.model_validate(snapshot())

@@ -71,3 +71,20 @@ class RuntimeStatusRead(BaseModel):
     state: Literal["ready", "degraded"]
     summary: str
     components: list[RuntimeComponent]
+
+
+class RouteMetricRead(BaseModel):
+    method: str
+    path: str
+    requests: int
+    failures: int
+    p50_ms: float
+    p95_ms: float
+    max_ms: float
+
+
+class MetricsRead(BaseModel):
+    uptime_seconds: float
+    requests_total: int
+    failures_total: int
+    routes: list[RouteMetricRead]

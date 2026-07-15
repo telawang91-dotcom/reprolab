@@ -1,9 +1,9 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, BarChart3, FolderOpen, Send, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, BarChart3, FolderInput, FolderOpen, RotateCcw, Send, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AgentTimelineView } from "@/components/agent/AgentTimelineView";
 import { ArtifactPanel } from "@/components/agent/ArtifactPanel";
 import { DataPanel } from "@/components/agent/DataPanel";
@@ -12,6 +12,7 @@ import { useAnalysisSession } from "@/components/agent/useAnalysisSession";
 import { ConversationList } from "@/components/agent/ConversationList";
 import { Sheet } from "@/components/ui/Sheet";
 import { useWorkspaceScope } from "@/components/workspace/WorkspaceScope";
+import type { DocumentDetail } from "@/lib/api";
 
 export default function AnalysisPage() {
   return <AnalysisWorkspace />;
@@ -55,6 +56,7 @@ function AnalysisWorkspace() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   };
   const activeStep = session.timeline.steps.find((step) => step.status === "working" || step.status === "repairing");
+  const examples = useMemo(() => datasetAwareExamples(session.selectedDatasets), [session.selectedDatasets]);
   const requestAnalysis = () => { if (session.message.trim() && session.selected.length && !session.running) setConfirmOpen(true); };
   return (
     <div className={`grid h-[calc(100dvh-3.5rem)] min-h-0 overflow-hidden bg-canvas ${session.activeCollection ? "xl:grid-cols-[240px_minmax(0,1fr)] 2xl:grid-cols-[240px_minmax(0,1fr)_300px]" : "2xl:grid-cols-[minmax(0,1fr)_300px]"}`}>
@@ -75,9 +77,9 @@ function AnalysisWorkspace() {
         {session.skillResult && <div className={`mx-4 mt-4 rounded-apple border px-4 py-3 text-sm md:mx-6 ${session.skillResult.fallback ? "bg-status-warn/[.08] text-status-warn" : "bg-status-ok/[.08] text-status-ok"}`}>{session.skillResult.fallback ? `字段映射不确定，已安全回退动态分析：${session.skillResult.reason}` : `技能复用完成，估算节省 ${session.skillResult.saved.toLocaleString()} token。${session.skillResult.reason}`}</div>}
         <div ref={scrollRef} onScroll={updateFollowState} data-analysis-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 [scrollbar-gutter:stable] md:px-6">
           <div className="mx-auto max-w-3xl">
-            {session.activeCollection ? <AgentTimelineView timeline={session.timeline} hasDatasets={session.datasets.length > 0} hasSelection={session.selected.length > 0} onExample={session.setMessage} onAnchor={session.anchorClick} onArtifact={session.setActiveArtifact} /> : <NoScope hasCollections={scope.collections.length > 0} />}
+            {session.activeCollection ? <AgentTimelineView timeline={session.timeline} hasDatasets={session.datasets.length > 0} hasSelection={session.selected.length > 0} examples={examples} onExample={session.setMessage} onAnchor={session.anchorClick} onArtifact={session.setActiveArtifact} /> : <NoScope hasCollections={scope.collections.length > 0} unfiledCount={scope.unfiledCount} onOrganize={() => scope.openManager({ selectUnfiled: true })} />}
             {session.running && <div className="mt-4"><LiveStatus running step={activeStep?.title} /></div>}
-            {session.error && <div role="alert" className="mt-4 flex items-start gap-2 rounded-apple border border-status-err/25 bg-status-err/[.08] p-3 text-sm text-status-err"><AlertTriangle size={15} className="mt-0.5 shrink-0" />{session.error}<button onClick={() => session.setError("")} className="ml-auto" aria-label="关闭错误"><X size={14} /></button></div>}
+            {session.error && <div role="alert" className="mt-4 flex items-start gap-2 rounded-apple border border-status-err/25 bg-status-err/[.08] p-3 text-sm text-status-err"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span className="min-w-0 flex-1">{session.error}</span>{session.message.trim() && session.selected.length > 0 && !session.running && <button onClick={() => setConfirmOpen(true)} className="inline-flex shrink-0 items-center gap-1 font-semibold"><RotateCcw size={13} />重新运行</button>}<button onClick={() => session.setError("")} className="shrink-0" aria-label="关闭错误"><X size={14} /></button></div>}
           </div>
         </div>
         {!following && session.events.length > 0 && <button onClick={scrollToLatest} className="btn-secondary absolute bottom-32 right-6 z-10 h-9 bg-surface/90 px-4 backdrop-blur-xl"><ArrowDown size={14} />回到最新</button>}
@@ -100,6 +102,19 @@ function AnalysisWorkspace() {
   );
 }
 
-function NoScope({ hasCollections }: { hasCollections: boolean }) {
+function NoScope({ hasCollections, unfiledCount, onOrganize }: { hasCollections: boolean; unfiledCount: number; onOrganize: () => void }) {
+  if (!hasCollections && unfiledCount > 0) return <section className="grid min-h-[420px] place-items-center text-center"><div className="max-w-md"><span className="mx-auto grid h-14 w-14 place-items-center rounded-apple bg-status-warn/10 text-status-warn"><FolderInput size={23} /></span><h2 className="mt-5 text-2xl font-semibold">先整理现有 {unfiledCount} 份资料。</h2><p className="mt-3 text-sm leading-7 text-muted">创建研究文件夹后，Agent 才能明确数据范围并为每个结果登记可靠来源。</p><button onClick={onOrganize} className="btn-primary mt-6"><FolderInput size={15} />整理并创建文件夹</button></div></section>;
   return <section className="grid min-h-[420px] place-items-center text-center"><div className="max-w-md"><span className="mx-auto grid h-14 w-14 place-items-center rounded-apple bg-brand/10 text-brand"><FolderOpen size={23} /></span><h2 className="mt-5 text-2xl font-semibold">先选择一个研究文件夹。</h2><p className="mt-3 text-sm leading-7 text-muted">{hasCollections ? "从左侧文件夹列表选择研究范围。这里会原地载入数据，不会跳转页面。" : "导入文件夹后，分析只会使用该文件夹内的数据，不会混入项目中的其他资料。"}</p>{!hasCollections && <Link href="/knowledge" className="btn-primary mt-6"><FolderOpen size={15} />导入文件夹</Link>}</div></section>;
+}
+
+function datasetAwareExamples(datasets: DocumentDetail[]): string[] {
+  const columns = datasets.flatMap((dataset) => dataset.schema_json?.columns ?? []);
+  const unique = columns.filter((item, index) => columns.findIndex((candidate) => candidate.name === item.name) === index);
+  const numeric = unique.filter((item) => /int|float|double|decimal|number/i.test(item.dtype));
+  const categorical = unique.find((item) => !numeric.some((candidate) => candidate.name === item.name));
+  const prompts: string[] = [];
+  if (categorical && numeric[0]) prompts.push(`比较“${categorical.name}”各组的“${numeric[0].name}”差异，报告效应量并绘图`);
+  if (numeric.length >= 2) prompts.push(`分析“${numeric[0].name}”与“${numeric[1].name}”的关系，检查异常值并报告置信区间`);
+  prompts.push("检查所选数据的缺失值、重复记录和异常值，生成数据质量报告");
+  return prompts.slice(0, 3);
 }

@@ -19,7 +19,8 @@ type WorkspaceScopeValue = {
   loading: boolean;
   error: string;
   managerOpen: boolean;
-  openManager: () => void;
+  managerSelectUnfiled: boolean;
+  openManager: (options?: { selectUnfiled?: boolean }) => void;
   closeManager: () => void;
   selectCollection: (id: string) => void;
   refresh: (preferredId?: string) => Promise<void>;
@@ -40,6 +41,7 @@ export function WorkspaceScopeProvider({ children }: { children: React.ReactNode
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [managerOpen, setManagerOpen] = useState(false);
+  const [managerSelectUnfiled, setManagerSelectUnfiled] = useState(false);
 
   const selectCollection = useCallback((id: string) => {
     setActiveId(id);
@@ -99,11 +101,12 @@ export function WorkspaceScopeProvider({ children }: { children: React.ReactNode
     loading,
     error,
     managerOpen,
-    openManager: () => setManagerOpen(true),
-    closeManager: () => setManagerOpen(false),
+    managerSelectUnfiled,
+    openManager: (options) => { setManagerSelectUnfiled(!!options?.selectUnfiled); setManagerOpen(true); },
+    closeManager: () => { setManagerOpen(false); setManagerSelectUnfiled(false); },
     selectCollection,
     refresh,
-  }), [activeId, collections, documents, error, loading, managerOpen, refresh, selectCollection]);
+  }), [activeId, collections, documents, error, loading, managerOpen, managerSelectUnfiled, refresh, selectCollection]);
 
   return <WorkspaceScopeContext.Provider value={value}>{children}</WorkspaceScopeContext.Provider>;
 }

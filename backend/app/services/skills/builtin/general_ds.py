@@ -6,7 +6,8 @@ GENERAL_CODE = """import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import stats
 
-df = pd.read_csv(DATASET_PATHS[0])
+path = DATASET_PATHS[0]
+df = pd.read_excel(path) if str(path).lower().endswith('.xlsx') else pd.read_csv(path, sep='\t' if str(path).lower().endswith('.tsv') else ',')
 numeric = list(df.select_dtypes(include='number').columns)
 if not numeric:
     raise ValueError('数据集中没有数值列')

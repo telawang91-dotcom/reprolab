@@ -88,3 +88,9 @@ class SkillHubItem(StrictModel):
     discipline: str
     version: int
     author: str
+    input_roles: list[dict[str, Any]] = Field(default_factory=list)
+    tools: list[str] = Field(default_factory=list)
+    outputs: list[str] = Field(default_factory=list)
+    workflow: list[str] = Field(default_factory=list)
+    estimated_from_scratch_tokens: int = Field(default=0, ge=0)
+    package_hash: str = Field(min_length=64, max_length=64)

@@ -37,9 +37,27 @@ jobs:
       - name: Typecheck frontend
         working-directory: frontend
         run: npm run typecheck
+      - name: Test frontend state and stream contracts
+        working-directory: frontend
+        run: npm run test:timeline && npm run test:api
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run frontend end-to-end tests
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3100
+        run: |
+          npm run start -- -H 127.0.0.1 -p 3100 > /tmp/reprolab-next.log 2>&1 &
+          for attempt in {1..30}; do
+            curl -fsS http://127.0.0.1:3100/demo && break
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:3100/demo
+          npm run test:e2e
 
   core-integration:
     runs-on: ubuntu-latest

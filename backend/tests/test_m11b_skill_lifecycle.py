@@ -83,5 +83,6 @@ def test_skill_exchange_round_trip_and_tamper_detection():
 
 def test_skill_hub_exposes_versioned_catalog_item():
     items = list_hub()
-    assert items and items[0].version >= 1
-    assert items[0].intent and items[0].author
+    assert len(items) >= 3 and all(item.version >= 1 for item in items)
+    assert all(item.intent and item.author and item.package_hash for item in items)
+    assert all(item.tools and item.outputs and item.workflow for item in items)

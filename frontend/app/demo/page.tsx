@@ -20,7 +20,7 @@ import {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { api, setActiveProjectId, type RuntimeStatus } from "@/lib/api";
+import { api, setActiveProjectId, type QualityReport, type RuntimeStatus } from "@/lib/api";
 
 const steps = [
   {
@@ -92,6 +92,7 @@ export default function DemoPage() {
   const [runtimeError, setRuntimeError] = useState("");
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState("");
+  const [quality, setQuality] = useState<QualityReport>();
   const step = steps[current];
   const Icon = step.icon;
 
@@ -102,12 +103,17 @@ export default function DemoPage() {
   }, []);
 
   async function enterDemo() {
+    if (quality) {
+      window.location.assign("/analysis");
+      return;
+    }
     setPreparing(true);
     setError("");
     try {
       const project = await api.prepareDemo();
       setActiveProjectId(project.id);
-      window.location.assign("/analysis");
+      setQuality(await api.qualityReport());
+      setPreparing(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "隔离演示准备失败");
       setPreparing(false);
@@ -129,7 +135,7 @@ export default function DemoPage() {
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <button onClick={() => void enterDemo()} disabled={preparing} className="btn-primary min-h-11 px-5">
               {preparing ? <LoaderCircle size={15} className="animate-spin"/> : <PlayCircle size={15}/>}
-              {preparing ? "正在准备隔离项目…" : "进入真实演示"}
+              {preparing ? "正在准备隔离项目…" : quality ? "开始真实演示" : "准备并检查演示项目"}
             </button>
             <a href="#capabilities" className="btn-secondary min-h-11 px-5">先看能力证据<ArrowRight size={14}/></a>
           </div>
@@ -139,6 +145,8 @@ export default function DemoPage() {
 
         <RuntimePanel runtime={runtime} error={runtimeError}/>
       </section>
+
+      {quality && <DemoReadiness quality={quality} />}
 
       <section id="capabilities" className="scroll-mt-8 border-t py-10 lg:py-14">
         <div className="mb-7 max-w-2xl"><div className="eyebrow text-brand">必备能力验证</div><h2 className="mt-2 text-3xl font-semibold tracking-[-.035em]">六步看懂完整技术闭环</h2><p className="mt-3 text-sm leading-7 text-muted">每一步都对应赛道要求或高权重评分点，不用把功能名称和真实价值分开猜。</p></div>
@@ -174,10 +182,26 @@ export default function DemoPage() {
 
       <section className="mb-8 rounded-appleXl bg-ink px-6 py-8 text-canvas sm:flex sm:items-center sm:px-8">
         <div><div className="text-xs font-semibold uppercase tracking-[.14em] text-canvas/55">现场建议</div><h2 className="mt-2 text-2xl font-semibold tracking-tight">现在进入隔离项目，亲手跑一遍可信分析。</h2><p className="mt-2 text-sm leading-6 text-canvas/65">系统会选中演示研究文件夹；运行后可继续查看产物血缘、复现记录与长期记忆。</p></div>
-        <button onClick={() => void enterDemo()} disabled={preparing} className="btn mt-5 min-h-11 shrink-0 bg-canvas px-5 text-ink hover:bg-white sm:ml-auto sm:mt-0"><PlayCircle size={15}/>{preparing ? "准备中…" : "开始真实演示"}</button>
+        <button onClick={() => void enterDemo()} disabled={preparing} className="btn mt-5 min-h-11 shrink-0 bg-canvas px-5 text-ink hover:bg-white sm:ml-auto sm:mt-0"><PlayCircle size={15}/>{preparing ? "准备中…" : quality ? "开始真实演示" : "准备并检查"}</button>
       </section>
     </main>
   </div>;
+}
+
+function DemoReadiness({ quality }: { quality: QualityReport }) {
+  const routes = [
+    { href: "/knowledge", label: "1. 检索证据" },
+    { href: "/analysis", label: "2. 动态分析" },
+    { href: "/results", label: "3. 产物与血缘" },
+    { href: "/results?tab=writing", label: "4. 三查与修复" },
+    { href: "/memory", label: "5. 长期记忆" },
+  ];
+  return <section aria-label="演示就绪检查" className="mb-10 rounded-appleXl border bg-surface p-6 lg:p-8">
+    <div className="flex flex-wrap items-start gap-4"><div><div className="eyebrow text-brand">真实项目预检</div><h2 className="mt-2 text-2xl font-semibold">{quality.ready_for_demo ? "可信闭环已就绪" : "演示项目已隔离，按主线补齐证据"}</h2><p className="mt-2 text-sm text-muted">以下数字直接读取项目账本，不是静态演示文案。</p></div><span className={`ml-auto rounded-full px-3 py-2 text-xs font-semibold ${quality.ready_for_demo ? "bg-status-ok/10 text-status-ok" : "bg-status-warn/10 text-status-warn"}`}>{quality.ready_for_demo ? "READY" : `${quality.blockers.length} 项待完成`}</span></div>
+    <div className="mt-6 grid gap-3 md:grid-cols-5">{quality.metrics.map((item) => <article key={item.key} className="rounded-apple border bg-ink/[.025] p-4"><div className={`text-2xl font-semibold ${item.state === "ready" ? "text-status-ok" : item.state === "block" ? "text-status-err" : "text-status-warn"}`}>{item.ratio == null ? item.value : `${Math.round(item.ratio * 100)}%`}</div><h3 className="mt-2 text-sm font-semibold">{item.title}</h3><p className="mt-1 text-xs leading-5 text-muted">{item.evidence}</p></article>)}</div>
+    {quality.blockers.length > 0 && <div className="mt-5 rounded-apple bg-status-warn/[.07] p-4 text-sm text-muted"><strong className="text-status-warn">当前待完成</strong><ul className="mt-2 space-y-1">{quality.blockers.map((item) => <li key={item}>• {item}</li>)}</ul></div>}
+    <nav aria-label="三分钟演示主线" className="mt-5 flex flex-wrap gap-2">{routes.map((item) => <Link key={item.href} href={item.href} className="btn-secondary min-h-10 px-3">{item.label}<ArrowRight size={13}/></Link>)}</nav>
+  </section>;
 }
 
 function RuntimePanel({ runtime, error }: { runtime?: RuntimeStatus; error: string }) {

@@ -52,6 +52,18 @@ def _capture_artifact(output: CapturedOutput) -> tuple[ArtifactCapture, str]:
     ), output_hash
 
 
+def _enforce_artifact_budget(execution: ExecResult, max_artifacts: int | None) -> ExecResult:
+    if max_artifacts is None or len(execution.artifacts) <= max_artifacts:
+        return execution
+    message = (
+        f"artifact budget exceeded: produced {len(execution.artifacts)}, maximum {max_artifacts}. "
+        "Keep only decision-relevant evidence, combine related metrics into one table, "
+        "and emit at most one figure for this step."
+    )
+    stdout = f"{execution.stdout}\n{message}".strip()
+    return ExecResult(status="error", stdout=stdout, artifacts=[], timed_out=execution.timed_out)
+
+
 def run_code(
     db: Session,
     project_id: uuid.UUID,
@@ -62,6 +74,7 @@ def run_code(
     conversation_id: uuid.UUID | None = None,
     timeout: float = 30,
     input_hashes_override: list[str] | None = None,
+    max_artifacts: int | None = None,
 ) -> RunResponse:
     if lang != "python":
         raise ValueError("only python is supported")
@@ -78,6 +91,7 @@ def run_code(
         execution = sandbox_run(code, input_hashes, seed, environment, timeout)
     else:
         execution = execute_code(code, seed, timeout, conversation_id, dataset_paths)
+    execution = _enforce_artifact_budget(execution, max_artifacts)
     captured = [_capture_artifact(item) for item in execution.artifacts]
     artifacts = [item[0] for item in captured]
     output_hashes = [item[1] for item in captured]

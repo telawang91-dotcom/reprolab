@@ -18,7 +18,15 @@ const event = (name: ChatEvent["event"], data: Record<string, unknown>): ChatEve
 }
 {
   const result = reduceAgentTimeline([{ event: "mystery", data: { anything: true } } as unknown as ChatEvent, null as unknown as ChatEvent]);
-  assert.deepEqual(result, { steps: [], conclusions: [] });
+  assert.deepEqual(result, { steps: [], contexts: [], conclusions: [] });
+}
+
+{
+  const result = reduceAgentTimeline([event("context", { tools: [
+    { name: "memory.search", label: "检索项目记忆", status: "used", detail: "召回 1 条", count: 1, items: [{ id: "m1", content: "优先使用稳健检验", layer: "semantic" }] },
+  ] })]);
+  assert.equal(result.contexts[0].tools[0].name, "memory.search");
+  assert.equal(result.contexts[0].tools[0].items?.[0].content, "优先使用稳健检验");
 }
 
 {
@@ -36,4 +44,4 @@ const event = (name: ChatEvent["event"], data: Record<string, unknown>): ChatEve
   assert.deepEqual(result.conclusions.map((item) => item.text), ["第一轮结论", "第二轮结论"]);
 }
 
-console.log("agentTimeline: 5 cases passed");
+console.log("agentTimeline: 6 cases passed");

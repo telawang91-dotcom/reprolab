@@ -1,4 +1,5 @@
 import threading
+from functools import lru_cache
 
 from app.core.config import settings
 
@@ -27,6 +28,12 @@ def encode(texts: list[str]) -> list[list[float]]:
     if any(len(vector) != 1024 for vector in result):
         raise RuntimeError("embedding model must produce 1024-dimensional vectors")
     return result
+
+
+@lru_cache(maxsize=512)
+def encode_one(text: str) -> tuple[float, ...]:
+    """Cache repeated query/memory embeddings without changing document batch ingestion."""
+    return tuple(encode([text])[0])
 
 
 def preheat() -> None:

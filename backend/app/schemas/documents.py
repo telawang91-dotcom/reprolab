@@ -15,6 +15,7 @@ class DocumentUploadResponse(BaseModel):
     chunks_count: int | None = None
     dataset_id: uuid.UUID | None = None
     collection_id: uuid.UUID | None = None
+    duplicate: bool = False
 
 
 class DocumentListItem(BaseModel):
@@ -70,6 +71,7 @@ class BatchItem(BaseModel):
     status: Literal["queued", "processing", "success", "error"]
     document_id: uuid.UUID | None = None
     dataset_id: uuid.UUID | None = None
+    duplicate: bool = False
     error: str | None = None
 
 

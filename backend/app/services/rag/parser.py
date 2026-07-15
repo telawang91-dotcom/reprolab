@@ -26,7 +26,7 @@ class ParsedDoc:
     dataset_schema: dict[str, Any] | None = None
 
 
-SUPPORTED_EXTENSIONS = {".pdf", ".csv", ".xlsx", ".py", ".ipynb", ".md", ".txt"}
+SUPPORTED_EXTENSIONS = {".pdf", ".csv", ".tsv", ".xlsx", ".py", ".ipynb", ".md", ".txt"}
 
 
 def _dataset_schema(frame: pd.DataFrame) -> dict[str, Any]:
@@ -61,6 +61,8 @@ def _parse_pdf(raw: bytes) -> ParsedDoc:
                 heading = next((line.strip() for line in page_text.splitlines() if 2 < len(line.strip()) < 100), None)
                 sections.append(ParsedSection(combined, heading, page_index + 1))
     text = "\n\n".join(section.text for section in sections)
+    if not text.strip():
+        raise ValueError("PDF 未识别到可检索文字；可能是扫描件。请先执行 OCR 或上传含文本层的 PDF。")
     return ParsedDoc(kind="text", text=text, sections=sections)
 
 
@@ -82,11 +84,11 @@ def _parse_notebook(raw: bytes) -> ParsedDoc:
     return ParsedDoc(kind="text", text="\n\n".join(item.text for item in sections), sections=sections)
 
 
-def _parse_csv(raw: bytes) -> pd.DataFrame:
+def _parse_csv(raw: bytes, separator: str = ",") -> pd.DataFrame:
     last_decode_error: UnicodeDecodeError | None = None
     for encoding in ("utf-8-sig", "gb18030"):
         try:
-            return pd.read_csv(io.BytesIO(raw), encoding=encoding)
+            return pd.read_csv(io.BytesIO(raw), encoding=encoding, sep=separator)
         except UnicodeDecodeError as exc:
             last_decode_error = exc
             continue
@@ -109,6 +111,50 @@ def _parse_csv(raw: bytes) -> pd.DataFrame:
     ) from last_decode_error
 
 
+def _parse_excel(raw: bytes) -> dict[str, Any]:
+    try:
+        sheets = pd.read_excel(io.BytesIO(raw), sheet_name=None)
+    except Exception as exc:
+        raise ValueError(f"Excel 无法解析：{exc}") from exc
+    if not sheets:
+        raise ValueError("Excel 工作簿中没有可读取的工作表")
+    first_name, first_frame = next(iter(sheets.items()))
+    schema = _dataset_schema(first_frame)
+    schema["default_sheet"] = str(first_name)
+    schema["sheets"] = [
+        {"name": str(name), **_dataset_schema(frame)}
+        for name, frame in sheets.items()
+    ]
+    return schema
+
+
+def _decode_text(raw: bytes) -> str:
+    last_error: UnicodeDecodeError | None = None
+    for encoding in ("utf-8-sig", "gb18030"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError as exc:
+            last_error = exc
+    raise ValueError("文本编码无法识别；请另存为 UTF-8 或 GB18030 后重试。") from last_error
+
+
+def read_dataset_frame(filename: str, raw: bytes, sheet: str | None = None) -> pd.DataFrame:
+    """Read a supported table using the same strict decoding rules as ingestion."""
+    extension = Path(filename).suffix.lower()
+    if extension == ".csv":
+        return _parse_csv(raw)
+    if extension == ".tsv":
+        return _parse_csv(raw, separator="\t")
+    if extension == ".xlsx":
+        try:
+            return pd.read_excel(io.BytesIO(raw), sheet_name=sheet if sheet is not None else 0)
+        except ValueError as exc:
+            raise ValueError(f"Excel 工作表不存在或无法读取：{sheet or '默认工作表'}") from exc
+        except Exception as exc:
+            raise ValueError(f"Excel 无法解析：{exc}") from exc
+    raise ValueError("只有 CSV、TSV 与 XLSX 支持结构化查询")
+
+
 def parse(filename: str, raw: bytes) -> ParsedDoc:
     extension = Path(filename).suffix.lower()
     if extension not in SUPPORTED_EXTENSIONS:
@@ -118,11 +164,15 @@ def parse(filename: str, raw: bytes) -> ParsedDoc:
     if extension == ".csv":
         frame = _parse_csv(raw)
         return ParsedDoc(kind="dataset", dataset_schema=_dataset_schema(frame))
-    if extension == ".xlsx":
-        frame = pd.read_excel(io.BytesIO(raw))
+    if extension == ".tsv":
+        frame = _parse_csv(raw, separator="\t")
         return ParsedDoc(kind="dataset", dataset_schema=_dataset_schema(frame))
+    if extension == ".xlsx":
+        return ParsedDoc(kind="dataset", dataset_schema=_parse_excel(raw))
     if extension == ".ipynb":
         return _parse_notebook(raw)
-    text = raw.decode("utf-8-sig")
+    text = _decode_text(raw)
+    if not text.strip():
+        raise ValueError("文件中没有可索引的文本内容")
     section = ParsedSection(text=text, section=None, position=0)
     return ParsedDoc(kind="text", text=text, sections=[section])

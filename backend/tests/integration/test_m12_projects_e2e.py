@@ -32,16 +32,16 @@ def test_demo_project_opens_with_an_analysis_ready_collection():
                 item for item in collections.json() if item["id"] == str(demo_collection_id)
             )
             assert demo_collection["name"] == "企鹅形态差异研究"
-            assert demo_collection["document_count"] == 1
+            assert demo_collection["document_count"] == 2
 
             documents = client.get(
                 "/api/v1/documents",
                 params={"project_id": str(demo_project_id), "collection_id": str(demo_collection_id)},
             )
             assert documents.status_code == 200, documents.text
-            assert len(documents.json()) == 1
-            assert documents.json()[0]["filename"] == "palmer_penguins_demo.csv"
-            assert documents.json()[0]["collection_id"] == str(demo_collection_id)
+            assert len(documents.json()) == 2
+            assert {item["filename"] for item in documents.json()} == {"palmer_penguins_demo.csv", "README-DEMO.md"}
+            assert all(item["collection_id"] == str(demo_collection_id) for item in documents.json())
     finally:
         with SessionLocal() as db:
             db.query(Dataset).filter(Dataset.project_id == demo_project_id).delete()

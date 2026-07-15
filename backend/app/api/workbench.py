@@ -1,11 +1,14 @@
 import uuid
+import io
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.schemas.workbench import ArtifactListResponse, EvidenceResponse, ReviewResponse, RunCompare, RunReport, TimelineResponse
+from app.schemas.workbench import ArtifactListResponse, EvidenceResponse, ProjectQualityReport, ReviewResponse, RunCompare, RunReport, TimelineResponse
 from app.services import workbench
+from app.services.lineage.bundle import build_reproducibility_bundle
 
 
 router = APIRouter(tags=["workbench"])
@@ -26,6 +29,11 @@ def review(project_id: uuid.UUID, db: Session = Depends(get_db)) -> ReviewRespon
     return guarded(lambda: workbench.project_review(db, project_id))
 
 
+@router.get("/projects/{project_id}/quality-report", response_model=ProjectQualityReport)
+def quality_report(project_id: uuid.UUID, db: Session = Depends(get_db)) -> ProjectQualityReport:
+    return guarded(lambda: workbench.project_quality_report(db, project_id))
+
+
 @router.get("/projects/{project_id}/artifacts", response_model=ArtifactListResponse)
 def artifacts(project_id: uuid.UUID, limit: int = 50, db: Session = Depends(get_db)) -> ArtifactListResponse:
     return guarded(lambda: workbench.project_artifacts(db, project_id, min(max(limit, 1), 100)))
@@ -34,6 +42,19 @@ def artifacts(project_id: uuid.UUID, limit: int = 50, db: Session = Depends(get_
 @router.get("/runs/{run_id}/report", response_model=RunReport)
 def report(run_id: uuid.UUID, project_id: uuid.UUID, db: Session = Depends(get_db)) -> RunReport:
     return guarded(lambda: workbench.run_report(db, project_id, run_id))
+
+
+@router.get("/runs/{run_id}/bundle")
+def bundle(run_id: uuid.UUID, project_id: uuid.UUID, db: Session = Depends(get_db)) -> StreamingResponse:
+    try:
+        filename, payload = build_reproducibility_bundle(db, project_id, run_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return StreamingResponse(
+        io.BytesIO(payload),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/runs/{run_id}/compare", response_model=RunCompare)

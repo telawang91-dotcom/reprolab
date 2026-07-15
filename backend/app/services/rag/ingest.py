@@ -1,11 +1,13 @@
+import hashlib
 import re
 import uuid
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.knowledge import Chunk, Collection, Dataset, Document
+from app.models.knowledge import Chunk, Collection, Dataset, Document, Project
 from app.schemas.documents import DocumentOrganizeRequest, DocumentUpdate
 from app.services.rag import chunker, embedder, parser, storage
 
@@ -18,6 +20,7 @@ class IngestResult:
     storage_hash: str
     chunks_count: int | None = None
     dataset_id: uuid.UUID | None = None
+    duplicate: bool = False
 
 
 def infer_type(filename: str) -> str:
@@ -56,14 +59,47 @@ def ingest(
     document_type: str | None,
     collection_id: uuid.UUID | None = None,
 ) -> IngestResult:
+    if db.get(Project, project_id) is None:
+        raise ValueError("project not found")
+    normalized = filename.replace("\\", "/")
+    path = PurePosixPath(normalized)
+    if path.is_absolute() or ".." in path.parts or not path.name:
+        raise ValueError(f"unsafe upload path: {filename}")
+    filename = normalized
     if collection_id is not None:
         collection = db.get(Collection, collection_id)
         if collection is None:
             raise ValueError("collection not found")
         if collection.project_id != project_id:
             raise ValueError("collection belongs to another project")
+    storage_hash = hashlib.sha256(raw).hexdigest()
+    existing = db.scalar(select(Document).where(
+        Document.project_id == project_id,
+        Document.collection_id == collection_id,
+        Document.storage_hash == storage_hash,
+    ))
+    if existing is not None:
+        dataset = db.scalar(select(Dataset).where(
+            Dataset.project_id == project_id,
+            Dataset.collection_id == collection_id,
+            Dataset.storage_hash == storage_hash,
+        ))
+        chunks_count = db.scalar(
+            select(func.count(Chunk.id)).where(Chunk.document_id == existing.id)
+        ) or 0
+        return IngestResult(
+            existing.id,
+            existing.type,
+            existing.filename,
+            storage_hash,
+            chunks_count=chunks_count,
+            dataset_id=dataset.id if dataset else None,
+            duplicate=True,
+        )
     parsed = parser.parse(filename, raw)
-    storage_hash = storage.save_bytes(raw)
+    saved_hash = storage.save_bytes(raw)
+    if saved_hash != storage_hash:
+        raise RuntimeError("content-addressed storage hash mismatch")
     resolved_type = document_type or infer_type(filename)
     if resolved_type not in {"paper", "note", "code", "other"}:
         raise ValueError("type must be paper, note, code, or other")

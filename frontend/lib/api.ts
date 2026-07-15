@@ -6,7 +6,7 @@ const ACTIVITY_KEY = "reprolab-activities";
 export type ActivityItem = {
   id: string;
   title: string;
-  state: "running" | "success" | "error";
+  state: "running" | "success" | "error" | "cancelled";
   created_at: string;
   href: string;
 };
@@ -26,7 +26,7 @@ function writeActivities(items: ActivityItem[]) {
     new CustomEvent("reprolab-activities", { detail: next }),
   );
 }
-function beginActivity(title: string, href: string) {
+export function beginActivity(title: string, href: string) {
   const item: ActivityItem = {
     id: crypto.randomUUID(),
     title,
@@ -37,7 +37,10 @@ function beginActivity(title: string, href: string) {
   writeActivities([item, ...readActivities()]);
   return item.id;
 }
-function finishActivity(id: string, state: "success" | "error") {
+export function finishActivity(
+  id: string,
+  state: "success" | "error" | "cancelled",
+) {
   writeActivities(
     readActivities().map((item) =>
       item.id === id ? { ...item, state } : item,
@@ -91,7 +94,43 @@ export type DocumentDetail = DocumentItem & {
     columns?: { name: string; dtype: string }[];
     row_count?: number;
     column_count?: number;
+    default_sheet?: string;
+    sheets?: { name: string; columns: { name: string; dtype: string }[]; row_count: number; column_count: number }[];
   } | null;
+};
+export type DatasetCatalogItem = {
+  id: string;
+  name: string;
+  storage_hash: string;
+  collection_id: string | null;
+  schema_json: DocumentDetail["schema_json"];
+  created_at: string;
+};
+export type DatasetFilter = {
+  column: string;
+  op: "eq" | "ne" | "contains" | "gt" | "gte" | "lt" | "lte" | "is_null" | "not_null";
+  value?: string | number | boolean | null;
+};
+export type DatasetQuerySpec = {
+  dataset_id: string;
+  sheet?: string | null;
+  columns?: string[];
+  filters?: DatasetFilter[];
+  search?: string | null;
+  sort?: { column: string; direction: "asc" | "desc" } | null;
+  offset?: number;
+  limit?: number;
+};
+export type DatasetQueryResult = {
+  dataset_id: string;
+  name: string;
+  storage_hash: string;
+  sheet: string | null;
+  columns: { name: string; dtype: string }[];
+  rows: Record<string, unknown>[];
+  matched_rows: number;
+  returned_rows: number;
+  receipt: Record<string, unknown>;
 };
 export type ConversationSummary = {
   id: string;
@@ -139,6 +178,7 @@ export type BatchStatus = {
     status: "queued" | "processing" | "success" | "error";
     document_id: string | null;
     dataset_id: string | null;
+    duplicate: boolean;
     error: string | null;
   }[];
 };
@@ -199,6 +239,8 @@ export type MemoryItem = {
   tags: string[];
   importance: number;
   written_at: string;
+  recallable: boolean;
+  source: "manual" | "conversation" | "reflection" | "agent";
 };
 export type SuggestionItem = {
   id: string;
@@ -227,6 +269,12 @@ export type SkillHubItem = {
   discipline: string;
   version: number;
   author: string;
+  input_roles: { name: string; description: string; dtype?: string; required?: boolean }[];
+  tools: string[];
+  outputs: string[];
+  workflow: string[];
+  estimated_from_scratch_tokens: number;
+  package_hash: string;
 };
 export type SkillApplyResult = {
   skill_id: string;
@@ -299,6 +347,23 @@ export type ReviewSummary = {
     flagged_claims: number;
   };
   risks: string[];
+  next_actions: string[];
+};
+export type QualityMetric = {
+  key: string;
+  title: string;
+  value: number;
+  total: number | null;
+  ratio: number | null;
+  state: "ready" | "warn" | "block";
+  evidence: string;
+};
+export type QualityReport = {
+  project_id: string;
+  generated_at: string;
+  ready_for_demo: boolean;
+  metrics: QualityMetric[];
+  blockers: string[];
   next_actions: string[];
 };
 export type ArtifactSummary = {
@@ -409,6 +474,16 @@ export const api = {
     ),
   document: (id: string) =>
     request<DocumentDetail>(`/documents/${id}?project_id=${activeProjectId()}`),
+  datasets: (collectionId?: string) =>
+    request<DatasetCatalogItem[]>(
+      `/datasets?project_id=${activeProjectId()}${collectionId ? `&collection_id=${collectionId}` : ""}`,
+    ),
+  queryDatasets: (queries: DatasetQuerySpec[]) =>
+    request<{ results: DatasetQueryResult[] }>("/datasets/query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: activeProjectId(), queries }),
+    }),
   deleteDocument: (id: string) =>
     request(`/documents/${id}?project_id=${activeProjectId()}`, {
       method: "DELETE",
@@ -426,7 +501,7 @@ export const api = {
       body: JSON.stringify({ project_id: activeProjectId(), document_ids: documentIds, collection_id: collectionId }),
     }),
   upload: async (file: File, collectionId?: string) => {
-    const activity = beginActivity(`正在导入 ${file.name}`, "/knowledge");
+    const activity = beginActivity(`导入 ${file.name}`, "/knowledge");
     const body = new FormData();
     body.append("file", file);
     body.append("project_id", activeProjectId());
@@ -582,6 +657,10 @@ export const api = {
         tags,
       }),
     }),
+  deleteMemory: (memoryId: string) =>
+    request<{ id: string; deleted: boolean }>(`/memories/${memoryId}?project_id=${activeProjectId()}`, {
+      method: "DELETE",
+    }),
   suggestions: () =>
     request<SuggestionItem[]>(`/suggestions?project_id=${activeProjectId()}`),
   refreshSuggestions: () =>
@@ -658,12 +737,31 @@ export const api = {
       `/projects/${activeProjectId()}/timeline`,
     ),
   review: () => request<ReviewSummary>(`/projects/${activeProjectId()}/review`),
+  qualityReport: () =>
+    request<QualityReport>(`/projects/${activeProjectId()}/quality-report`),
   artifacts: (limit = 50) =>
     request<{ items: ArtifactSummary[] }>(
       `/projects/${activeProjectId()}/artifacts?limit=${limit}`,
     ),
   runReport: (runId: string) =>
     request<RunReport>(`/runs/${runId}/report?project_id=${activeProjectId()}`),
+  downloadRunBundle: async (runId: string) => {
+    const response = await fetch(
+      `${API_BASE}/runs/${runId}/bundle?project_id=${activeProjectId()}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.error?.message ?? `复现包导出失败 (${response.status})`);
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `reprolab-run-${runId.slice(0, 8)}.zip`;
+    link.click();
+    URL.revokeObjectURL(url);
+  },
   compareRuns: (runId: string, otherRunId: string) =>
     request<RunCompare>(
       `/runs/${runId}/compare?project_id=${activeProjectId()}&other_run_id=${otherRunId}`,
@@ -691,7 +789,7 @@ export const api = {
 };
 
 export type ChatEvent = {
-  event: "plan" | "thinking" | "code" | "run" | "artifact" | "message" | "done";
+  event: "context" | "plan" | "thinking" | "code" | "run" | "artifact" | "message" | "done";
   data: Record<string, any>;
 };
 
@@ -705,7 +803,8 @@ export async function streamChat(
   onEvent: (event: ChatEvent) => void,
   signal?: AbortSignal,
 ) {
-  const activity = beginActivity("正在运行科研分析", "/analysis");
+  const activity = beginActivity("科研分析", "/analysis");
+  let completed = false;
   try {
     const response = await fetch(`${API_BASE}/chat`, {
       method: "POST",
@@ -737,16 +836,21 @@ export async function streamChat(
           if (line.startsWith("event:")) name = line.slice(6).trim();
           if (line.startsWith("data:")) data += line.slice(5).trim();
         }
-        if (name && data)
+        if (name && data) {
+          if (name === "done") completed = true;
           onEvent({
             event: name as ChatEvent["event"],
             data: JSON.parse(data),
           });
+        }
       }
+    }
+    if (!completed) {
+      throw new Error("分析连接在完成前中断。已生成的中间状态仍保留，请重试或查看服务运行状态。");
     }
     finishActivity(activity, "success");
   } catch (error) {
-    finishActivity(activity, "error");
+    finishActivity(activity, (error as Error).name === "AbortError" ? "cancelled" : "error");
     throw error;
   }
 }

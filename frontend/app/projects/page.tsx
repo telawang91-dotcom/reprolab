@@ -183,7 +183,7 @@ export default function ProjectsPage() {
       {error && (
         <div
           role="alert"
-          className="rounded-xl border border-status-error/20 bg-status-error/[.06] px-4 py-3 text-sm text-status-error"
+          className="rounded-apple border border-status-err/20 bg-status-err/[.06] px-4 py-3 text-sm text-status-err"
         >
           {error}
         </div>
@@ -403,7 +403,7 @@ export default function ProjectsPage() {
                 }
                 className={
                   dialog.type === "archive"
-                    ? "btn bg-status-error text-white hover:opacity-90"
+                    ? "btn bg-status-err text-white hover:opacity-90"
                     : "btn-primary"
                 }
               >

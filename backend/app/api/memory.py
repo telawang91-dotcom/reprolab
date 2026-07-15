@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.models.knowledge import Memory
-from app.schemas.memory import MemoryCreate, MemoryOut
+from app.schemas.memory import MemoryCreate, MemoryDeleteResponse, MemoryOut
 from app.services.memory.recall import recall_memories
 from app.services.memory.store import write_memory
 
@@ -35,3 +35,17 @@ def list_memories(
 @router.post("", response_model=MemoryOut, status_code=status.HTTP_201_CREATED)
 def create_memory(request: MemoryCreate, db: Session = Depends(get_db)) -> Memory:
     return write_memory(db, request)
+
+
+@router.delete("/{memory_id}", response_model=MemoryDeleteResponse)
+def delete_memory(
+    memory_id: uuid.UUID,
+    project_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> MemoryDeleteResponse:
+    memory = db.get(Memory, memory_id)
+    if memory is None or memory.project_id != project_id:
+        raise HTTPException(status_code=404, detail="memory not found")
+    db.delete(memory)
+    db.commit()
+    return MemoryDeleteResponse(id=memory_id, deleted=True)

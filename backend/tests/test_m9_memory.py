@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.models.knowledge import Memory
-from app.schemas.memory import MemoryCreate
+from app.schemas.memory import MemoryCreate, MemoryOut
 from app.services.memory.recall import memory_context, verify_before_use
 from app.services.memory.reflect import _json_array
 
@@ -29,3 +29,17 @@ def test_verify_before_use_filters_stale_or_low_importance():
     assert not verify_before_use(stale, now)
     assert not verify_before_use(weak, now)
     assert memory_context([fresh]) == "- fresh"
+
+
+def test_memory_output_explains_recall_eligibility_and_source():
+    output = MemoryOut(
+        id=uuid.uuid4(),
+        layer="semantic",
+        content="优先报告效应量",
+        tags=["manual"],
+        importance=0.8,
+        written_at=datetime.now(timezone.utc),
+    )
+    dumped = output.model_dump()
+    assert dumped["recallable"] is True
+    assert dumped["source"] == "manual"

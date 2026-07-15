@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     embedding_model: str = "BAAI/bge-m3"
     embedding_preload: bool = True
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    rerank_limit: int = Field(default=12, ge=5, le=50)
     llm_base_url: str = "https://api.deepseek.com/v1"
     llm_api_key: str = ""
     llm_model: str = "deepseek-v4-flash"

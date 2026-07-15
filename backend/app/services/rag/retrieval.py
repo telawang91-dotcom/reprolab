@@ -13,10 +13,10 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.knowledge import Chunk, Document
 from app.schemas.search import SearchFilters, SearchHit
-from app.services.rag.embedder import encode
+from app.services.rag.embedder import encode_one
 
 RECALL_LIMIT = 50
-RERANK_LIMIT = 30
+RERANK_LIMIT = settings.rerank_limit
 RRF_K = 60
 
 
@@ -89,7 +89,7 @@ def pgvector_search(
     limit: int = RECALL_LIMIT,
     collection_id: uuid.UUID | None = None,
 ) -> list[Candidate]:
-    query_vector = encode([query])[0]
+    query_vector = list(encode_one(query))
     distance = Chunk.embedding.cosine_distance(query_vector)
     rows = db.execute(
         _scope_statement(project_id, filters, collection_id)
@@ -119,9 +119,18 @@ def get_reranker():
 def rerank(query: str, candidates: Sequence[Candidate], limit: int) -> list[Candidate]:
     if not candidates:
         return []
-    raw_scores = get_reranker().predict([(query, item.chunk.content) for item in candidates], show_progress_bar=False)
+    texts = tuple(item.chunk.content for item in candidates)
+    raw_scores = _predict_scores(query, texts)
     scored = [Candidate(item.chunk, item.document, float(score)) for item, score in zip(candidates, raw_scores, strict=True)]
     return sorted(scored, key=lambda item: (-item.score, str(item.id)))[:limit]
+
+
+@lru_cache(maxsize=256)
+def _predict_scores(query: str, texts: tuple[str, ...]) -> tuple[float, ...]:
+    scores = get_reranker().predict(
+        [(query, text) for text in texts], show_progress_bar=False
+    )
+    return tuple(float(score) for score in scores)
 
 
 def _to_hits(candidates: Sequence[Candidate]) -> list[SearchHit]:

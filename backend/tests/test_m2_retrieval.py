@@ -6,7 +6,8 @@ from pydantic import ValidationError
 from app.models.knowledge import Chunk, Document
 from app.schemas.search import Citation, SearchRequest
 from app.services.rag.qa import extract_citations, source_anchor
-from app.services.rag.retrieval import Candidate, bm25_search, rrf
+from app.services.rag import retrieval
+from app.services.rag.retrieval import Candidate, bm25_search, rerank, rrf
 
 
 def candidate(identifier: int, content: str = "evidence") -> Candidate:
@@ -36,6 +37,23 @@ def test_bm25_handles_chinese_terms():
     assert bm25_search("企鹅体重", [unrelated, penguin], 1)[0].id == penguin.id
 
 
+def test_reranker_reuses_identical_query_candidate_inference(monkeypatch):
+    calls = []
+
+    class FakeReranker:
+        def predict(self, pairs, **_kwargs):
+            calls.append(pairs)
+            return [float(index) for index, _ in enumerate(pairs)]
+
+    retrieval._predict_scores.cache_clear()
+    monkeypatch.setattr(retrieval, "get_reranker", lambda: FakeReranker())
+    items = [candidate(1, "alpha"), candidate(2, "beta")]
+    assert rerank("query", items, 2)[0].chunk.content == "beta"
+    assert rerank("query", items, 2)[0].chunk.content == "beta"
+    assert len(calls) == 1
+    retrieval._predict_scores.cache_clear()
+
+
 def test_citation_mapping_only_accepts_known_anchors():
     document_id = uuid.UUID("abcd0000-0000-0000-0000-000000000000")
     chunk_id = uuid.uuid4()
@@ -48,4 +66,3 @@ def test_citation_mapping_only_accepts_known_anchors():
 def test_search_contract_forbids_unknown_fields():
     with pytest.raises(ValidationError):
         SearchRequest(project_id=uuid.uuid4(), query="x", unexpected=True)
-

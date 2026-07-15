@@ -3,6 +3,7 @@ import type { ChatEvent } from "./api";
 export type TimelineArtifact = {
   artifact_id: string;
   kind: string;
+  title?: string | null;
   value_json?: unknown;
   figure_url?: string | null;
   anchor?: string;
@@ -28,9 +29,18 @@ export type TimelineStep = {
   status: "pending" | "working" | "repairing" | "success";
 };
 export type AgentConclusion = { text: string; citations: string[] };
-export type AgentTimeline = { steps: TimelineStep[]; conclusion?: AgentConclusion; conclusions: AgentConclusion[]; activeStepId?: string };
+export type AgentToolReceipt = {
+  name: string;
+  label: string;
+  status: "used" | "empty";
+  detail: string;
+  count: number;
+  items?: { id: string; content: string; layer: string }[];
+};
+export type AgentContext = { id: string; tools: AgentToolReceipt[] };
+export type AgentTimeline = { steps: TimelineStep[]; contexts: AgentContext[]; conclusion?: AgentConclusion; conclusions: AgentConclusion[]; activeStepId?: string };
 
-const emptyTimeline = (): AgentTimeline => ({ steps: [], conclusions: [] });
+const emptyTimeline = (): AgentTimeline => ({ steps: [], contexts: [], conclusions: [] });
 const id = (prefix: string, index: number) => `${prefix}-${index + 1}`;
 const text = (value: unknown) => typeof value === "string" ? value : "";
 
@@ -58,6 +68,30 @@ export function reduceAgentTimeline(events: readonly ChatEvent[] | null | undefi
   try {
     return (Array.isArray(events) ? events : []).reduce<AgentTimeline>((state, event) => {
       if (!event || typeof event !== "object" || !event.data || typeof event.data !== "object") return state;
+      if (event.event === "context") {
+        const raw: unknown[] = Array.isArray(event.data.tools) ? event.data.tools : [];
+        const tools = raw.flatMap((item) => {
+          if (!item || typeof item !== "object") return [];
+          const record = item as Record<string, unknown>;
+          const name = text(record.name);
+          const label = text(record.label);
+          if (!name || !label) return [];
+          const rawItems = Array.isArray(record.items) ? record.items : [];
+          return [{
+            name,
+            label,
+            status: record.status === "used" ? "used" as const : "empty" as const,
+            detail: text(record.detail),
+            count: typeof record.count === "number" ? record.count : 0,
+            items: rawItems.flatMap((entry) => entry && typeof entry === "object" ? [{
+              id: text((entry as Record<string, unknown>).id),
+              content: text((entry as Record<string, unknown>).content),
+              layer: text((entry as Record<string, unknown>).layer),
+            }] : []),
+          }];
+        });
+        return tools.length ? { ...state, contexts: [...state.contexts, { id: `context-${state.contexts.length + 1}`, tools }] } : state;
+      }
       if (event.event === "plan") {
         const raw: unknown[] = Array.isArray(event.data.steps) ? event.data.steps : [];
         if (!raw.length) return state;

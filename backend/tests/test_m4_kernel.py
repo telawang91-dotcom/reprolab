@@ -3,7 +3,8 @@ import uuid
 import pytest
 
 from app.core.config import settings
-from app.services.sandbox.kernel import execute_code, kernel_registry
+from app.services.sandbox.kernel import CapturedOutput, ExecResult, execute_code, kernel_registry
+from app.services.sandbox.runner import _enforce_artifact_budget
 
 
 @pytest.fixture(autouse=True)
@@ -73,3 +74,15 @@ def test_explicit_coefficient_artifact_is_structured():
     assert artifact.value == 0.083
     assert artifact.title == "mass effect"
     assert artifact.tol == 1e-5
+
+
+def test_artifact_budget_rejects_noisy_runs_before_persistence():
+    execution = ExecResult(
+        status="success",
+        stdout="computed",
+        artifacts=[CapturedOutput(kind="number", mime_type="application/json", value=index) for index in range(5)],
+    )
+    limited = _enforce_artifact_budget(execution, 4)
+    assert limited.status == "error"
+    assert limited.artifacts == []
+    assert "produced 5, maximum 4" in limited.stdout
