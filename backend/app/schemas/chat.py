@@ -11,6 +11,8 @@ class StrictModel(BaseModel):
 class ChatRequest(StrictModel):
     project_id: uuid.UUID
     conversation_id: uuid.UUID | None = None
+    collection_id: uuid.UUID | None = None
+    mode: Literal["analysis", "workspace"] = "analysis"
     message: str = Field(min_length=1, max_length=10_000)
     dataset_ids: list[uuid.UUID] = Field(default_factory=list)
     skill_id: uuid.UUID | None = None

@@ -20,6 +20,7 @@ type Props = {
   onExample: (text: string) => void;
   onAnchor: (anchor: string) => void;
   onArtifact: (artifact: TimelineArtifact) => void;
+  workspaceMode?: boolean;
 };
 
 function UserQuestion({ text }: { text: string }) {
@@ -36,6 +37,7 @@ export function AgentTimelineView({
   onExample,
   onAnchor,
   onArtifact,
+  workspaceMode = false,
 }: Props) {
   const reduceMotion = useReducedMotion();
   if (!timeline.questions.length && !timeline.steps.length && !timeline.conclusion) {
@@ -45,17 +47,19 @@ export function AgentTimelineView({
           <span className="mx-auto grid h-14 w-14 place-items-center rounded-appleLg bg-brand/10 text-brand">
             {hasDatasets ? <Sparkles size={24} /> : <Database size={24} />}
           </span>
-          <h2 className="mt-5 text-2xl font-semibold tracking-tight">{hasDatasets ? "从一个科研问题开始" : "先添加一份可分析的数据"}</h2>
+          <h2 className="mt-5 text-2xl font-semibold tracking-tight">{workspaceMode ? "开始和当前文件夹对话" : hasDatasets ? "从一个科研问题开始" : "先添加一份可分析的数据"}</h2>
           <p className="mt-3 text-sm leading-6 text-muted">
-            {hasDatasets
+            {workspaceMode
+              ? "像使用 Codex 一样直接提出问题。Agent 会按需读取文件、检索内容、检查数据结构、调用分析环境，并保留工具回执。"
+              : hasDatasets
               ? hasSelection
                 ? "下面的问题根据已选数据字段生成。Agent 会展示真实规划、执行、自检与可信产物。"
                 : "先选择数据集，避免生成没有来源的分析。"
               : "上传 CSV 或 XLSX 后，Agent 会按问题动态生成代码并登记完整血缘。"}
           </p>
-          {hasDatasets ? (
+          {hasDatasets || workspaceMode ? (
             <div className="mt-6 grid gap-2 sm:grid-cols-3">
-              {examples.map((prompt) => <button key={prompt} disabled={!hasSelection} onClick={() => onExample(prompt)} className="rounded-apple border bg-surface p-3 text-left text-sm hover:border-brand/35 disabled:opacity-40">{prompt}</button>)}
+              {examples.map((prompt) => <button key={prompt} disabled={!workspaceMode && !hasSelection} onClick={() => onExample(prompt)} className="rounded-apple border bg-surface p-3 text-left text-sm hover:border-brand/35 disabled:opacity-40">{prompt}</button>)}
             </div>
           ) : <Link href="/knowledge" className="btn-primary mt-6">上传数据</Link>}
         </div>

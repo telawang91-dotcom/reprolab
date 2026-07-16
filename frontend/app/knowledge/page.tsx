@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   BookOpen,
   Check,
@@ -13,7 +14,8 @@ import {
   FolderOpen,
   FolderPlus,
   LocateFixed,
-  Search,
+  MessageSquarePlus,
+  Send,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -21,7 +23,8 @@ import {
   X,
 } from "lucide-react";
 
-import { AnchoredMarkdown } from "@/components/anchor/AnchoredMarkdown";
+import { AgentTimelineView } from "@/components/agent/AgentTimelineView";
+import { useAnalysisSession } from "@/components/agent/useAnalysisSession";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Sheet } from "@/components/ui/Sheet";
@@ -32,18 +35,12 @@ import {
   beginActivity,
   finishActivity,
   type BatchStatus,
-  type Citation,
   type DocumentDetail,
   type DocumentItem,
   type SearchHit,
 } from "@/lib/api";
 import { displayDocumentTitle } from "@/lib/documentTitle";
 
-const modes = [
-  { id: "hybrid", label: "智能混合" },
-  { id: "semantic", label: "语义" },
-  { id: "keyword", label: "关键词" },
-];
 const icons = { paper: FileText, note: BookOpen, code: FileCode2, other: Database };
 const typeNames = { paper: "论文", note: "笔记", code: "代码", other: "数据/其他" };
 const folderPickerAttributes = { webkitdirectory: "", directory: "" };
@@ -55,21 +52,13 @@ export default function KnowledgePage() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  const [mode, setMode] = useState("hybrid");
   const [type, setType] = useState("");
   const [year, setYear] = useState("");
-  const [hits, setHits] = useState<SearchHit[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [warmingRetrieval, setWarmingRetrieval] = useState(false);
-  const [semanticPrepared, setSemanticPrepared] = useState(false);
   const [uploading, setUploading] = useState<string[]>([]);
   const [batch, setBatch] = useState<BatchStatus>();
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState<DocumentDetail | null>(null);
   const [focusedHit, setFocusedHit] = useState<SearchHit | null>(null);
-  const [answer, setAnswer] = useState("");
-  const [citations, setCitations] = useState<Citation[]>([]);
   const [copied, setCopied] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -122,7 +111,7 @@ export default function KnowledgePage() {
   useEffect(() => { void loadDocuments(); }, [loadDocuments]);
 
   useEffect(() => {
-    setHits([]); setAnswer(""); setCitations([]); setBatch(undefined); setType(""); setYear("");
+    setBatch(undefined); setType(""); setYear("");
   }, [collection]);
 
   async function createCollection() {
@@ -223,47 +212,6 @@ export default function KnowledgePage() {
     }
   }
 
-  async function search() {
-    if (!query.trim() || !activeCollection) return;
-    setSearching(true);
-    setError("");
-    setAnswer("");
-    const needsWarmup = mode !== "keyword" && !semanticPrepared;
-    if (needsWarmup) setWarmingRetrieval(true);
-    try {
-      const filters: Record<string, unknown> = {};
-      if (type) filters.type = type;
-      if (year) filters.year_gte = Number(year);
-      setHits((await api.search(query, mode, filters, activeCollection.id)).hits);
-      if (needsWarmup) setSemanticPrepared(true);
-    } catch (reason) {
-      setError((reason as Error).message);
-    } finally {
-      setSearching(false);
-      setWarmingRetrieval(false);
-    }
-  }
-
-  async function ask() {
-    if (!query.trim() || !activeCollection) return;
-    setSearching(true);
-    setError("");
-    setHits([]);
-    const needsWarmup = !semanticPrepared;
-    if (needsWarmup) setWarmingRetrieval(true);
-    try {
-      const response = await api.qa(query, activeCollection.id);
-      setAnswer(response.answer);
-      setCitations(response.citations);
-      if (needsWarmup) setSemanticPrepared(true);
-    } catch (reason) {
-      setError((reason as Error).message);
-    } finally {
-      setSearching(false);
-      setWarmingRetrieval(false);
-    }
-  }
-
   async function openDocument(id: string, hit: SearchHit | null = null) {
     try {
       setFocusedHit(hit);
@@ -290,11 +238,6 @@ export default function KnowledgePage() {
     await navigator.clipboard.writeText(preview.storage_hash);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
-  }
-
-  function anchorClick(anchor: string) {
-    const citation = citations.find((item) => item.anchor.toLowerCase() === anchor.toLowerCase());
-    if (citation) void openDocument(citation.document_id);
   }
 
   return (
@@ -344,14 +287,7 @@ export default function KnowledgePage() {
                 <div className="mt-8 rounded-appleLg border border-dashed py-14"><EmptyState title="这个空间还没有资料" description="添加文件或导入文件夹后，才会开启当前空间的可信问答。" action={<div className="flex flex-wrap justify-center gap-2"><button onClick={() => fileRef.current?.click()} className="btn-primary"><UploadCloud size={14} />添加文件</button><button onClick={() => folderRef.current?.click()} className="btn-secondary"><FolderOpen size={14} />导入文件夹</button></div>} /></div>
               ) : (
                 <>
-                  <section className="mt-8 rounded-appleLg border bg-surface p-4 sm:p-5">
-                    <div className="flex items-center gap-3"><Search size={18} className="shrink-0 text-subtle" /><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void ask()} className="min-h-11 min-w-0 flex-1 bg-transparent text-[17px] outline-none placeholder:text-subtle" placeholder={`向“${activeCollection.name}”提问…`} />{searching && <span className="h-2 w-2 animate-pulse rounded-full bg-status-warn" />}</div>
-                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3 text-xs text-muted"><ShieldCheck size={13} className="text-status-ok" /><span className="mr-auto">{warmingRetrieval ? "正在准备语义检索，完成后会自动继续" : `仅使用当前空间的 ${documents.length} 份资料`}</span><select value={mode} onChange={(event) => setMode(event.target.value)} className="input h-9 py-0 text-xs">{modes.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select><button onClick={() => void search()} disabled={searching || !query.trim()} className="btn-secondary h-9 px-4">检索</button><button onClick={() => void ask()} disabled={searching || !query.trim()} className="btn-primary h-9 px-4"><Sparkles size={14} />提问</button></div>
-                  </section>
-
-                  {answer && <section className="mt-6 rounded-appleLg border bg-surface p-5 sm:p-6"><div className="mb-4 flex items-center gap-2"><Sparkles size={16} className="text-brand" /><h3 className="font-semibold">回答</h3><span className="ml-auto text-xs text-status-ok">基于 {activeCollection.name}</span></div><div className="max-w-3xl"><AnchoredMarkdown text={answer} onAnchor={anchorClick} /></div><div className="mt-5 flex flex-wrap gap-2">{citations.map((item) => <button onClick={() => void openDocument(item.document_id)} key={item.chunk_id} className="rounded-appleSm bg-ink/[.05] px-2.5 py-1.5 font-mono text-xs text-muted hover:text-brand">{item.anchor} 查看原文</button>)}</div></section>}
-
-                  {hits.length > 0 && <SearchResults hits={hits} onOpen={openDocument} />}
+                  <WorkspaceAgent collectionId={activeCollection.id} collectionName={activeCollection.name} documentCount={documents.length} onOpenDocument={openDocument} />
 
                   <details className="mt-6 overflow-hidden rounded-appleLg border bg-surface">
                     <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-5"><Folder size={17} className="text-brand" /><span><strong className="block text-sm">资料来源</strong><span className="mt-0.5 block text-xs text-muted">{documents.length} 份文件，默认收起</span></span><ChevronDown size={16} className="ml-auto text-subtle" /></summary>
@@ -376,6 +312,67 @@ export default function KnowledgePage() {
       <ConfirmDialog open={!!pendingDelete} title={pendingDelete?.kind === "collection" ? "删除研究文件夹" : "永久删除资料"} description={pendingDelete?.kind === "collection" ? `“${pendingDelete.name}”中的资料会保留并移到未归档，不会删除原文件。` : `将删除“${pendingDelete?.name || ""}”、文本切块和关联数据记录。此操作无法撤销；既有运行与产物账本仍保留审计信息。`} confirmLabel={pendingDelete?.kind === "collection" ? "删除文件夹" : "删除资料"} busy={deleting} error={deleteError} onCancel={() => setPendingDelete(undefined)} onConfirm={() => pendingDelete?.kind === "collection" ? removeCollection() : pendingDelete ? removeDocument(pendingDelete.id) : undefined}/>
     </main>
   );
+}
+
+function WorkspaceAgent({ collectionId, collectionName, documentCount, onOpenDocument }: { collectionId: string; collectionName: string; documentCount: number; onOpenDocument: (id: string, hit?: SearchHit | null) => Promise<void> }) {
+  const session = useAnalysisSession(collectionId, undefined, { mode: "workspace", autoSelectAll: true, refreshKey: documentCount });
+  const [modelReady, setModelReady] = useState<boolean>();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const examples = useMemo(() => [
+    "这个文件夹里有哪些资料和可分析的数据？",
+    "检查数据质量、缺失值和异常值，并告诉我应该怎么处理",
+    "结合现有资料，给出下一步最有价值的研究建议",
+  ], []);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [session.events, session.running]);
+
+  useEffect(() => {
+    let live = true;
+    void api.runtimeStatus().then((runtime) => {
+      if (!live) return;
+      setModelReady(runtime.components.find((item) => item.key === "model")?.state === "ready");
+    }).catch(() => { if (live) setModelReady(false); });
+    return () => { live = false; };
+  }, []);
+
+  function openAnchor(anchor: string) {
+    for (const event of [...session.events].reverse()) {
+      const sources = Array.isArray(event.data.sources) ? event.data.sources : [];
+      const source = sources.find((item) => item && typeof item === "object" && (item as Record<string, unknown>).anchor === anchor) as Record<string, unknown> | undefined;
+      if (source && typeof source.document_id === "string") {
+        void onOpenDocument(source.document_id);
+        return;
+      }
+    }
+    session.anchorClick(anchor);
+  }
+
+  function submit() {
+    if (!session.message.trim() || session.running) return;
+    void session.send();
+  }
+
+  return <section className="mt-8 overflow-hidden rounded-appleXl border bg-surface shadow-soft">
+    <header className="flex min-h-16 items-center gap-3 border-b px-4 sm:px-5">
+      <span className="grid h-9 w-9 place-items-center rounded-appleSm bg-brand/10 text-brand"><Sparkles size={17} /></span>
+      <div className="min-w-0"><h3 className="truncate text-sm font-semibold">Agent · {collectionName}</h3><p className="mt-0.5 text-[11px] text-muted">自动选择检索、文件读取、数据分析与记忆工具</p></div>
+      <div className="ml-auto flex items-center gap-2">{modelReady === false ? <Link href="/settings" className="hidden text-[11px] font-semibold text-status-warn sm:inline">配置模型 API</Link> : <span className={`hidden items-center gap-1.5 text-[11px] sm:inline-flex ${session.running ? "text-status-warn" : modelReady ? "text-status-ok" : "text-muted"}`}><span className={`h-1.5 w-1.5 rounded-full ${session.running ? "animate-pulse bg-status-warn" : modelReady ? "bg-status-ok" : "animate-pulse bg-muted"}`} />{session.running ? "Agent 工作中" : modelReady ? "API 已连接" : "检查 API"}</span>}<button onClick={session.newConversation} disabled={session.running} className="btn-secondary h-9 px-3"><MessageSquarePlus size={14} />新对话</button></div>
+    </header>
+
+    <div ref={scrollRef} className="max-h-[680px] min-h-[440px] overflow-y-auto overscroll-contain px-4 py-6 sm:px-6">
+      <div className="mx-auto max-w-3xl"><AgentTimelineView timeline={session.timeline} liveTimeline={session.liveTimeline} running={session.running} hasDatasets={session.datasets.length > 0} hasSelection={session.selected.length > 0} examples={examples} onExample={session.setMessage} onAnchor={openAnchor} onArtifact={session.setActiveArtifact} workspaceMode />{session.error && <div role="alert" className="mt-4 flex items-start gap-2 rounded-apple border border-status-err/20 bg-status-err/[.07] px-4 py-3 text-sm text-status-err"><span className="min-w-0 flex-1">{session.error}</span><button onClick={() => session.setError("")} aria-label="关闭 Agent 错误"><X size={14} /></button></div>}</div>
+    </div>
+
+    <div className="border-t bg-canvas/45 p-3 sm:p-4">
+      <div className="mx-auto max-w-3xl rounded-appleLg border bg-surface p-2 shadow-soft focus-within:border-brand/40">
+        <textarea value={session.message} onChange={(event) => session.setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } }} disabled={modelReady === false} rows={3} className="w-full resize-none bg-transparent px-2 py-1 text-[15px] leading-6 outline-none placeholder:text-subtle disabled:opacity-50" placeholder={modelReady === false ? "先到设置页配置模型 API…" : `向“${collectionName}”中的 Agent 发送消息…`} />
+        <div className="flex flex-wrap items-center gap-2 border-t px-1 pt-2 text-[11px] text-muted"><ShieldCheck size={12} className="text-status-ok" /><span>{documentCount} 个文件</span><span>·</span><span>{session.datasets.length} 个可分析数据集</span><span className="hidden sm:inline">· Enter 发送，Shift+Enter 换行</span>{session.running ? <button onClick={session.stop} className="btn-secondary ml-auto h-8 px-3"><X size={13} />停止</button> : <button onClick={submit} disabled={!session.message.trim() || modelReady === false} className="btn-primary ml-auto h-8 w-8 p-0" aria-label="发送给 Agent"><Send size={14} /></button>}</div>
+      </div>
+    </div>
+  </section>;
 }
 
 function BatchProgress({ batch }: { batch: BatchStatus }) {
@@ -403,10 +400,6 @@ function parseStatusLabel(status: ParseStatus | null | undefined) {
 
 function DocumentList({ documents, onOpen }: { documents: DocumentItem[]; onOpen: (id: string) => void }) {
   return <div className="max-h-[420px] divide-y overflow-y-auto">{documents.map((document) => { const Icon = icons[document.type]; const status = documentParseStatus(document); return <button key={document.id} onClick={() => onOpen(document.id)} className="flex min-h-[68px] w-full items-center gap-3 px-5 py-3 text-left hover:bg-ink/[.035]"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-appleSm bg-ink/[.05] text-muted"><Icon size={16} /></span><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{displayDocumentTitle(document)}</strong><span className="mt-1 block truncate text-xs text-muted">{document.filename}</span></span>{status && <span className={`hidden rounded-full px-2 py-1 text-[11px] sm:block ${status === "needs_attention" ? "bg-status-warn/10 text-status-warn" : status === "stored" ? "bg-ink/[.05] text-muted" : "bg-status-ok/10 text-status-ok"}`}>{parseStatusLabel(status)}</span>}<span className="hidden text-xs text-subtle md:block">{typeNames[document.type]}</span></button>; })}</div>;
-}
-
-function SearchResults({ hits, onOpen }: { hits: SearchHit[]; onOpen: (id: string, hit: SearchHit) => void }) {
-  return <section className="mt-6 rounded-appleLg border bg-surface p-5"><div className="mb-3 flex items-center justify-between"><h3 className="font-semibold">检索结果</h3><span className="text-xs text-muted">按相关度排序</span></div><div className="divide-y">{hits.map((hit, index) => <article key={hit.chunk_id} className="py-4 first:pt-0"><div className="flex gap-3"><span className="text-xs text-subtle">{String(index + 1).padStart(2, "0")}</span><div className="min-w-0 flex-1"><div className="mb-1.5 flex items-center gap-2 text-xs text-muted"><span>{hit.section || "未命名章节"}</span><span className="ml-auto font-mono">{hit.score.toFixed(3)}</span></div><p className="line-clamp-3 text-sm leading-6">{hit.content}</p><button onClick={() => onOpen(hit.document_id, hit)} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand"><LocateFixed size={12} />定位原文</button></div></div></article>)}</div></section>;
 }
 
 function DocumentPreview({ preview, focusedHit, copied, onCopy, onDelete }: { preview: DocumentDetail; focusedHit: SearchHit | null; copied: boolean; onCopy: () => Promise<void>; onDelete: (id: string) => void }) {

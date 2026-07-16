@@ -108,7 +108,17 @@ def replay_conversation(
             }))
             continue
         text = message.content or ""
+        sources = meta.get("sources") or []
         citations = [f"⟦art_{str(item)[:4]}⟧" for item in meta.get("artifact_ids") or [] if f"⟦art_{str(item)[:4]}⟧" in text]
-        events.append(ConversationEvent(event="message", data={"text": text, "citations": citations}))
+        citations.extend(
+            str(item.get("anchor"))
+            for item in sources
+            if isinstance(item, dict) and item.get("anchor") in text
+        )
+        events.append(ConversationEvent(event="message", data={
+            "text": text,
+            "citations": citations,
+            "sources": sources,
+        }))
     events.append(ConversationEvent(event="done", data={"conversation_id": conversation.id}))
     return ConversationReplay(id=conversation.id, title=conversation.title, events=events)

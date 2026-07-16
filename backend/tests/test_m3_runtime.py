@@ -1,3 +1,5 @@
+import asyncio
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -13,6 +15,8 @@ from app.services.agents.orchestrator import (
     _json_object,
     _trusted_artifact_summary,
     _validate_generated_code,
+    _run_workspace_answer,
+    _workspace_needs_analysis,
 )
 from app.services.agents.runtime import run_agent
 
@@ -215,3 +219,61 @@ def test_critic_fallback_unwraps_ledger_scalars_and_removes_exact_duplicates():
     ])
     assert text.count("样本量：4") == 1
     assert "可能错误" not in text
+
+
+def test_workspace_mode_routes_analysis_requests_but_keeps_file_questions_lightweight():
+    datasets = [SimpleNamespace(id=uuid.uuid4())]
+    assert _workspace_needs_analysis("检查缺失值并告诉我怎么处理", datasets)
+    assert not _workspace_needs_analysis("这个文件夹里有哪些文件？", datasets)
+    assert not _workspace_needs_analysis("检查缺失值", [])
+
+
+def test_workspace_answer_uses_manifest_without_rag_hits(monkeypatch):
+    document_id = uuid.uuid4()
+    conversation_id = uuid.uuid4()
+    request = ChatRequest(
+        project_id=uuid.uuid4(),
+        collection_id=uuid.uuid4(),
+        mode="workspace",
+        message="这里有什么数据？",
+    )
+    document = SimpleNamespace(
+        id=document_id,
+        filename="xps.csv",
+        type="other",
+        storage_hash="hash",
+        extra_metadata={"parse_status": "structured", "parser": "csv"},
+    )
+    dataset = SimpleNamespace(
+        id=uuid.uuid4(),
+        name="xps.csv",
+        storage_hash="hash",
+        schema_json={"row_count": 1501, "column_count": 10},
+    )
+
+    class FakeDb:
+        def __init__(self): self.added = []
+        def add(self, value): self.added.append(value)
+        def commit(self): return None
+
+    anchor = f"⟦src_{str(document_id)[:4]}⟧"
+    adapter = ScriptedAdapter([ModelResponse(content=f"包含 1501 行 XPS 数据 {anchor}")])
+    monkeypatch.setattr("app.services.agents.orchestrator.recall_memories", lambda *_: [])
+    monkeypatch.setattr("app.services.agents.orchestrator.complex_retrieve", lambda *_args, **_kwargs: [])
+    db = FakeDb()
+
+    async def collect():
+        return [item async for item in _run_workspace_answer(
+            db,
+            request,
+            SimpleNamespace(id=conversation_id),
+            [],
+            [document],
+            [dataset],
+            adapter,
+        )]
+
+    events = asyncio.run(collect())
+    assert [item.event for item in events] == ["context", "thinking", "message", "done"]
+    assert events[2].data["sources"][0]["document_id"] == str(document_id)
+    assert "没有文本命中" in events[0].data["tools"][1]["detail"]

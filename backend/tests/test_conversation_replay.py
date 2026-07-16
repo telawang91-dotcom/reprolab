@@ -99,3 +99,31 @@ def test_replay_restores_failed_turn_as_error_event():
         item.event == "message" and not item.data.get("user")
         for item in replay.events
     )
+
+
+def test_replay_preserves_workspace_document_sources():
+    project_id, conversation_id, document_id = (uuid.uuid4() for _ in range(3))
+    conversation = SimpleNamespace(id=conversation_id, project_id=project_id, title="Workspace")
+    anchor = f"⟦src_{str(document_id)[:4]}⟧"
+    source = {
+        "anchor": anchor,
+        "document_id": str(document_id),
+        "chunk_id": None,
+        "filename": "xps.csv",
+    }
+    messages = [
+        SimpleNamespace(role="user", content="这里有什么数据？", extra_metadata={}),
+        SimpleNamespace(
+            role="assistant",
+            content=f"包含 XPS 数据 {anchor}",
+            extra_metadata={"mode": "workspace", "sources": [source]},
+        ),
+    ]
+    replay = replay_conversation(
+        FakeSession(conversation, None, [messages]),
+        project_id,
+        conversation_id,
+    )
+    answer = next(item for item in replay.events if item.event == "message" and not item.data.get("user"))
+    assert answer.data["citations"] == [anchor]
+    assert answer.data["sources"] == [source]

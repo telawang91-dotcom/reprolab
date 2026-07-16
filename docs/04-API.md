@@ -169,7 +169,8 @@ plaintext
 
 ```
 POST /chat                 # 自然语言 → 规划 → 执行 → 返回图/表/结论
-  body: { project_id, conversation_id?, message, dataset_ids?: [] }
+  body: { project_id, conversation_id?, collection_id?, mode?: "analysis"|"workspace",
+          message, dataset_ids?: [] }
   -> SSE 事件流：
      event: context  data: { tools: [{ name, label, status, detail, count, items? }] }
      event: plan     data: { steps: [...] }
@@ -181,6 +182,10 @@ POST /chat                 # 自然语言 → 规划 → 执行 → 返回图/�
      event: error    data: { stage, step?, code, message, retryable, conversation_id? }
      event: done     data: { conversation_id }
   # 多轮迭代：带 conversation_id 继续，如"横坐标改对数"
+  # workspace 模式：collection_id 必填；先读取文件清单、内容检索、数据结构和记忆，
+  # 普通资料问题直接回答，需要计算/清洗/绘图时自动选择当前文件夹内数据进入可信分析。
+  # 文本检索为空不得直接失败；可依据 schema 回答。不可读二进制必须明确能力边界。
+  # 分析执行失败时不得伪造结果，回退为基于文件结构的处理建议并保留运行回执。
 GET /conversations?project_id={id}
   -> [{ id, title, created_at, updated_at, message_count }]
 GET /conversations/{id}?project_id={id}

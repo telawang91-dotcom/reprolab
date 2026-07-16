@@ -6,7 +6,16 @@ import { api, streamChat, type ChatEvent, type CollectionItem, type DocumentDeta
 
 export type AnalysisEvent = ChatEvent & { id: string };
 
-export function useAnalysisSession(collectionId?: string, replayId?: string) {
+type SessionOptions = {
+  mode?: "analysis" | "workspace";
+  autoSelectAll?: boolean;
+  refreshKey?: string | number;
+};
+
+export function useAnalysisSession(collectionId?: string, replayId?: string, options: SessionOptions = {}) {
+  const mode = options.mode ?? "analysis";
+  const autoSelectAll = options.autoSelectAll ?? false;
+  const refreshKey = options.refreshKey;
   const [collections, setCollections] = useState<CollectionItem[]>([]);
   const [datasets, setDatasets] = useState<DocumentDetail[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
@@ -44,16 +53,17 @@ export function useAnalysisSession(collectionId?: string, replayId?: string) {
           setError("当前文件夹不存在或已被删除，请重新选择研究文件夹。");
           return;
         }
-        const docs = await api.documents("other", collectionId);
+        const docs = await api.documents(mode === "workspace" ? undefined : "other", collectionId);
         const details = await Promise.all(docs.map((doc) => api.document(doc.id)));
         if (!live) return;
         const available = details.filter((doc) => doc.dataset_id);
         setDatasets(available);
-        if (available.length === 1 && available[0].dataset_id) setSelected([available[0].dataset_id]);
+        if (autoSelectAll) setSelected(available.flatMap((item) => item.dataset_id ? [item.dataset_id] : []));
+        else if (available.length === 1 && available[0].dataset_id) setSelected([available[0].dataset_id]);
       } catch (reason) { if (live) setError(reason instanceof Error ? reason.message : "数据集加载失败"); }
     })();
     return () => { live = false; abortRef.current?.abort(); };
-  }, [collectionId, replayId]);
+  }, [autoSelectAll, collectionId, mode, refreshKey, replayId]);
 
   const timeline = useMemo(() => reduceAgentTimeline(events), [events]);
   const liveTimeline = useMemo(() => reduceAgentTimeline(liveEvents), [liveEvents]);
@@ -61,14 +71,14 @@ export function useAnalysisSession(collectionId?: string, replayId?: string) {
   const selectedDatasets = useMemo(() => datasets.filter((item) => item.dataset_id && selected.includes(item.dataset_id)), [datasets, selected]);
 
   const send = useCallback(async (text = message) => {
-    if (!text.trim() || running || !selected.length) return;
+    if (!text.trim() || running || (mode === "analysis" && !selected.length)) return;
     setMessage(""); setError(""); setRunning(true);
     const userEvent: AnalysisEvent = { id: crypto.randomUUID(), event: "message", data: { text: text.trim(), citations: [], user: true } };
     setLiveEvents([userEvent]);
     setEvents((items) => [...items, userEvent]);
     const controller = new AbortController(); abortRef.current = controller;
     try {
-      await streamChat({ conversation_id: conversation, message: text.trim(), dataset_ids: selected, skill_id: skill?.id }, (incoming) => {
+      await streamChat({ conversation_id: conversation, collection_id: collectionId, mode, message: text.trim(), dataset_ids: selected, skill_id: skill?.id }, (incoming) => {
         const event = { ...incoming, id: crypto.randomUUID() };
         setEvents((items) => [...items, event]);
         setLiveEvents((items) => [...items, event]);
@@ -80,7 +90,13 @@ export function useAnalysisSession(collectionId?: string, replayId?: string) {
       if ((reason as Error).name !== "AbortError") setError(reason instanceof Error ? `${reason.message} 研究问题已恢复，可直接重新运行。` : "分析失败，研究问题已恢复，可直接重新运行。");
     }
     finally { setRunning(false); abortRef.current = undefined; }
-  }, [conversation, message, running, selected, skill]);
+  }, [collectionId, conversation, message, mode, running, selected, skill]);
+
+  const newConversation = useCallback(() => {
+    abortRef.current?.abort();
+    setEvents([]); setLiveEvents([]); setConversation(undefined); setMessage(""); setError("");
+    setActiveArtifact(undefined); setLineage(undefined); setSkillResult(undefined); setRunning(false);
+  }, []);
 
   const showLineage = async (artifactId: string) => {
     try { setLineage(await api.lineage(artifactId)); }
@@ -124,5 +140,5 @@ export function useAnalysisSession(collectionId?: string, replayId?: string) {
   const toggleDataset = (datasetId: string) => setSelected((items) => items.includes(datasetId) ? items.filter((item) => item !== datasetId) : [...items, datasetId]);
 
   const activeCollection = collections.find((item) => item.id === collectionId);
-  return { collections, activeCollection, datasets, selected, toggleDataset, selectedDatasets, events, timeline, liveTimeline, artifacts, message, setMessage, running, error, setError, conversation, activeArtifact, setActiveArtifact, lineage, setLineage, skill, setSkill, skillRefresh, skillResult, send, stop: () => abortRef.current?.abort(), showLineage, anchorClick, saveAsSkill, applySkill };
+  return { collections, activeCollection, datasets, selected, toggleDataset, selectedDatasets, events, timeline, liveTimeline, artifacts, message, setMessage, running, error, setError, conversation, activeArtifact, setActiveArtifact, lineage, setLineage, skill, setSkill, skillRefresh, skillResult, send, newConversation, stop: () => abortRef.current?.abort(), showLineage, anchorClick, saveAsSkill, applySkill };
 }

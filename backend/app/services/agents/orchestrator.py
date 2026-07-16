@@ -8,7 +8,8 @@ from typing import Any
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.models.knowledge import Artifact, Conversation, Dataset, Message
+from app.core.config import settings
+from app.models.knowledge import Artifact, Collection, Conversation, Dataset, Document, Message
 from app.models.skills import Skill
 from app.schemas.chat import ChatRequest, PlanStep, SSEEvent
 from app.services.agents.runtime import run_agent
@@ -17,6 +18,7 @@ from app.services.agents.verifier import check_numbers
 from app.services.sandbox.runner import run_with_retry
 from app.services.memory.recall import memory_context, recall_memories
 from app.services.skills.store import ensure_builtins
+from app.services.rag.retrieval import complex_retrieve
 
 
 FINAL_ANSWER_SYSTEM_PROMPT = (
@@ -24,6 +26,14 @@ FINAL_ANSWER_SYSTEM_PROMPT = (
     "不得编造数字；所有数字必须紧跟给定产物锚点。输出自然、简洁的 Markdown。"
     "只呈现与问题相关的答案、关键证据和必要的数据限制；不得提及智能体、规划、执行步骤、"
     "Python 代码、工具、stdout、重试或其他内部运行过程。"
+)
+
+WORKSPACE_ANALYSIS_PATTERN = re.compile(
+    r"分析|统计|计算|绘图|画图|可视化|比较|相关|回归|聚类|建模|检验|异常|缺失|清洗|"
+    r"数据质量|怎么处理|如何处理|处理建议|趋势|分布|效应量|置信区间|"
+    r"analy[sz]e|statistics?|calculate|plot|visuali[sz]e|compare|correlation|regression|"
+    r"cluster|model|missing|outlier|clean|distribution|confidence interval",
+    re.IGNORECASE,
 )
 
 
@@ -109,7 +119,13 @@ def _history(db: Session, conversation_id: uuid.UUID) -> list[dict[str, str]]:
 def _dataset_context(db: Session, request: ChatRequest) -> str:
     if not request.dataset_ids:
         return "未选择数据集。若任务需要计算，应在计划中说明。"
-    datasets = list(db.scalars(select(Dataset).where(Dataset.id.in_(request.dataset_ids))))
+    statement = select(Dataset).where(
+        Dataset.project_id == request.project_id,
+        Dataset.id.in_(request.dataset_ids),
+    )
+    if request.collection_id is not None:
+        statement = statement.where(Dataset.collection_id == request.collection_id)
+    datasets = list(db.scalars(statement))
     by_id = {item.id: item for item in datasets}
     missing = [str(item) for item in request.dataset_ids if item not in by_id]
     if missing:
@@ -121,6 +137,223 @@ def _dataset_context(db: Session, request: ChatRequest) -> str:
         ],
         ensure_ascii=False,
     )
+
+
+def _workspace_scope(
+    db: Session, request: ChatRequest
+) -> tuple[list[Document], list[Dataset]]:
+    if request.collection_id is None:
+        raise ValueError("workspace mode requires collection_id")
+    collection = db.get(Collection, request.collection_id)
+    if collection is None or collection.project_id != request.project_id:
+        raise LookupError("collection not found")
+    documents = list(db.scalars(
+        select(Document)
+        .where(
+            Document.project_id == request.project_id,
+            Document.collection_id == request.collection_id,
+        )
+        .order_by(Document.created_at, Document.id)
+    ))
+    datasets = list(db.scalars(
+        select(Dataset)
+        .where(
+            Dataset.project_id == request.project_id,
+            Dataset.collection_id == request.collection_id,
+        )
+        .order_by(Dataset.created_at, Dataset.id)
+    ))
+    return documents, datasets
+
+
+def _workspace_needs_analysis(message: str, datasets: list[Dataset]) -> bool:
+    return bool(datasets and WORKSPACE_ANALYSIS_PATTERN.search(message))
+
+
+def _workspace_manifest(
+    documents: list[Document], datasets: list[Dataset]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    def compact_schema(value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not value:
+            return None
+        columns = value.get("columns") if isinstance(value.get("columns"), list) else []
+        sheets = value.get("sheets") if isinstance(value.get("sheets"), list) else []
+        return {
+            "row_count": value.get("row_count"),
+            "column_count": value.get("column_count"),
+            "columns": columns[:80],
+            "default_sheet": value.get("default_sheet"),
+            "sheets": [
+                {
+                    "name": item.get("name"),
+                    "row_count": item.get("row_count"),
+                    "column_count": item.get("column_count"),
+                }
+                for item in sheets[:20]
+                if isinstance(item, dict)
+            ],
+            "source_format": value.get("source_format"),
+            "truncated": len(columns) > 80 or len(sheets) > 20,
+        }
+
+    datasets_by_hash = {item.storage_hash: item for item in datasets}
+    sources: list[dict[str, Any]] = []
+    manifest: list[dict[str, Any]] = []
+    for document in documents[:100]:
+        anchor = f"⟦src_{str(document.id)[:4]}⟧"
+        dataset = datasets_by_hash.get(document.storage_hash)
+        metadata = document.extra_metadata or {}
+        manifest.append({
+            "anchor": anchor,
+            "filename": document.filename,
+            "type": document.type,
+            "parse_status": metadata.get("parse_status"),
+            "parser": metadata.get("parser"),
+            "dataset_schema": compact_schema(dataset.schema_json) if dataset else None,
+        })
+        sources.append({
+            "anchor": anchor,
+            "document_id": str(document.id),
+            "chunk_id": None,
+            "filename": document.filename,
+        })
+    return manifest, sources
+
+
+async def _run_workspace_answer(
+    db: Session,
+    request: ChatRequest,
+    conversation: Conversation,
+    history: list[dict[str, str]],
+    documents: list[Document],
+    datasets: list[Dataset],
+    adapter: ModelAdapter,
+    record_user: bool = True,
+    limitation: str | None = None,
+) -> AsyncIterator[SSEEvent]:
+    recalled = recall_memories(db, request.project_id, request.message)
+    memories = memory_context(recalled)
+    hits = complex_retrieve(
+        db,
+        request.project_id,
+        request.message,
+        mode="hybrid",
+        k=8,
+        collection_id=request.collection_id,
+    )
+    manifest, manifest_sources = _workspace_manifest(documents, datasets)
+    sources_by_anchor = {item["anchor"]: item for item in manifest_sources}
+    evidence: list[dict[str, Any]] = []
+    for hit in hits:
+        anchor = f"⟦src_{str(hit.document_id)[:4]}⟧"
+        evidence.append({
+            "anchor": anchor,
+            "section": hit.section,
+            "content": hit.content[:3_000],
+        })
+        sources_by_anchor[anchor] = {
+            "anchor": anchor,
+            "document_id": str(hit.document_id),
+            "chunk_id": str(hit.chunk_id),
+            "filename": next(
+                (item.filename for item in documents if item.id == hit.document_id),
+                "",
+            ),
+        }
+    context_tools = [
+        {
+            "name": "file.scope",
+            "label": "读取当前文件夹",
+            "status": "used" if documents else "empty",
+            "detail": f"已读取 {len(documents)} 个文件的类型、状态与可用结构" if documents else "当前文件夹为空",
+            "count": len(documents),
+        },
+        {
+            "name": "knowledge.search",
+            "label": "检索文件内容",
+            "status": "used" if hits else "empty",
+            "detail": f"找到 {len(hits)} 段相关内容" if hits else "没有文本命中，继续使用文件清单与数据结构回答",
+            "count": len(hits),
+        },
+        {
+            "name": "dataset.inspect",
+            "label": "检查数据结构",
+            "status": "used" if datasets else "empty",
+            "detail": "、".join(item.name for item in datasets) if datasets else "没有可查询数据表",
+            "count": len(datasets),
+        },
+        {
+            "name": "memory.search",
+            "label": "检索项目记忆",
+            "status": "used" if recalled else "empty",
+            "detail": f"召回 {len(recalled)} 条有效记忆" if recalled else "没有匹配到可用长期记忆",
+            "count": len(recalled),
+        },
+    ]
+    if record_user:
+        db.add(Message(
+            conversation_id=conversation.id,
+            role="user",
+            content=request.message,
+            extra_metadata={
+                "collection_id": str(request.collection_id),
+                "mode": "workspace",
+                "memory_ids": [str(item.id) for item in recalled],
+                "context_tools": context_tools,
+            },
+        ))
+        db.commit()
+    yield _event("context", {"tools": context_tools})
+    yield _event("thinking", {"text": "正在结合当前文件夹、数据结构与相关内容组织回答。"})
+    response = adapter.chat({
+        "model": settings.agent_model_route["critic"],
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "你是 Codex 风格的科研工作区 Agent。直接解决用户问题，可以使用当前文件夹清单、"
+                    "数据结构、检索证据和已核验记忆。不得声称读取了 parse_status 为 stored 或 needs_attention "
+                    "文件的内部内容；应明确能力边界并给出下一步。引用具体文件事实时紧跟对应 ⟦src_xxxx⟧。"
+                    "没有文本命中不等于失败：可依据数据 schema 回答字段与分析建议，也可说明尚需执行分析。"
+                    "输出自然、简洁的 Markdown，不要暴露隐藏推理。"
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"会话历史：{json.dumps(history[-12:], ensure_ascii=False)}\n"
+                    f"当前问题：{request.message}\n"
+                    f"文件清单与数据结构：{json.dumps(manifest, ensure_ascii=False, default=str)}\n"
+                    f"相关内容：{json.dumps(evidence, ensure_ascii=False)}\n"
+                    f"项目记忆：{memories}\n"
+                    f"执行限制：{limitation or '无'}"
+                ),
+            },
+        ],
+        "tools": [],
+    })
+    final_text = response.content.strip()
+    if not final_text:
+        raise RuntimeError("workspace agent returned an empty answer")
+    used_sources = [item for anchor, item in sources_by_anchor.items() if anchor in final_text]
+    used_anchors = [item["anchor"] for item in used_sources]
+    db.add(Message(
+        conversation_id=conversation.id,
+        role="assistant",
+        content=final_text,
+        extra_metadata={
+            "collection_id": str(request.collection_id),
+            "mode": "workspace",
+            "sources": used_sources,
+        },
+    ))
+    db.commit()
+    yield _event("message", {
+        "text": final_text,
+        "citations": used_anchors,
+        "sources": used_sources,
+    })
+    yield _event("done", {"conversation_id": conversation.id})
 
 
 def _skill_context(db: Session, request: ChatRequest) -> str:
@@ -282,6 +515,18 @@ async def run_chat(
 ) -> AsyncIterator[SSEEvent]:
     conversation = _conversation(db, request)
     history = _history(db, conversation.id)
+    if request.mode == "workspace":
+        documents, scoped_datasets = _workspace_scope(db, request)
+        if not _workspace_needs_analysis(request.message, scoped_datasets):
+            async for item in _run_workspace_answer(
+                db, request, conversation, history, documents, scoped_datasets, adapter
+            ):
+                yield item
+            return
+        if not request.dataset_ids:
+            request = request.model_copy(update={
+                "dataset_ids": [item.id for item in scoped_datasets],
+            })
     recalled = recall_memories(db, request.project_id, request.message)
     memories = memory_context(recalled)
     skill = _skill_context(db, request)
@@ -324,6 +569,8 @@ async def run_chat(
         content=request.message,
         extra_metadata={
             "skill_id": str(request.skill_id) if request.skill_id else None,
+            "collection_id": str(request.collection_id) if request.collection_id else None,
+            "mode": request.mode,
             "memory_ids": [str(item.id) for item in recalled],
             "context_tools": context_tools,
         },
@@ -338,7 +585,7 @@ async def run_chat(
     anchors: list[str] = []
     artifact_events: list[dict[str, Any]] = []
     tool_summaries: list[dict[str, Any]] = []
-    artifact_budget_per_step = max(2, min(4, 8 // len(steps)))
+    artifact_budget_per_step = 4
     for step in steps:
         yield _event("thinking", {"text": step.rationale})
         previous_error: str | None = None
@@ -395,6 +642,22 @@ async def run_chat(
             if attempt == 0:
                 yield _event("thinking", {"text": "执行失败，依据完整报错修正代码后重试。"})
         else:
+            if request.mode == "workspace":
+                documents, scoped_datasets = _workspace_scope(db, request)
+                yield _event("thinking", {"text": "代码执行未完成，正在基于文件结构给出可操作回答。"})
+                async for item in _run_workspace_answer(
+                    db,
+                    request,
+                    conversation,
+                    history,
+                    documents,
+                    scoped_datasets,
+                    adapter,
+                    record_user=False,
+                    limitation="本轮数据代码执行未完成，不得声称已得到计算结果；请基于 schema 说明可确认的信息、处理步骤与重试建议。",
+                ):
+                    yield item
+                return
             failure_message = "分析代码连续两次执行失败，数据和运行记录已保留，可以调整问题后重试。"
             db.add(
                 Message(

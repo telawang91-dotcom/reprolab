@@ -799,6 +799,8 @@ export type ChatEvent = {
 export async function streamChat(
   payload: {
     conversation_id?: string;
+    collection_id?: string;
+    mode?: "analysis" | "workspace";
     message: string;
     dataset_ids: string[];
     skill_id?: string;
