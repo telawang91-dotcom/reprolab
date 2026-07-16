@@ -56,13 +56,20 @@ function AnalysisWorkspace() {
   };
   const activeStep = session.liveTimeline.steps.find((step) => step.status === "working" || step.status === "repairing");
   const examples = useMemo(() => datasetAwareExamples(session.selectedDatasets), [session.selectedDatasets]);
+  const beginNewConversation = () => {
+    session.newConversation();
+    router.replace(collectionId ? `/analysis?collection=${collectionId}` : "/analysis", { scroll: false });
+  };
+  const conversationDeleted = (id: string) => {
+    if (id === session.conversation || id === requestedConversation) beginNewConversation();
+  };
   const requestAnalysis = () => {
     if (session.message.trim() && session.selected.length && !session.running) void session.send();
   };
   return (
     <div className={`grid h-[calc(100dvh-3.5rem)] min-h-0 overflow-hidden bg-canvas ${session.activeCollection ? "xl:grid-cols-[240px_minmax(0,1fr)] 2xl:grid-cols-[240px_minmax(0,1fr)_300px]" : "2xl:grid-cols-[minmax(0,1fr)_300px]"}`}>
       {session.activeCollection && <aside className="material hidden min-h-0 overflow-y-auto overscroll-contain border-r p-4 xl:block">
-        <ConversationList activeId={session.conversation} collectionId={collectionId} refreshKey={session.conversation} />
+        <ConversationList activeId={session.conversation} collectionId={collectionId} refreshKey={session.conversation} onNew={beginNewConversation} onDeleted={conversationDeleted} disabled={session.running} />
         <div className="my-4 border-t" />
         <DataPanel datasets={session.datasets} selected={session.selected} onToggle={session.toggleDataset} skill={session.skill} onSelectSkill={session.setSkill} onApplySkill={session.applySkill} refreshKey={session.skillRefresh} />
       </aside>}
@@ -93,7 +100,7 @@ function AnalysisWorkspace() {
       </main>
       <aside className="material hidden min-h-0 overflow-y-auto overscroll-contain border-l p-4 2xl:block"><ArtifactPanel artifact={session.activeArtifact} total={session.artifacts.length} onLineage={session.showLineage} onSave={session.saveAsSkill} /></aside>
 
-      <Sheet open={dataOpen} onOpenChange={setDataOpen} title="数据、会话与技能" side="bottom"><div className="mx-auto max-w-xl">{session.activeCollection && <><ConversationList activeId={session.conversation} collectionId={collectionId} refreshKey={session.conversation} /><div className="my-5 border-t" /><DataPanel datasets={session.datasets} selected={session.selected} onToggle={session.toggleDataset} skill={session.skill} onSelectSkill={session.setSkill} onApplySkill={session.applySkill} refreshKey={session.skillRefresh} /></>}</div></Sheet>
+      <Sheet open={dataOpen} onOpenChange={setDataOpen} title="数据、会话与技能" side="bottom"><div className="mx-auto max-w-xl">{session.activeCollection && <><ConversationList activeId={session.conversation} collectionId={collectionId} refreshKey={session.conversation} onNew={beginNewConversation} onDeleted={conversationDeleted} disabled={session.running} /><div className="my-5 border-t" /><DataPanel datasets={session.datasets} selected={session.selected} onToggle={session.toggleDataset} skill={session.skill} onSelectSkill={session.setSkill} onApplySkill={session.applySkill} refreshKey={session.skillRefresh} /></>}</div></Sheet>
       <Sheet open={artifactOpen} onOpenChange={setArtifactOpen} title="可信产物" side="right"><ArtifactPanel artifact={session.activeArtifact} total={session.artifacts.length} onLineage={session.showLineage} onSave={session.saveAsSkill} /></Sheet>
       <Sheet open={!!session.lineage} onOpenChange={(open) => { if (!open) session.setLineage(undefined); }} title="完整可信链" side="right"><div className="space-y-2">{session.lineage?.nodes.map((node) => <div key={node.id} className="rounded-apple border p-3"><span className="text-[10px] uppercase text-brand">{node.type}</span><div className="mt-1 truncate text-sm font-semibold">{node.label}</div></div>)}</div></Sheet>
     </div>

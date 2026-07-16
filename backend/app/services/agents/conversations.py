@@ -1,3 +1,4 @@
+import logging
 import uuid
 from collections import defaultdict
 from datetime import datetime
@@ -9,9 +10,15 @@ from sqlalchemy.orm import Session
 from app.models.knowledge import Artifact, Conversation, Message, Run
 from app.schemas.conversations import ConversationEvent, ConversationReplay, ConversationSummary
 
+logger = logging.getLogger(__name__)
 
-def list_conversations(db: Session, project_id: uuid.UUID) -> list[ConversationSummary]:
-    rows = db.execute(
+
+def list_conversations(
+    db: Session,
+    project_id: uuid.UUID,
+    collection_id: uuid.UUID | None = None,
+) -> list[ConversationSummary]:
+    rows = list(db.execute(
         select(
             Conversation,
             func.count(Message.id),
@@ -21,7 +28,22 @@ def list_conversations(db: Session, project_id: uuid.UUID) -> list[ConversationS
         .where(Conversation.project_id == project_id)
         .group_by(Conversation.id)
         .order_by(func.coalesce(func.max(Message.created_at), Conversation.created_at).desc())
-    )
+    ))
+    if collection_id is not None:
+        scoped_ids = {
+            conversation_id
+            for conversation_id, metadata in db.execute(
+                select(Message.conversation_id, Message.extra_metadata)
+                .join(Conversation, Conversation.id == Message.conversation_id)
+                .where(
+                    Conversation.project_id == project_id,
+                    Message.role == "user",
+                )
+            )
+            if isinstance(metadata, dict)
+            and metadata.get("collection_id") == str(collection_id)
+        }
+        rows = [row for row in rows if row[0].id in scoped_ids]
     return [ConversationSummary(
         id=conversation.id,
         title=conversation.title,
@@ -29,6 +51,22 @@ def list_conversations(db: Session, project_id: uuid.UUID) -> list[ConversationS
         updated_at=updated_at,
         message_count=int(message_count),
     ) for conversation, message_count, updated_at in rows]
+
+
+def delete_conversation(
+    db: Session, project_id: uuid.UUID, conversation_id: uuid.UUID
+) -> None:
+    conversation = db.get(Conversation, conversation_id)
+    if conversation is None or conversation.project_id != project_id:
+        raise LookupError("conversation not found")
+    db.delete(conversation)
+    db.commit()
+    from app.services.sandbox.kernel import kernel_registry
+
+    try:
+        kernel_registry.close(conversation_id)
+    except Exception:
+        logger.exception("failed to close deleted conversation kernel", extra={"conversation_id": str(conversation_id)})
 
 
 def _artifact_data(artifact: Artifact) -> dict[str, Any]:

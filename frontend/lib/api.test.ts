@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { readActivities, setActiveProjectId, streamChat } from "./api";
+import { api, readActivities, setActiveProjectId, streamChat } from "./api";
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -38,6 +38,24 @@ async function run() {
   globalThis.fetch = (async () => { throw new DOMException("cancelled", "AbortError"); }) as typeof fetch;
   await assert.rejects(streamChat({ message: "计算均值", dataset_ids: ["d1"] }, () => undefined));
   assert.equal(readActivities()[0].state, "cancelled");
+
+  let requestedUrl = "";
+  let requestedMethod = "";
+  globalThis.fetch = (async (input, init) => {
+    requestedUrl = String(input);
+    requestedMethod = init?.method ?? "GET";
+    return new Response(null, { status: 204 });
+  }) as typeof fetch;
+  await api.deleteConversation("conversation-1");
+  assert.match(requestedUrl, /\/conversations\/conversation-1\?project_id=/);
+  assert.equal(requestedMethod, "DELETE");
+
+  globalThis.fetch = (async (input) => {
+    requestedUrl = String(input);
+    return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  await api.conversations("collection-1");
+  assert.match(requestedUrl, /collection_id=collection-1/);
 }
 
 void run().catch((error) => {

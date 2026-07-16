@@ -445,6 +445,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         `请求失败 (${response.status})`,
     );
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -785,10 +786,12 @@ export const api = {
     }),
   testModel: () =>
     request<ModelTestResult>("/settings/model/test", { method: "POST" }),
-  conversations: () =>
-    request<ConversationSummary[]>(`/conversations?project_id=${activeProjectId()}`),
+  conversations: (collectionId?: string) =>
+    request<ConversationSummary[]>(`/conversations?project_id=${activeProjectId()}${collectionId ? `&collection_id=${collectionId}` : ""}`),
   conversation: (id: string) =>
     request<ConversationReplay>(`/conversations/${id}?project_id=${activeProjectId()}`),
+  deleteConversation: (id: string) =>
+    request<void>(`/conversations/${id}?project_id=${activeProjectId()}`, { method: "DELETE" }),
 };
 
 export type ChatEvent = {

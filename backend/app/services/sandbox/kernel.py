@@ -172,6 +172,12 @@ class KernelRegistry:
                 close_handle(handle)
             self._handles.clear()
 
+    def close(self, conversation_id: uuid.UUID) -> None:
+        with self._lock:
+            handle = self._handles.pop(conversation_id, None)
+            if handle is not None:
+                close_handle(handle)
+
 
 def close_handle(handle: KernelHandle) -> None:
     try:

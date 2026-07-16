@@ -13,6 +13,7 @@ def test_conversation_and_agent_routes_are_published():
     paths = app.openapi()["paths"]
     assert "get" in paths["/api/v1/conversations"]
     assert "get" in paths["/api/v1/conversations/{conversation_id}"]
+    assert "delete" in paths["/api/v1/conversations/{conversation_id}"]
     assert "post" in paths["/api/v1/agent/invoke"]
     assert "post" in paths["/api/v1/agent/jobs"]
     assert "get" in paths["/api/v1/agent/jobs/{job_id}"]

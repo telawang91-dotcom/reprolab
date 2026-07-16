@@ -1,8 +1,9 @@
 import uuid
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from app.models.knowledge import Conversation, Run
-from app.services.agents.conversations import replay_conversation
+from app.services.agents.conversations import delete_conversation, list_conversations, replay_conversation
 
 
 class FakeSession:
@@ -20,6 +21,52 @@ class FakeSession:
 
     def scalars(self, _statement):
         return next(self.scalar_results)
+
+
+class ConversationManagementSession:
+    def __init__(self, conversations, aggregate_rows, scope_rows):
+        self.conversations = {item.id: item for item in conversations}
+        self.results = iter([aggregate_rows, scope_rows])
+        self.deleted = None
+        self.committed = False
+
+    def execute(self, _statement):
+        return next(self.results)
+
+    def get(self, model, item_id):
+        if model is Conversation:
+            return self.conversations.get(item_id)
+        return None
+
+    def delete(self, item):
+        self.deleted = item
+
+    def commit(self):
+        self.committed = True
+
+
+def test_conversation_management_is_collection_scoped_and_deletable(monkeypatch):
+    project_id, collection_a, collection_b = (uuid.uuid4() for _ in range(3))
+    first = SimpleNamespace(id=uuid.uuid4(), project_id=project_id, title="A", created_at=datetime.now(timezone.utc))
+    second = SimpleNamespace(id=uuid.uuid4(), project_id=project_id, title="B", created_at=datetime.now(timezone.utc))
+    rows = [(first, 3, first.created_at), (second, 5, second.created_at)]
+    scopes = [
+        (first.id, {"collection_id": str(collection_a)}),
+        (second.id, {"collection_id": str(collection_b)}),
+    ]
+    db = ConversationManagementSession([first, second], rows, scopes)
+    listed = list_conversations(db, project_id, collection_a)
+    assert [item.id for item in listed] == [first.id]
+
+    closed = []
+    monkeypatch.setattr(
+        "app.services.sandbox.kernel.kernel_registry.close",
+        lambda conversation_id: closed.append(conversation_id),
+    )
+    delete_conversation(db, project_id, first.id)
+    assert db.deleted is first
+    assert db.committed is True
+    assert closed == [first.id]
 
 
 def test_replay_restores_questions_conclusions_and_artifact_titles():
