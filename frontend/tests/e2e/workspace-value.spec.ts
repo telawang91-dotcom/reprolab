@@ -81,11 +81,10 @@ test("Agent 断流后恢复研究问题并提供重试", async ({ page }) => {
   await page.goto("/analysis");
   await expect(page.getByRole("button", { name: "比较“group”各组的“score”差异，报告效应量并绘图" })).toBeVisible();
   const question = "比较各组得分并报告效应量";
-  await page.getByPlaceholder("描述你想分析的问题…").fill(question);
-  await page.getByRole("button", { name: "运行" }).click();
-  await page.getByRole("button", { name: "确认并运行" }).click();
-  await expect(page.getByRole("button", { name: "重新运行" })).toBeVisible();
-  await expect(page.getByPlaceholder("描述你想分析的问题…")).toHaveValue(question);
+  await page.getByPlaceholder("直接提出你的研究问题…").fill(question);
+  await page.getByRole("button", { name: "发送" }).click();
+  await expect(page.getByRole("button", { name: "重新发送" })).toBeVisible();
+  await expect(page.getByPlaceholder("直接提出你的研究问题…")).toHaveValue(question);
 });
 
 test("SkillHub 展示真实契约并防止重复导入", async ({ page }) => {
@@ -115,9 +114,12 @@ test("SkillHub 展示真实契约并防止重复导入", async ({ page }) => {
   await page.route("**/api/v1/skills/hub/community-data-quality/import", (route) => { imported = true; return route.fulfill({ status: 201, json: importedSkill }); });
   await page.goto("/analysis");
   if (page.viewportSize()!.width < 1280) await page.getByRole("button", { name: "数据与技能" }).click();
-  await page.getByRole("button", { name: "SkillHub" }).click();
-  await expect(page.getByRole("dialog", { name: "SkillHub · 可复用分析" })).toBeVisible();
-  await expect(page.getByText("字段契约", { exact: true })).toBeVisible();
+  const skillSurface = page.viewportSize()!.width < 1280 ? page.getByRole("dialog", { name: "数据、会话与技能" }) : page;
+  await expect(skillSurface.getByText("默认由 Agent 根据问题动态规划；技能只是可选工具，不限制学科与分析类型。")).toBeVisible();
+  await expect(skillSurface.getByRole("combobox", { name: "全部领域" })).toHaveCount(0);
+  await skillSurface.getByRole("button", { name: "SkillHub" }).click();
+  await expect(page.getByRole("dialog", { name: "SkillHub · 能力目录" })).toBeVisible();
+  await expect(page.getByText("适用输入", { exact: true })).toBeVisible();
   await expect(page.getByText("质量概览表")).toBeVisible();
   await expect(page.getByText("emit_artifact")).toBeVisible();
   await page.getByRole("button", { name: "导入到项目" }).click();

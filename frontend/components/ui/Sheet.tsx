@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { X } from "lucide-react";
+import { createPortal } from "react-dom";
 
 export function Sheet({
   open,
@@ -18,7 +19,8 @@ export function Sheet({
 }) {
   const reduceMotion = useReducedMotion();
   const initial = reduceMotion ? false : side === "right" ? { x: 36, opacity: 0 } : { y: 36, opacity: 0 };
-  return (
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
@@ -53,6 +55,7 @@ export function Sheet({
           </motion.aside>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

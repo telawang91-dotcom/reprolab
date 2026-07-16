@@ -20,7 +20,8 @@ def test_registry_filters_without_limiting_dynamic_analysis():
 
 def test_builtins_and_skill_contract_are_nonempty():
     assert any(pack.discipline == "general" for pack in BUILTIN_PACKS)
-    assert any(pack.discipline == "materials" for pack in BUILTIN_PACKS)
+    assert all(pack.discipline == "general" for pack in BUILTIN_PACKS)
+    assert all("材料" not in pack.name for pack in BUILTIN_PACKS)
     assert all(pack.code_template and "emit_artifact" in pack.code_template for pack in BUILTIN_PACKS)
     request = SkillCreate(name="自定义", discipline="biology", template="print('ok')")
     assert request.meta is None

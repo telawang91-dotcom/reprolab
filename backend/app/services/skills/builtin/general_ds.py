@@ -36,10 +36,13 @@ else:
 
 GENERAL_DATA_SCIENCE = SkillPack(
     id=uuid.UUID("10000000-0000-5000-8000-000000000001"),
-    name="通用描述统计与组间检验",
+    name="数据概览与初步探索",
     discipline="general",
     tools=("pandas", "scipy", "matplotlib", "emit_artifact"),
-    prompt_template="按用户问题选择数值列和分组列，完成描述统计、组间检验与箱线图；模板仅供参考，可动态调整。",
+    prompt_template=(
+        "根据用户问题和真实数据结构动态检查规模、类型、缺失、分布与候选关系；"
+        "模板只提供初始探索路径，Agent 可按任务改写代码、统计方法和输出形式。"
+    ),
     renderer="table+boxplot",
     code_template=GENERAL_CODE,
 )
