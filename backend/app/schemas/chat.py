@@ -25,6 +25,10 @@ class PlanEvent(StrictModel):
     steps: list[PlanStep]
 
 
+class ContextEvent(StrictModel):
+    tools: list[dict[str, Any]]
+
+
 class ThinkingEvent(StrictModel):
     text: str
 
@@ -59,5 +63,5 @@ class DoneEvent(StrictModel):
 
 
 class SSEEvent(StrictModel):
-    event: Literal["plan", "thinking", "code", "run", "artifact", "message", "error", "done"]
+    event: Literal["context", "plan", "thinking", "code", "run", "artifact", "message", "error", "done"]
     data: dict[str, Any]

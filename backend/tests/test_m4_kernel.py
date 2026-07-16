@@ -3,7 +3,8 @@ import uuid
 import pytest
 
 from app.core.config import settings
-from app.services.sandbox.kernel import execute_code, kernel_registry
+from app.services.sandbox.kernel import CapturedOutput, ExecResult, execute_code, kernel_registry
+from app.services.sandbox.runner import _enforce_artifact_budget
 
 
 @pytest.fixture(autouse=True)
@@ -115,3 +116,15 @@ def test_text_and_dataframe_artifacts_are_normalized():
     assert result.artifacts[0].value == "field meaning"
     assert result.artifacts[1].value["columns"] == ["species", "count"]
     assert result.artifacts[1].value["data"] == [["Adelie", 1]]
+
+
+def test_artifact_budget_rejects_noisy_runs_before_persistence():
+    execution = ExecResult(
+        status="success",
+        stdout="computed",
+        artifacts=[CapturedOutput(kind="number", mime_type="application/json", value=index) for index in range(5)],
+    )
+    limited = _enforce_artifact_budget(execution, 4)
+    assert limited.status == "error"
+    assert limited.artifacts == []
+    assert "produced 5, maximum 4" in limited.stdout

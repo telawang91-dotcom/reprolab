@@ -147,9 +147,10 @@ stateDiagram-v2
 2. 复用会话时验证 `project_id`；
 3. 按时间读取 Message 历史；
 4. 校验 Dataset 并读取名称与 schema，不把完整数据直接塞入提示；
-5. 新会话按项目召回长期记忆；
+5. 每一轮都按当前问题在项目内召回长期记忆，并过滤超过 180 天或重要度低于 0.2 的记录；
 6. 校验技能属于全局内置或当前项目；
-7. 保存用户消息后进入规划。
+7. 将数据范围、`memory.search` 和记忆命中、技能选择保存为可回放的工具回执；
+8. 保存用户消息后进入规划。
 
 ### 4.2 步骤执行与代码修复
 
@@ -165,7 +166,9 @@ Agent 编排调用沙箱时设置 `max_retries=0`，避免用相同错误代码�
 
 ### 4.3 最终结论
 
-全部步骤成功后，Critic 基于真实 `tool_summaries` 生成结论。只有本次运行实际产生且确实出现在文本中的锚点才进入 `citations`。
+全部步骤成功后，Critic 基于真实 `tool_summaries` 生成结论；每个摘要项显式包含步骤内 Artifact 的标题、账本值与锚点，不只提供 stdout。只有本次运行实际产生且确实出现在文本中的锚点才进入 `citations`。Critic 文本在保存前强制执行 `check_numbers`：裸数字、锚点不存在、血缘不完整或正文值与 Artifact 值不一致，任一情况都会丢弃模型文字，并用账本中的标量值、标题和精确锚点生成确定性安全摘要；确定性摘要仍未通过数字核查则整轮失败。中文文字可以紧邻数字（如“样本量为4”），数字提取器不得因 Unicode 单词边界漏检。
+
+单轮最多规划 3 个互不重复的 Python 步骤，总产物预算按步骤数收紧到 4–8 个；Planner 不得把“总结结论”作为执行步骤，同一指标不得重复计算。沙箱产物超过预算时触发代码修复，而不是把大量低价值卡片推给用户。
 
 ## 5. SSE 事件协议
 
@@ -173,6 +176,7 @@ Agent 编排调用沙箱时设置 `max_retries=0`，避免用相同错误代码�
 
 | 事件 | 数据 | 前端表现 |
 | --- | --- | --- |
+| `context` | `tools[]` | 数据、记忆与技能调用回执；只显示动作摘要，不暴露隐藏推理 |
 | `plan` | `steps[]` | 真实执行计划 |
 | `thinking` | `text` | 步骤理由或修复提示 |
 | `code` | `code`, `lang` | Python 代码块 |
@@ -239,9 +243,9 @@ code_hash  = SHA256(code + lang + input_hash + env_hash)
 
 ## 10. 会话与记忆
 
-Message 包含 `user`、`tool` 和 `assistant` 三种角色。工具消息保存 stdout、run ID 与状态；助手消息保存最终结论、计划、run IDs 和 artifact IDs。
+Message 包含 `user`、`tool` 和 `assistant` 三种角色。用户消息元数据保存本轮 context tools 与实际命中的 memory IDs；工具消息保存 stdout、run ID 与状态；助手消息保存最终结论、计划、run IDs 和 artifact IDs。历史回放会恢复 `context` 事件，因此连续追问与重新打开会话时都能审计记忆是否被调用。
 
-收到 `done` 后由 BackgroundTasks 执行会话反思：先确定性写入 episodic 摘要，再由 Critic 抽取 semantic/skill 候选；最多处理 12 条，全部写入当前项目。反思失败不影响主分析结果。
+收到 `done` 后由 BackgroundTasks 执行会话反思：先确定性写入 episodic 摘要，再由 Critic 抽取 semantic/skill 候选；最多处理 12 条，全部写入当前项目并标记来源。语义记忆按向量相似度去重，用户可在记忆页查看可召回状态并明确删除；反思失败不影响主分析结果。
 
 ## 11. 项目隔离与安全边界
 

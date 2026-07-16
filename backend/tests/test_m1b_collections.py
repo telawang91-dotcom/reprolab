@@ -59,6 +59,8 @@ def test_batch_rejects_zip_traversal_and_unsupported_upload():
         batch_ingest.prepare_files([("bad.zip", _zip({"../escape.pdf": b"x"}))])
     with pytest.raises(ValueError, match="no supported files"):
         batch_ingest.prepare_files([("bad.exe", b"x")])
+    with pytest.raises(ValueError, match="unsafe zip entry or upload path"):
+        batch_ingest.prepare_files([("../outside.md", b"x")])
 
 
 def test_batch_job_records_partial_success(monkeypatch):

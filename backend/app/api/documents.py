@@ -34,6 +34,8 @@ def upload_document(
     raw = file.file.read()
     if not raw:
         raise HTTPException(status_code=422, detail="uploaded file is empty")
+    if len(raw) > batch_ingest.MAX_EXPANDED_BYTES:
+        raise HTTPException(status_code=422, detail="file size exceeds 100 MB")
     try:
         result = ingest_service.ingest(
             db, file.filename or "upload", raw, project_id, type, collection_id
@@ -49,6 +51,7 @@ def upload_document(
         chunks_count=result.chunks_count,
         dataset_id=result.dataset_id,
         collection_id=collection_id,
+        duplicate=result.duplicate,
     )
 
 

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 MemoryLayer = Literal["episodic", "semantic", "skill"]
 
@@ -27,6 +27,29 @@ class MemoryOut(StrictModel):
     tags: list[str]
     importance: float
     written_at: datetime
+
+    @computed_field(return_type=bool)
+    @property
+    def recallable(self) -> bool:
+        current = datetime.now(self.written_at.tzinfo) if self.written_at.tzinfo else datetime.now()
+        age_days = max(0.0, (current - self.written_at).total_seconds() / 86400)
+        return age_days <= 180 and self.importance >= 0.2
+
+    @computed_field(return_type=str)
+    @property
+    def source(self) -> str:
+        if "manual" in self.tags:
+            return "manual"
+        if "conversation" in self.tags:
+            return "conversation"
+        if "reflection" in self.tags:
+            return "reflection"
+        return "agent"
+
+
+class MemoryDeleteResponse(StrictModel):
+    id: uuid.UUID
+    deleted: bool
 
 
 class MemoryQuery(StrictModel):

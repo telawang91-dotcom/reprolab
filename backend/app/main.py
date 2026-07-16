@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+import time
+import uuid
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -21,8 +23,10 @@ from app.api.settings import router as settings_router
 from app.api.projects import router as projects_router
 from app.api.workbench import router as workbench_router
 from app.api.conversations import router as conversations_router
+from app.api.datasets import router as datasets_router
 from app.core.db import ProjectArchivedError, SessionLocal
 from app.core.config import settings
+from app.core.telemetry import record_request
 from app.services.rag.embedder import start_preheat
 from app.services.sandbox.kernel import kernel_registry
 from app.services.skills.store import ensure_builtins
@@ -55,6 +59,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_observability(request: Request, call_next):
+    supplied = request.headers.get("x-request-id", "").strip()
+    request_id = supplied[:64] if supplied and all(ch.isalnum() or ch in "-_." for ch in supplied) else uuid.uuid4().hex[:16]
+    request.state.request_id = request_id
+    started = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - started) * 1000
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", "__unmatched__")
+    record_request(request.method, route_path, response.status_code, duration_ms)
+    response.headers["X-Request-ID"] = request_id
+    response.headers["Server-Timing"] = f'app;dur={duration_ms:.2f}'
+    return response
 app.include_router(documents_router, prefix=settings.api_prefix)
 app.include_router(collections_router, prefix=settings.api_prefix)
 app.include_router(search_router, prefix=settings.api_prefix)
@@ -71,6 +91,7 @@ app.include_router(settings_router, prefix=settings.api_prefix)
 app.include_router(projects_router, prefix=settings.api_prefix)
 app.include_router(workbench_router, prefix=settings.api_prefix)
 app.include_router(conversations_router, prefix=settings.api_prefix)
+app.include_router(datasets_router, prefix=settings.api_prefix)
 
 
 @app.exception_handler(HTTPException)

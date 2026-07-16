@@ -29,9 +29,25 @@ export type TimelineStep = {
   status: "pending" | "working" | "repairing" | "success";
 };
 export type AgentConclusion = { text: string; citations: string[]; question?: string };
-export type AgentTimeline = { steps: TimelineStep[]; questions: string[]; conclusion?: AgentConclusion; conclusions: AgentConclusion[]; activeStepId?: string };
+export type AgentToolReceipt = {
+  name: string;
+  label: string;
+  status: "used" | "empty";
+  detail: string;
+  count: number;
+  items?: { id: string; content: string; layer: string }[];
+};
+export type AgentContext = { id: string; tools: AgentToolReceipt[] };
+export type AgentTimeline = {
+  steps: TimelineStep[];
+  questions: string[];
+  contexts: AgentContext[];
+  conclusion?: AgentConclusion;
+  conclusions: AgentConclusion[];
+  activeStepId?: string;
+};
 
-const emptyTimeline = (): AgentTimeline => ({ steps: [], questions: [], conclusions: [] });
+const emptyTimeline = (): AgentTimeline => ({ steps: [], questions: [], contexts: [], conclusions: [] });
 const id = (prefix: string, index: number) => `${prefix}-${index + 1}`;
 const text = (value: unknown) => typeof value === "string" ? value : "";
 
@@ -48,11 +64,36 @@ function currentIndex(state: AgentTimeline, advance = false) {
 }
 
 function withCurrent(state: AgentTimeline, update: (step: TimelineStep) => TimelineStep, advance = false) {
-  let steps = [...state.steps];
+  const steps = [...state.steps];
   let index = currentIndex(state, advance);
   if (index < 0) { steps.push(implicitStep(state)); index = steps.length - 1; }
   steps[index] = update(steps[index]);
   return { ...state, steps, activeStepId: steps[index].id };
+}
+
+function contextFrom(event: ChatEvent, state: AgentTimeline): AgentTimeline {
+  const raw: unknown[] = Array.isArray(event.data.tools) ? event.data.tools : [];
+  const tools = raw.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const record = item as Record<string, unknown>;
+    const name = text(record.name);
+    const label = text(record.label);
+    if (!name || !label) return [];
+    const rawItems = Array.isArray(record.items) ? record.items : [];
+    return [{
+      name,
+      label,
+      status: record.status === "used" ? "used" as const : "empty" as const,
+      detail: text(record.detail),
+      count: typeof record.count === "number" ? record.count : 0,
+      items: rawItems.flatMap((entry) => entry && typeof entry === "object" ? [{
+        id: text((entry as Record<string, unknown>).id),
+        content: text((entry as Record<string, unknown>).content),
+        layer: text((entry as Record<string, unknown>).layer),
+      }] : []),
+    }];
+  });
+  return tools.length ? { ...state, contexts: [...state.contexts, { id: `context-${state.contexts.length + 1}`, tools }] } : state;
 }
 
 export function reduceAgentTimeline(events: readonly ChatEvent[] | null | undefined): AgentTimeline {
@@ -63,11 +104,15 @@ export function reduceAgentTimeline(events: readonly ChatEvent[] | null | undefi
         const question = text(event.data.text);
         return question ? { ...state, questions: [...state.questions, question] } : state;
       }
+      if (event.event === "context") return contextFrom(event, state);
       if (event.event === "plan") {
         const raw: unknown[] = Array.isArray(event.data.steps) ? event.data.steps : [];
         if (!raw.length) return state;
         const offset = state.steps.length;
-        const next = raw.map((step, index) => { const record = step && typeof step === "object" ? step as Record<string, unknown> : undefined; return { id: id("step", offset + index), title: typeof step === "string" ? step : text(record?.title) || `步骤 ${offset + index + 1}`, rationale: text(record?.rationale) || undefined, notes: [], attempts: [], status: "pending" as const }; });
+        const next = raw.map((step, index) => {
+          const record = step && typeof step === "object" ? step as Record<string, unknown> : undefined;
+          return { id: id("step", offset + index), title: typeof step === "string" ? step : text(record?.title) || `步骤 ${offset + index + 1}`, rationale: text(record?.rationale) || undefined, notes: [], attempts: [], status: "pending" as const };
+        });
         return { ...state, activeStepId: next[0]?.id, steps: [...state.steps, ...next] };
       }
       if (event.event === "thinking") return withCurrent(state, (step) => {
@@ -96,7 +141,10 @@ export function reduceAgentTimeline(events: readonly ChatEvent[] | null | undefi
         attempts[last] = { ...attempts[last], artifacts: [...attempts[last].artifacts, event.data as TimelineArtifact] };
         return { ...step, attempts };
       });
-      if (event.event === "message" && !event.data.user) { const conclusion = { text: text(event.data.text), citations: Array.isArray(event.data.citations) ? (event.data.citations as unknown[]).filter((item): item is string => typeof item === "string") : [], question: state.questions.at(-1) }; return { ...state, conclusion, conclusions: [...state.conclusions, conclusion] }; }
+      if (event.event === "message" && !event.data.user) {
+        const conclusion = { text: text(event.data.text), citations: Array.isArray(event.data.citations) ? (event.data.citations as unknown[]).filter((item): item is string => typeof item === "string") : [], question: state.questions.at(-1) };
+        return { ...state, conclusion, conclusions: [...state.conclusions, conclusion] };
+      }
       return state;
     }, emptyTimeline());
   } catch {

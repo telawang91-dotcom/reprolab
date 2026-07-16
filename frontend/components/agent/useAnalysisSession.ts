@@ -75,7 +75,10 @@ export function useAnalysisSession(collectionId?: string, replayId?: string) {
         if (incoming.event === "artifact") setActiveArtifact(incoming.data as TimelineArtifact);
         if (incoming.event === "done" || incoming.event === "error") setConversation(incoming.data.conversation_id);
       }, controller.signal);
-    } catch (reason) { if ((reason as Error).name !== "AbortError") setError(reason instanceof Error ? reason.message : "分析失败"); }
+    } catch (reason) {
+      setMessage(text.trim());
+      if ((reason as Error).name !== "AbortError") setError(reason instanceof Error ? `${reason.message} 研究问题已恢复，可直接重新运行。` : "分析失败，研究问题已恢复，可直接重新运行。");
+    }
     finally { setRunning(false); abortRef.current = undefined; }
   }, [conversation, message, running, selected, skill]);
 
@@ -87,13 +90,16 @@ export function useAnalysisSession(collectionId?: string, replayId?: string) {
     const artifact = artifacts.find((item) => item.anchor?.toLowerCase() === anchor.toLowerCase());
     if (artifact) { setActiveArtifact(artifact); void showLineage(artifact.artifact_id); }
   };
-  const saveAsSkill = async (artifact: TimelineArtifact) => {
-    const name = window.prompt("技能名称", `${artifact.kind} 分析技能`);
-    if (!name?.trim()) return;
-    const intent = window.prompt("这个技能解决什么问题？", "分组分布对比+检验");
-    if (!intent?.trim()) return;
-    try { const created = await api.harvestSkill(artifact.artifact_id, name.trim(), intent.trim()); setSkill(created); setSkillRefresh((value) => value + 1); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "技能保存失败"); }
+  const saveAsSkill = async (artifact: TimelineArtifact, name: string, intent: string, discipline: string) => {
+    try {
+      const created = await api.harvestSkill(artifact.artifact_id, name.trim(), intent.trim(), discipline);
+      setSkill(created);
+      setSkillRefresh((value) => value + 1);
+      setSkillResult({ saved: 0, fallback: false, reason: `“${created.name}”已从真实运行沉淀，并自动设为当前技能。` });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "技能保存失败");
+      throw reason;
+    }
   };
   const applySkill = async (item: SkillItem) => {
     if (!selected.length) { setError("请先选择要应用技能的新数据集"); return; }

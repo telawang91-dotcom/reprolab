@@ -170,6 +170,8 @@ def test_m1_real_ingest_contract(client: TestClient, project_id: uuid.UUID):
     assert (settings.storage_dir / csv_detail["storage_hash"]).is_file()
     duplicate = upload(client, project_id, "measurements-copy.csv", csv_raw)
     assert duplicate["storage_hash"] == csv_detail["storage_hash"]
+    assert duplicate["duplicate"] is True
+    assert duplicate["id"] == csv["id"]
 
     notebook = json.dumps({
         "nbformat": 4, "nbformat_minor": 5, "metadata": {},
@@ -289,6 +291,19 @@ def test_m4_m5_real_ledger_match_and_drift(client: TestClient, project_id: uuid.
     assert {node["type"] for node in lineage.json()["nodes"]}.issuperset({"dataset", "run", "artifact"})
     report = client.get(f"/api/v1/runs/{run['run_id']}/report", params={"project_id": str(project_id)})
     assert report.status_code == 200 and report.json()["artifacts"] and report.json()["datasets"]
+    bundle = client.get(f"/api/v1/runs/{run['run_id']}/bundle", params={"project_id": str(project_id)})
+    assert bundle.status_code == 200 and bundle.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(bundle.content)) as archive:
+        names = set(archive.namelist())
+        assert {"analysis.py", "run-report.json", "manifest.json", "bundle-audit.json"}.issubset(names)
+        assert json.loads(archive.read("bundle-audit.json"))["passed"] is True
+        manifest = json.loads(archive.read("manifest.json"))
+        for name, expected_hash in manifest["files"].items():
+            assert hashlib.sha256(archive.read(name)).hexdigest() == expected_hash
+    quality = client.get(f"/api/v1/projects/{project_id}/quality-report")
+    assert quality.status_code == 200
+    provenance = next(item for item in quality.json()["metrics"] if item["key"] == "provenance")
+    assert provenance["value"] >= 1 and provenance["ratio"] == 1
     comparison = client.get(f"/api/v1/runs/{run['run_id']}/compare", params={
         "project_id": str(project_id), "other_run_id": run["run_id"],
     })
@@ -747,11 +762,10 @@ def test_platform_real_headless_endpoint_aggregates_lineage_and_verification(cli
                 return ModelResponse(content='{"steps":[{"title":"计算均值","rationale":"使用真实数据"}]}')
             if "执行器" in system:
                 return ModelResponse(content=(
-                    "import pandas as pd\n"
-                    "df = pd.read_csv(DATASET_PATHS[0])\n"
+                    "df = load_dataset(0)\n"
                     "emit_artifact('number', float(df['value'].mean()), title='headless mean', tol=1e-9)"
                 ))
-            if "审阅者" in system:
+            if "面向用户的科研分析回答者" in system:
                 with SessionLocal() as lookup:
                     artifact = lookup.scalar(select(Artifact).where(
                         Artifact.project_id == project_id,

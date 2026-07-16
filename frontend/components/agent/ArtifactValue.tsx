@@ -1,4 +1,5 @@
 import type { TimelineArtifact } from "@/lib/agentTimeline";
+import { unwrapArtifactValue } from "@/lib/artifactValue";
 
 export function artifactKindLabel(kind: string) {
   const labels: Record<string, string> = {
@@ -13,9 +14,9 @@ export function artifactKindLabel(kind: string) {
 }
 
 function payloadOf(artifact: TimelineArtifact) {
-  const value = artifact.value_json;
+  const value = unwrapArtifactValue(artifact.value_json);
   if (!value || typeof value !== "object" || Array.isArray(value)) return value;
-  if (artifact.kind === "table" && "data" in value) return value.data;
+  if (artifact.kind === "table" && "data" in value) return value;
   if (["number", "coefficient"].includes(artifact.kind) && "value" in value) return value.value;
   if (["text", "conclusion"].includes(artifact.kind) && "text" in value) return value.text;
   return value;

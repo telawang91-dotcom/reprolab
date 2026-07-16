@@ -11,6 +11,8 @@ from app.services.agents.orchestrator import (
     _code,
     _generate_code,
     _json_object,
+    _trusted_artifact_summary,
+    _validate_generated_code,
 )
 from app.services.agents.runtime import run_agent
 
@@ -28,6 +30,13 @@ class ScriptedAdapter:
 def test_run_agent_returns_model_content_through_adapter():
     adapter = ScriptedAdapter([ModelResponse(content="done")])
     assert run_agent("role", "task", adapter=adapter) == "done"
+
+
+def test_agent_context_event_supports_visible_tool_receipts():
+    event = SSEEvent(event="context", data={"tools": [{
+        "name": "memory.search", "status": "used", "count": 1,
+    }]})
+    assert event.event == "context" and event.data["tools"][0]["count"] == 1
 
 
 def test_run_agent_executes_normalized_tools_and_routes_roles():
@@ -171,3 +180,38 @@ def test_artifact_evidence_includes_value_and_limits_prompt_size():
     assert evidence["title"] == "数据内容概述"
     assert "企鹅观测数据" in evidence["value_json"]
     assert evidence["value_json"].endswith("…")
+
+
+def test_executor_code_policy_protects_injected_paths_and_artifact_protocol():
+    _validate_generated_code(
+        "df=load_dataset(0)\nemit_artifact('number', float(df.shape[0]), 'rows')",
+        datasets_selected=True,
+    )
+    with pytest.raises(ValueError, match="cannot be reassigned"):
+        _validate_generated_code("DATASET_PATHS=['local.csv']\nprint(DATASET_PATHS[0])", True)
+    with pytest.raises(ValueError, match="kind must be"):
+        _validate_generated_code("x=DATASET_PATHS[0]\nemit_artifact('scalar', 1)", True)
+    with pytest.raises(ValueError, match="must be read"):
+        _validate_generated_code("print('no data')", True)
+    with pytest.raises(ValueError, match="trusted artifact"):
+        _validate_generated_code("x=load_dataset(0)\nprint(x)", True)
+
+
+def test_critic_fallback_uses_only_real_artifacts_and_exact_anchors():
+    text = _trusted_artifact_summary([
+        {"kind": "number", "title": "平均值", "value_json": 3.5, "anchor": "⟦art_ab12⟧"},
+        {"kind": "figure", "title": "分组图", "value_json": {"x": [1]}, "anchor": "⟦art_cd34⟧"},
+    ])
+    assert "3.5 ⟦art_ab12⟧" in text
+    assert "分组图” ⟦art_cd34⟧" in text
+    assert "{'x'" not in text
+
+
+def test_critic_fallback_unwraps_ledger_scalars_and_removes_exact_duplicates():
+    text = _trusted_artifact_summary([
+        {"kind": "number", "title": "样本量", "value_json": {"value": 4, "mime_type": "application/json"}, "anchor": "⟦art_a111⟧"},
+        {"kind": "number", "title": "样本量", "value_json": {"value": 4, "mime_type": "application/json"}, "anchor": "⟦art_b222⟧"},
+        {"kind": "conclusion", "title": "模型草稿", "value_json": {"text": "可能错误的 3"}, "anchor": "⟦art_c333⟧"},
+    ])
+    assert text.count("样本量：4") == 1
+    assert "可能错误" not in text

@@ -1,5 +1,6 @@
 import uuid
 from collections.abc import Iterable
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -7,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.models.knowledge import Artifact, Chunk, Claim, Conversation, Dataset, Document, Edge, EnvSnapshot, Project, Run
 from app.schemas.workbench import (
     ArtifactChange, ArtifactListResponse, ArtifactSummary, EvidenceExcerpt, EvidenceResponse, ReportArtifact, ReviewCounts,
-    ReviewResponse, RunCompare, RunReport, TimelineItem, TimelineResponse,
+    ProjectQualityReport, QualityMetric, ReviewResponse, RunCompare, RunReport, TimelineItem, TimelineResponse,
 )
 
 
@@ -87,6 +88,71 @@ def project_artifacts(db: Session, project_id: uuid.UUID, limit: int = 50) -> Ar
             source_complete=source_complete, run_status=run.status if run else None,
         ))
     return ArtifactListResponse(items=items)
+
+
+def project_quality_report(db: Session, project_id: uuid.UUID) -> ProjectQualityReport:
+    _project(db, project_id)
+    count = lambda model, *where: db.scalar(select(func.count()).select_from(model).where(*where)) or 0
+    documents = count(Document, Document.project_id == project_id)
+    searchable_documents = db.scalar(
+        select(func.count(func.distinct(Document.id)))
+        .select_from(Document)
+        .join(Chunk, Chunk.document_id == Document.id)
+        .where(Document.project_id == project_id)
+    ) or 0
+    datasets = count(Dataset, Dataset.project_id == project_id)
+    successful = count(Run, Run.project_id == project_id, Run.status == "success")
+    failed = count(Run, Run.project_id == project_id, Run.status == "error")
+    artifacts = list(db.scalars(select(Artifact).where(Artifact.project_id == project_id)))
+    complete = 0
+    for artifact in artifacts:
+        run = db.get(Run, artifact.run_id) if artifact.run_id else None
+        produced = bool(run and db.scalar(select(Edge.id).where(
+            Edge.from_type == "run", Edge.from_id == run.id,
+            Edge.to_type == "artifact", Edge.to_id == artifact.id,
+            Edge.relation == "produces",
+        ).limit(1)))
+        reads = bool(run and db.scalar(select(Edge.id).where(
+            Edge.from_type == "dataset", Edge.to_type == "run",
+            Edge.to_id == run.id, Edge.relation == "reads",
+        ).limit(1)))
+        if run and run.status == "success" and produced and (reads or not run.input_hashes):
+            complete += 1
+    verified = count(Claim, Claim.project_id == project_id, Claim.status == "verified")
+    flagged = count(Claim, Claim.project_id == project_id, Claim.status == "flagged")
+    claims = count(Claim, Claim.project_id == project_id)
+
+    run_total = successful + failed
+    run_ratio = successful / run_total if run_total else None
+    provenance_ratio = complete / len(artifacts) if artifacts else None
+    verification_ratio = verified / claims if claims else None
+    metrics = [
+        QualityMetric(key="datasets", title="可分析数据集", value=datasets, state="ready" if datasets else "block", evidence="项目内真实 Dataset 数量"),
+        QualityMetric(key="searchable_documents", title="可检索证据文档", value=searchable_documents, total=documents, ratio=searchable_documents / documents if documents else None, state="ready" if searchable_documents else "warn", evidence="至少含一个文本切块的项目文档"),
+        QualityMetric(key="run_success", title="分析运行成功率", value=successful, total=run_total, ratio=run_ratio, state="ready" if successful and failed == 0 else ("warn" if successful else "block"), evidence="项目内成功/全部运行"),
+        QualityMetric(key="provenance", title="完整血缘覆盖率", value=complete, total=len(artifacts), ratio=provenance_ratio, state="ready" if artifacts and complete == len(artifacts) else "block", evidence="成功 Run、reads 与 produces 边均完整的 Artifact"),
+        QualityMetric(key="verification", title="可信结论通过率", value=verified, total=claims, ratio=verification_ratio, state="ready" if verified and flagged == 0 else ("warn" if claims == 0 else "block"), evidence="verified Claim / 全部 Claim"),
+    ]
+    blockers = []
+    if not datasets: blockers.append("还没有真实可分析数据集。")
+    if not successful: blockers.append("还没有成功的动态分析运行。")
+    if not artifacts: blockers.append("还没有可展示的分析产物。")
+    elif complete != len(artifacts): blockers.append(f"有 {len(artifacts) - complete} 个产物缺少完整 Dataset → Run → Artifact 血缘。")
+    if not verified: blockers.append("还没有通过三查的可信结论。")
+    if flagged: blockers.append(f"仍有 {flagged} 条结论处于 flagged 状态。")
+    next_actions = []
+    if not datasets: next_actions.append("进入知识空间上传 CSV/XLSX。")
+    if datasets and not successful: next_actions.append("进入分析页选择数据并运行一个未预设问题。")
+    if successful and not verified: next_actions.append("从成果箱进入写作，运行检查并修复后保存结论。")
+    if artifacts and complete == len(artifacts): next_actions.append("从任一产物打开溯源页并执行一次复现。")
+    return ProjectQualityReport(
+        project_id=project_id,
+        generated_at=datetime.now(timezone.utc),
+        ready_for_demo=not blockers,
+        metrics=metrics,
+        blockers=blockers,
+        next_actions=next_actions,
+    )
 
 
 def run_report(db: Session, project_id: uuid.UUID, run_id: uuid.UUID) -> RunReport:

@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 
 import fitz
@@ -46,6 +47,33 @@ def test_csv_parser_accepts_common_gb18030_encoding():
     assert parsed.dataset_schema["columns"][0]["name"] == "姓名"
 
 
+def test_tsv_and_multi_sheet_excel_expose_complete_dataset_structure():
+    tsv = parser.parse("measurements.tsv", b"sample\tvalue\nA\t1\nB\t2\n")
+    assert tsv.dataset_schema["row_count"] == 2
+    assert [item["name"] for item in tsv.dataset_schema["columns"]] == ["sample", "value"]
+
+    stream = io.BytesIO()
+    with pd.ExcelWriter(stream, engine="openpyxl") as writer:
+        pd.DataFrame({"sample": ["A", "B"], "value": [1, 2]}).to_excel(
+            writer, sheet_name="raw", index=False
+        )
+        pd.DataFrame({"metric": ["mean"], "value": [1.5]}).to_excel(
+            writer, sheet_name="summary", index=False
+        )
+    workbook = parser.parse("study.xlsx", stream.getvalue())
+    assert workbook.dataset_schema["default_sheet"] == "raw"
+    assert [item["name"] for item in workbook.dataset_schema["sheets"]] == ["raw", "summary"]
+
+
+def test_scanned_pdf_is_not_reported_as_successful_text_ingest():
+    document = fitz.open()
+    document.new_page()
+    raw = document.tobytes()
+    document.close()
+    with pytest.raises(ValueError, match="OCR"):
+        parser.parse("scan.pdf", raw)
+
+
 def test_notebook_and_markdown_are_chunked():
     notebook = {
         "nbformat": 4,
@@ -61,6 +89,12 @@ def test_notebook_and_markdown_are_chunked():
     assert "```python" in parsed_notebook.text
     assert chunker.split(parsed_notebook)
     assert len(chunker.split(parsed_markdown)) >= 2
+
+
+def test_plain_text_accepts_gb18030_and_rejects_empty_content():
+    assert "实验记录" in parser.parse("notes.md", "实验记录".encode("gb18030")).text
+    with pytest.raises(ValueError, match="没有可索引"):
+        parser.parse("empty.txt", b" \n")
 
 
 def test_three_page_pdf_extracts_text_and_positions():

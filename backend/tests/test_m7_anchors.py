@@ -16,3 +16,8 @@ def test_scientific_notation_and_leading_decimal_are_supported():
     assert [item.value for item in numbers] == [0.01, -0.0012]
     assert all(item.anchor is not None for item in numbers)
 
+
+def test_chinese_text_can_touch_a_bound_number_without_hiding_it():
+    numbers = extract_numbers("样本量为4 ⟦art_abcd⟧，均值为3.0 ⟦art_1234⟧。")
+    assert [item.value for item in numbers] == [4.0, 3.0]
+    assert [item.anchor.raw for item in numbers if item.anchor] == ["⟦art_abcd⟧", "⟦art_1234⟧"]

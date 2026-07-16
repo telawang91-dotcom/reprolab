@@ -1,0 +1,12 @@
+{
+  "project_id": "替换为隔离评测项目UUID",
+  "cases": [
+    {
+      "name": "示例：方法关键词",
+      "query": "替换为有明确答案的查询",
+      "mode": "hybrid",
+      "k": 5,
+      "expected_document_ids": ["替换为真实文档UUID"]
+    }
+  ]
+}

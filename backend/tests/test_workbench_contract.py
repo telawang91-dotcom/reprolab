@@ -5,8 +5,10 @@ def test_workbench_and_project_scoped_read_routes_are_exposed():
     paths = app.openapi()["paths"]
     assert "/api/v1/projects/{project_id}/timeline" in paths
     assert "/api/v1/projects/{project_id}/review" in paths
+    assert "/api/v1/projects/{project_id}/quality-report" in paths
     assert "/api/v1/projects/{project_id}/artifacts" in paths
     assert "/api/v1/runs/{run_id}/report" in paths
+    assert "/api/v1/runs/{run_id}/bundle" in paths
     assert "/api/v1/runs/{run_id}/compare" in paths
     assert "/api/v1/documents/{document_id}/evidence" in paths
     detail_parameters = paths["/api/v1/documents/{document_id}"]["get"]["parameters"]

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Database, FileQuestion, FolderOpen } from "lucide-react";
+import { ArrowRight, Database, FileQuestion, FolderInput, FolderOpen } from "lucide-react";
 import Link from "next/link";
 
 import { useWorkspaceScope } from "@/components/workspace/WorkspaceScope";
@@ -35,7 +35,7 @@ export default function Home() {
         </div>
       ) : (
         <section className="grid min-h-[calc(100vh-10rem)] place-items-center text-center">
-          <div className="max-w-lg"><span className="mx-auto grid h-14 w-14 place-items-center rounded-apple bg-brand/10 text-brand"><FolderOpen size={24} /></span><h1 className="mt-6 text-3xl font-semibold tracking-[-.04em]">从一个研究文件夹开始。</h1><p className="mt-4 text-[15px] leading-7 text-muted">导入文件夹后，左栏会持续保留当前范围。工作台、资料问答和数据分析不再各自重复选择。</p><Link href="/knowledge" className="btn-primary mt-7"><FolderOpen size={15} />导入文件夹</Link>{scope.unfiledCount > 0 && <button onClick={scope.openManager} className="mt-5 block w-full text-sm text-muted hover:text-brand">已有 {scope.unfiledCount} 份未归档资料，打开资料管理 →</button>}</div>
+          {scope.unfiledCount > 0 ? <div className="max-w-lg"><span className="mx-auto grid h-14 w-14 place-items-center rounded-apple bg-status-warn/10 text-status-warn"><FolderInput size={24} /></span><p className="mt-6 text-xs font-semibold uppercase tracking-[.12em] text-status-warn">还有一步即可开始</p><h1 className="mt-2 text-3xl font-semibold tracking-[-.04em]">让现有资料成为可分析的研究范围。</h1><p className="mt-4 text-[15px] leading-7 text-muted">检测到 {scope.unfiledCount} 份尚未归档的真实资料。将它们放入研究文件夹后，问答、Agent 分析和成果都会自动限定在同一范围。</p><button onClick={() => scope.openManager({ selectUnfiled: true })} className="btn-primary mt-7"><FolderInput size={15} />整理这 {scope.unfiledCount} 份资料</button><Link href="/knowledge" className="mt-5 block text-sm text-muted hover:text-brand">继续导入新文件 →</Link></div> : <div className="max-w-lg"><span className="mx-auto grid h-14 w-14 place-items-center rounded-apple bg-brand/10 text-brand"><FolderOpen size={24} /></span><h1 className="mt-6 text-3xl font-semibold tracking-[-.04em]">从一个研究文件夹开始。</h1><p className="mt-4 text-[15px] leading-7 text-muted">导入文件夹后，左栏会持续保留当前范围。工作台、资料问答和数据分析不再各自重复选择。</p><Link href="/knowledge" className="btn-primary mt-7"><FolderOpen size={15} />导入文件夹</Link></div>}
         </section>
       )}
     </main>

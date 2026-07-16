@@ -70,6 +70,9 @@ def replay_conversation(
             events.append(ConversationEvent(event="message", data={
                 "text": message.content or "", "citations": [], "user": True,
             }))
+            context_tools = (message.extra_metadata or {}).get("context_tools") or []
+            if context_tools:
+                events.append(ConversationEvent(event="context", data={"tools": context_tools}))
             continue
         if message.role != "assistant":
             continue

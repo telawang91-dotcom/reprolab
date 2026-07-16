@@ -9,7 +9,7 @@ from app.core.db import SessionLocal
 from app.schemas.documents import BatchStatus
 from app.services.rag.ingest import ingest
 
-SUPPORTED_SUFFIXES = {".pdf", ".csv", ".xlsx", ".py", ".ipynb", ".md", ".txt"}
+SUPPORTED_SUFFIXES = {".pdf", ".csv", ".tsv", ".xlsx", ".py", ".ipynb", ".md", ".txt"}
 MAX_FILES = 100
 MAX_EXPANDED_BYTES = 100 * 1024 * 1024
 
@@ -24,11 +24,11 @@ _jobs: dict[uuid.UUID, dict] = {}
 _lock = threading.Lock()
 
 
-def _safe_zip_name(name: str) -> str:
+def safe_upload_name(name: str) -> str:
     normalized = name.replace("\\", "/")
     path = PurePosixPath(normalized)
     if path.is_absolute() or ".." in path.parts or not path.name:
-        raise ValueError(f"unsafe zip entry: {name}")
+        raise ValueError(f"unsafe zip entry or upload path: {name}")
     return normalized
 
 
@@ -47,7 +47,7 @@ def prepare_files(files: list[tuple[str, bytes]]) -> list[PreparedFile]:
                 for info in archive.infolist():
                     if info.is_dir():
                         continue
-                    safe_name = _safe_zip_name(info.filename)
+                    safe_name = safe_upload_name(info.filename)
                     if info.flag_bits & 0x1:
                         raise ValueError(f"encrypted zip entry is not supported: {safe_name}")
                     if PurePosixPath(safe_name).suffix.lower() not in SUPPORTED_SUFFIXES:
@@ -57,6 +57,7 @@ def prepare_files(files: list[tuple[str, bytes]]) -> list[PreparedFile]:
                         raise ValueError("batch expanded size exceeds 100 MB")
                     prepared.append(PreparedFile(safe_name, archive.read(info)))
         else:
+            filename = safe_upload_name(filename)
             suffix = PurePosixPath(filename).suffix.lower()
             if suffix not in SUPPORTED_SUFFIXES:
                 continue
@@ -87,7 +88,7 @@ def create_job(
         "failed": 0,
         "items": [
             {"filename": item.filename, "status": "queued", "document_id": None,
-             "dataset_id": None, "error": None}
+             "dataset_id": None, "duplicate": False, "error": None}
             for item in files
         ],
     }
@@ -119,6 +120,7 @@ def process_job(
                     "status": "success",
                     "document_id": result.document_id,
                     "dataset_id": result.dataset_id,
+                    "duplicate": bool(getattr(result, "duplicate", False)),
                 })
                 _jobs[batch_id]["completed"] += 1
         except Exception as exc:

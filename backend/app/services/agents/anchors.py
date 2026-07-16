@@ -2,7 +2,9 @@ import re
 from dataclasses import dataclass
 
 ANCHOR_PATTERN = re.compile(r"⟦(?P<kind>art|src)_(?P<code>[0-9a-fA-F]{4})⟧")
-NUMBER_PATTERN = re.compile(r"(?<![\w.])[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?(?![\w.])")
+NUMBER_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_.])[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?(?![A-Za-z0-9_.])"
+)
 BOUND_NUMBER_PATTERN = re.compile(
     r"(?P<number>[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)\s*(?P<anchor>⟦art_[0-9a-fA-F]{4}⟧)"
 )
@@ -57,4 +59,3 @@ def extract_numbers(text: str) -> list[NumberRef]:
             continue
         results.append(NumberRef(float(match.group()), match.group(), span[0], span[1], bound.get(span)))
     return results
-

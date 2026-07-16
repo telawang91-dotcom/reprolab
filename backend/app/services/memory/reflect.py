@@ -78,6 +78,11 @@ def reflect_conversation(
     except (RuntimeError, ValueError, json.JSONDecodeError):
         return written
     for candidate in candidates[:12]:
+        candidate_tags = candidate.get("tags") if isinstance(candidate, dict) else None
+        if isinstance(candidate_tags, list):
+            candidate["tags"] = sorted({str(item) for item in candidate_tags} | {"reflection"})
+        elif isinstance(candidate, dict):
+            candidate["tags"] = ["reflection"]
         try:
             request = MemoryCreate(project_id=conversation.project_id, **candidate)
         except (ValidationError, TypeError):

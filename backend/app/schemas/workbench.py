@@ -97,3 +97,22 @@ class RunCompare(BaseModel):
     input_changed: bool
     environment_changed: bool
     artifact_changes: list[ArtifactChange]
+
+
+class QualityMetric(BaseModel):
+    key: str
+    title: str
+    value: int
+    total: int | None = None
+    ratio: float | None = None
+    state: Literal["ready", "warn", "block"]
+    evidence: str
+
+
+class ProjectQualityReport(BaseModel):
+    project_id: uuid.UUID
+    generated_at: datetime
+    ready_for_demo: bool
+    metrics: list[QualityMetric]
+    blockers: list[str]
+    next_actions: list[str]
