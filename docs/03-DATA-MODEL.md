@@ -164,7 +164,7 @@ CREATE TABLE env_snapshots (
 CREATE TABLE runs (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id       UUID REFERENCES projects(id),
-  conversation_id  UUID REFERENCES conversations(id),
+  conversation_id  UUID REFERENCES conversations(id) ON DELETE SET NULL,
   code             TEXT NOT NULL,
   lang             TEXT NOT NULL DEFAULT 'python',
   env_snapshot_id  UUID REFERENCES env_snapshots(id),

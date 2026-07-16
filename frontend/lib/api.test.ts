@@ -28,6 +28,11 @@ async function run() {
   assert.deepEqual(events, ["done"]);
   assert.equal(readActivities()[0].state, "success");
 
+  globalThis.fetch = (async () => sse("event: message\ndata: {\"text\":\"完成\"}\n\nevent: done\ndata: {\"conversation_id\":\"c2\"}")) as typeof fetch;
+  const finalFrameEvents: string[] = [];
+  await streamChat({ message: "分析数据", dataset_ids: ["d1"] }, (event) => finalFrameEvents.push(event.event));
+  assert.deepEqual(finalFrameEvents, ["message", "done"]);
+
   globalThis.fetch = (async () => sse("event: thinking\ndata: {\"text\":\"处理中\"}\n\n")) as typeof fetch;
   await assert.rejects(
     streamChat({ message: "计算均值", dataset_ids: ["d1"] }, () => undefined),

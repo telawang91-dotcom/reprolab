@@ -31,7 +31,7 @@ from app.services.rag.embedder import start_preheat
 from app.services.sandbox.kernel import kernel_registry
 from app.services.skills.store import ensure_builtins
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 
 @asynccontextmanager
@@ -108,6 +108,17 @@ async def validation_exception(_: Request, exc: RequestValidationError) -> JSONR
     return JSONResponse(
         status_code=422,
         content={"error": {"code": "validation_error", "message": str(exc)}},
+    )
+
+
+@app.exception_handler(IntegrityError)
+async def database_conflict_exception(_: Request, __: IntegrityError) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={"error": {
+            "code": "database_conflict",
+            "message": "操作与现有可信记录冲突，请刷新后重试。",
+        }},
     )
 
 

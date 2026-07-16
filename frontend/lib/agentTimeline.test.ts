@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import type { ChatEvent } from "./api";
-import { reduceAgentTimeline } from "./agentTimeline";
+import { reduceAgentTimeline, terminalConversationMessage } from "./agentTimeline";
 
 const event = (name: ChatEvent["event"], data: Record<string, unknown>): ChatEvent => ({ event: name, data });
 
@@ -52,5 +52,14 @@ const event = (name: ChatEvent["event"], data: Record<string, unknown>): ChatEve
   ]);
   assert.equal(result.conclusion?.status, "partial");
 }
+{
+  const fallback = terminalConversationMessage("连接中断");
+  const result = reduceAgentTimeline([
+    event("message", { text: "问题", user: true }),
+    fallback,
+  ]);
+  assert.equal(result.conclusion?.status, "partial");
+  assert.match(result.conclusion?.text ?? "", /连接中断/);
+}
 
-console.log("agentTimeline: 7 cases passed");
+console.log("agentTimeline: 8 cases passed");

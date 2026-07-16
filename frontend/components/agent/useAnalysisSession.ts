@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { reduceAgentTimeline, type TimelineArtifact } from "@/lib/agentTimeline";
+import { reduceAgentTimeline, terminalConversationMessage, type TimelineArtifact } from "@/lib/agentTimeline";
 import { api, streamChat, type ChatEvent, type CollectionItem, type DocumentDetail, type Lineage, type SkillItem } from "@/lib/api";
 
 export type AnalysisEvent = ChatEvent & { id: string };
@@ -31,10 +31,12 @@ export function useAnalysisSession(collectionId?: string, replayId?: string, opt
   const [skillRefresh, setSkillRefresh] = useState(0);
   const [skillResult, setSkillResult] = useState<{ saved: number; fallback: boolean; reason: string }>();
   const abortRef = useRef<AbortController>();
+  const loadedReplayRef = useRef<string>();
 
   useEffect(() => {
     let live = true;
     abortRef.current?.abort();
+    loadedReplayRef.current = undefined;
     setDatasets([]); setSelected([]); setEvents([]); setLiveEvents([]); setConversation(undefined);
     setActiveArtifact(undefined); setLineage(undefined); setSkillResult(undefined); setError("");
     void (async () => {
@@ -42,12 +44,6 @@ export function useAnalysisSession(collectionId?: string, replayId?: string, opt
         const scopes = await api.collections();
         if (!live) return;
         setCollections(scopes);
-        if (replayId) {
-          const replay = await api.conversation(replayId);
-          if (!live) return;
-          setEvents(replay.events.map((event) => ({ ...event, id: crypto.randomUUID() })));
-          setConversation(replay.id);
-        }
         if (!collectionId) return;
         if (!scopes.some((item) => item.id === collectionId)) {
           setError("当前文件夹不存在或已被删除，请重新选择研究文件夹。");
@@ -63,7 +59,31 @@ export function useAnalysisSession(collectionId?: string, replayId?: string, opt
       } catch (reason) { if (live) setError(reason instanceof Error ? reason.message : "数据集加载失败"); }
     })();
     return () => { live = false; abortRef.current?.abort(); };
-  }, [autoSelectAll, collectionId, mode, refreshKey, replayId]);
+  }, [autoSelectAll, collectionId, mode, refreshKey]);
+
+  useEffect(() => {
+    const replayKey = replayId ? `${collectionId ?? ""}:${replayId}` : undefined;
+    if (replayKey && loadedReplayRef.current === replayKey) return;
+    let live = true;
+    abortRef.current?.abort();
+    setEvents([]); setLiveEvents([]); setConversation(undefined); setMessage(""); setError("");
+    setActiveArtifact(undefined); setLineage(undefined); setSkillResult(undefined); setRunning(false);
+    if (!replayId) {
+      loadedReplayRef.current = undefined;
+      return () => { live = false; };
+    }
+    void api.conversation(replayId)
+      .then((replay) => {
+        if (!live) return;
+        setEvents(replay.events.map((event) => ({ ...event, id: crypto.randomUUID() })));
+        setConversation(replay.id);
+        loadedReplayRef.current = replayKey;
+      })
+      .catch((reason) => {
+        if (live) setError(reason instanceof Error ? reason.message : "会话加载失败");
+      });
+    return () => { live = false; };
+  }, [collectionId, replayId]);
 
   const timeline = useMemo(() => reduceAgentTimeline(events), [events]);
   const liveTimeline = useMemo(() => reduceAgentTimeline(liveEvents), [liveEvents]);
@@ -77,23 +97,42 @@ export function useAnalysisSession(collectionId?: string, replayId?: string, opt
     setLiveEvents([userEvent]);
     setEvents((items) => [...items, userEvent]);
     const controller = new AbortController(); abortRef.current = controller;
+    let receivedAnswer = false;
     try {
       await streamChat({ conversation_id: conversation, collection_id: collectionId, mode, message: text.trim(), dataset_ids: selected, skill_id: skill?.id }, (incoming) => {
         const event = { ...incoming, id: crypto.randomUUID() };
         setEvents((items) => [...items, event]);
         setLiveEvents((items) => [...items, event]);
+        if (incoming.event === "message" && !incoming.data.user && typeof incoming.data.text === "string" && incoming.data.text.trim()) receivedAnswer = true;
         if (incoming.event === "artifact") setActiveArtifact(incoming.data as TimelineArtifact);
-        if (incoming.event === "done" || incoming.event === "error") setConversation(incoming.data.conversation_id);
+        if ((incoming.event === "done" || incoming.event === "error") && typeof incoming.data.conversation_id === "string") {
+          setConversation(incoming.data.conversation_id);
+          loadedReplayRef.current = `${collectionId ?? ""}:${incoming.data.conversation_id}`;
+        }
       }, controller.signal);
+      if (!receivedAnswer) {
+        const fallback = { ...terminalConversationMessage("服务已结束处理，但没有返回可展示的回答。"), id: crypto.randomUUID() };
+        setEvents((items) => [...items, fallback]);
+        setLiveEvents((items) => [...items, fallback]);
+        setMessage(text.trim());
+      }
     } catch (reason) {
       setMessage(text.trim());
-      if ((reason as Error).name !== "AbortError") setError(reason instanceof Error ? `${reason.message} 研究问题已恢复，可直接重新运行。` : "分析失败，研究问题已恢复，可直接重新运行。");
+      const stopped = (reason as Error).name === "AbortError";
+      if (!receivedAnswer) {
+        const messageText = reason instanceof Error ? reason.message : "分析服务暂时不可用。";
+        const fallback = { ...terminalConversationMessage(messageText, stopped), id: crypto.randomUUID() };
+        setEvents((items) => [...items, fallback]);
+        setLiveEvents((items) => [...items, fallback]);
+      }
+      if (!stopped) setError(reason instanceof Error ? `${reason.message} 研究问题已恢复，可直接重新运行。` : "分析失败，研究问题已恢复，可直接重新运行。");
     }
     finally { setRunning(false); abortRef.current = undefined; }
   }, [collectionId, conversation, message, mode, running, selected, skill]);
 
   const newConversation = useCallback(() => {
     abortRef.current?.abort();
+    loadedReplayRef.current = undefined;
     setEvents([]); setLiveEvents([]); setConversation(undefined); setMessage(""); setError("");
     setActiveArtifact(undefined); setLineage(undefined); setSkillResult(undefined); setRunning(false);
   }, []);

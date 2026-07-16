@@ -26,11 +26,13 @@ class FakeSession:
 class ConversationManagementSession:
     def __init__(self, conversations, aggregate_rows, scope_rows):
         self.conversations = {item.id: item for item in conversations}
-        self.results = iter([aggregate_rows, scope_rows])
+        self.results = iter([aggregate_rows, scope_rows, []])
         self.deleted = None
         self.committed = False
+        self.executed = []
 
-    def execute(self, _statement):
+    def execute(self, statement):
+        self.executed.append(statement)
         return next(self.results)
 
     def get(self, model, item_id):
@@ -66,6 +68,8 @@ def test_conversation_management_is_collection_scoped_and_deletable(monkeypatch)
     delete_conversation(db, project_id, first.id)
     assert db.deleted is first
     assert db.committed is True
+    assert len(db.executed) == 3
+    assert "UPDATE runs SET conversation_id" in str(db.executed[-1])
     assert closed == [first.id]
 
 

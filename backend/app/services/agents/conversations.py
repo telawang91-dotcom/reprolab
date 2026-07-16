@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.models.knowledge import Artifact, Conversation, Message, Run
@@ -59,6 +59,13 @@ def delete_conversation(
     conversation = db.get(Conversation, conversation_id)
     if conversation is None or conversation.project_id != project_id:
         raise LookupError("conversation not found")
+    # Conversation is presentation/history state. Immutable runs and their
+    # artifacts remain in the provenance ledger after the chat is removed.
+    db.execute(
+        update(Run)
+        .where(Run.conversation_id == conversation_id)
+        .values(conversation_id=None)
+    )
     db.delete(conversation)
     db.commit()
     from app.services.sandbox.kernel import kernel_registry

@@ -98,7 +98,9 @@ class Run(Base):
     __table_args__ = (CheckConstraint("status IN ('success','error')", name="ck_runs_status"),)
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id"))
-    conversation_id: Mapped[uuid.UUID | None]
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True
+    )
     code: Mapped[str] = mapped_column(Text)
     lang: Mapped[str] = mapped_column(Text, default="python")
     env_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("env_snapshots.id"))

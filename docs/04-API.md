@@ -193,7 +193,8 @@ GET /conversations/{id}?project_id={id}
   -> { id, title, events: [{ event, data }] }
 DELETE /conversations/{id}?project_id={id}
   -> 204
-  # 删除会话仅删除消息与会话入口；可信 Run、Artifact 和血缘账本继续保留。
+  # 删除会话仅删除消息与会话入口；可信 Run、Artifact 和血缘账本继续保留，
+  # Run.conversation_id 自动置空，历史账本不得因外键冲突阻塞删除。
 
 历史列表可按研究文件夹过滤。历史回放事件复用 POST /chat 的 SSE event/data schema；只从已持久化的 Message、Run、Artifact 还原，不新增第二套事件模型。
   # 已创建的 Run 和 Conversation 均保留，可带 conversation_id 重试；历史失败也回放为 partial 报告。
@@ -434,6 +435,8 @@ GET /settings/metrics
 语义查询向量按原始查询缓存，混合检索的 CrossEncoder 分数按“查询 + 完整候选文本序列”缓存；只有输入完全一致时复用，不跳过项目/文件夹 SQL 作用域，也不改变 BM25、pgvector、RRF 或 reranker 排序。RRF 默认取前 12 个候选进入 CrossEncoder（`RERANK_LIMIT` 可在 5–50 内配置），避免 CPU 环境对 30 个长文本逐一重排造成不可接受的首问延迟；召回仍使用 BM25 与 pgvector 各 50 个候选。文档入库的批量 embedding 不走查询缓存。
 
 前端不得把网络异常原样显示为 `Failed to fetch`。它应调用本接口展示受影响能力、下一步操作和设置入口；接口只检查本机配置与依赖可达性，不主动发送模型请求或泄露密钥。
+
+数据库连接错误返回 `503 database_unavailable`；已连接数据库内的约束冲突返回 `409 database_conflict`，不得把约束冲突误报为“数据库未启动”。流式聊天即使在 `done` 前断开或未产生非空 `message`，前端也必须保留问题、呈现 `partial` 恢复卡并允许直接重发。
 
 ### 模块 × 接口映射（Codex 按此最小加载）
 

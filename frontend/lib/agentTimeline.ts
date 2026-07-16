@@ -56,6 +56,19 @@ const emptyTimeline = (): AgentTimeline => ({ steps: [], questions: [], contexts
 const id = (prefix: string, index: number) => `${prefix}-${index + 1}`;
 const text = (value: unknown) => typeof value === "string" ? value : "";
 
+export function terminalConversationMessage(reason: string, stopped = false): ChatEvent {
+  return {
+    event: "message",
+    data: {
+      status: "partial",
+      citations: [],
+      text: stopped
+        ? "## 回答已停止\n\n本次回答已按你的操作停止。问题已恢复到输入框，可修改后重新发送。"
+        : `## 暂未完成回答\n\n本次没有形成完整回复。${reason}\n\n问题已恢复到输入框，可以直接重新发送。`,
+    },
+  };
+}
+
 function implicitStep(state: AgentTimeline): TimelineStep {
   return { id: id("step", state.steps.length), title: `执行步骤 ${state.steps.length + 1}`, implicit: true, notes: [], attempts: [], status: "pending" };
 }

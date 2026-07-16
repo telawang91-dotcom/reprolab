@@ -831,35 +831,38 @@ export async function streamChat(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    const emitFrame = (frame: string) => {
+      let name = "";
+      let data = "";
+      for (const line of frame.split("\n")) {
+        if (line.startsWith("event:")) name = line.slice(6).trim();
+        if (line.startsWith("data:")) data += line.slice(5).trim();
+      }
+      if (!name || !data) return;
+      const event: ChatEvent = {
+        event: name as ChatEvent["event"],
+        data: JSON.parse(data),
+      };
+      if (event.event === "done") completed = true;
+      onEvent(event);
+      if (event.event === "error") {
+        throw new Error(
+          typeof event.data.message === "string"
+            ? event.data.message
+            : "分析执行失败，请稍后重试。",
+        );
+      }
+    };
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
       const frames = buffer.split("\n\n");
       buffer = frames.pop() ?? "";
-      for (const frame of frames) {
-        let name = "";
-        let data = "";
-        for (const line of frame.split("\n")) {
-          if (line.startsWith("event:")) name = line.slice(6).trim();
-          if (line.startsWith("data:")) data += line.slice(5).trim();
-        }
-        if (name && data) {
-          const event: ChatEvent = {
-            event: name as ChatEvent["event"],
-            data: JSON.parse(data),
-          };
-          if (event.event === "done") completed = true;
-          onEvent(event);
-          if (event.event === "error")
-            throw new Error(
-              typeof event.data.message === "string"
-                ? event.data.message
-                : "分析执行失败，请稍后重试。",
-            );
-        }
-      }
+      frames.forEach(emitFrame);
     }
+    buffer += decoder.decode();
+    if (buffer.trim()) emitFrame(buffer);
     if (!completed) {
       throw new Error("分析连接在完成前中断。已生成的中间状态仍保留，请重试或查看服务运行状态。");
     }
