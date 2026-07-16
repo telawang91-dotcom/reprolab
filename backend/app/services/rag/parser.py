@@ -103,7 +103,7 @@ def _paired_series_frame(raw: bytes, encoding: str, separator: str) -> pd.DataFr
         return None
 
     seen: dict[str, int] = {}
-    series: list[dict[str, str]] = []
+    series: list[dict[str, Any]] = []
     columns: list[str] = []
     for label in label_row:
         seen[label] = seen.get(label, 0) + 1
@@ -118,6 +118,16 @@ def _paired_series_frame(raw: bytes, encoding: str, separator: str) -> pd.DataFr
         for row in data_rows
     ]
     frame = pd.DataFrame(values, columns=columns)
+    for item in series:
+        axis, intensity = str(item["axis"]), str(item["intensity"])
+        paired_valid = frame[[axis, intensity]].notna().all(axis=1)
+        item["valid_point_count"] = int(paired_valid.sum())
+        if paired_valid.any():
+            first = int(paired_valid[paired_valid].index[0])
+            last = int(paired_valid[paired_valid].index[-1])
+            item["internal_gap_count"] = int((~paired_valid.loc[first:last]).sum())
+        else:
+            item["internal_gap_count"] = 0
     frame.attrs["reprolab_schema"] = {
         "source_format": "paired_series_csv",
         "header_rows": data_start,

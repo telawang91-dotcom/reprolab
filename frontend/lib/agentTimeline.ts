@@ -28,7 +28,12 @@ export type TimelineStep = {
   attempts: TimelineAttempt[];
   status: "pending" | "working" | "repairing" | "success";
 };
-export type AgentConclusion = { text: string; citations: string[]; question?: string };
+export type AgentConclusion = {
+  text: string;
+  citations: string[];
+  question?: string;
+  status: "complete" | "partial";
+};
 export type AgentToolReceipt = {
   name: string;
   label: string;
@@ -142,7 +147,12 @@ export function reduceAgentTimeline(events: readonly ChatEvent[] | null | undefi
         return { ...step, attempts };
       });
       if (event.event === "message" && !event.data.user) {
-        const conclusion = { text: text(event.data.text), citations: Array.isArray(event.data.citations) ? (event.data.citations as unknown[]).filter((item): item is string => typeof item === "string") : [], question: state.questions.at(-1) };
+        const conclusion = {
+          text: text(event.data.text),
+          citations: Array.isArray(event.data.citations) ? (event.data.citations as unknown[]).filter((item): item is string => typeof item === "string") : [],
+          question: state.questions.at(-1),
+          status: event.data.status === "partial" ? "partial" as const : "complete" as const,
+        };
         return { ...state, conclusion, conclusions: [...state.conclusions, conclusion] };
       }
       return state;

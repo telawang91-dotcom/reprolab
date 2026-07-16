@@ -64,7 +64,7 @@ def test_replay_restores_questions_conclusions_and_artifact_titles():
     assert any(item.event == "message" and not item.data.get("user") for item in replay.events)
 
 
-def test_replay_restores_failed_turn_as_error_event():
+def test_replay_restores_failed_turn_as_partial_report():
     project_id, conversation_id, run_id = (uuid.uuid4() for _ in range(3))
     conversation = SimpleNamespace(id=conversation_id, project_id=project_id, title="Failed")
     run = SimpleNamespace(
@@ -92,13 +92,13 @@ def test_replay_restores_failed_turn_as_error_event():
         project_id,
         conversation_id,
     )
-    errors = [item for item in replay.events if item.event == "error"]
-    assert len(errors) == 1
-    assert errors[0].data["code"] == "analysis_execution_failed"
-    assert not any(
-        item.event == "message" and not item.data.get("user")
-        for item in replay.events
+    assert not any(item.event == "error" for item in replay.events)
+    answer = next(
+        item for item in replay.events
+        if item.event == "message" and not item.data.get("user")
     )
+    assert answer.data["status"] == "partial"
+    assert "本次分析未完成" in answer.data["text"]
 
 
 def test_replay_preserves_workspace_document_sources():

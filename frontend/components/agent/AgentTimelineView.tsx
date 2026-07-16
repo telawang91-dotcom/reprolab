@@ -72,8 +72,13 @@ export function AgentTimelineView({
   const answeredQuestions = new Set(conclusions.map((item) => item.question).filter(Boolean));
   const unansweredQuestion = timeline.questions.findLast((item) => !answeredQuestions.has(item));
   const processTimeline = running ? liveTimeline : timeline;
-  const showProcess = running || conclusions.length === 0;
   const context = liveTimeline.contexts.at(-1) ?? timeline.contexts.at(-1);
+  const process = <section className="space-y-4" aria-label="分析过程">
+    <PlanTracker steps={processTimeline.steps} />
+    <AnimatePresence initial={false}>
+      {processTimeline.steps.map((step, index) => <StepBlock key={step.id} step={step} index={index} onArtifact={onArtifact} />)}
+    </AnimatePresence>
+  </section>;
 
   return (
     <div className="space-y-4">
@@ -81,19 +86,17 @@ export function AgentTimelineView({
       {conclusions.map((conclusion, index) => (
         <motion.div key={`${index}-${conclusion.text.slice(0, 24)}`} initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={agentSpring} className="space-y-3">
           {conclusion.question && <UserQuestion text={conclusion.question} />}
-          <ConclusionCard text={conclusion.text} onAnchor={onAnchor} />
+          <ConclusionCard text={conclusion.text} status={conclusion.status} onAnchor={onAnchor} />
         </motion.div>
       ))}
       {running && currentQuestion && !answeredQuestions.has(currentQuestion) && <UserQuestion text={currentQuestion} />}
       {!running && unansweredQuestion && <UserQuestion text={unansweredQuestion} />}
-      {showProcess && (
-        <section className="space-y-4" aria-label="当前分析过程">
-          <PlanTracker steps={processTimeline.steps} />
-          <AnimatePresence initial={false}>
-            {processTimeline.steps.map((step, index) => <StepBlock key={step.id} step={step} index={index} onArtifact={onArtifact} />)}
-          </AnimatePresence>
-        </section>
-      )}
+      {running && process}
+      {!running && conclusions.length === 0 && process}
+      {!running && conclusions.length > 0 && processTimeline.steps.length > 0 && <details className="group rounded-appleLg border bg-surface/70">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-muted">查看分析过程与技术详情</summary>
+        <div className="border-t p-4">{process}</div>
+      </details>}
     </div>
   );
 }

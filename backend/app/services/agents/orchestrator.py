@@ -24,7 +24,8 @@ from app.services.rag.retrieval import complex_retrieve
 FINAL_ANSWER_SYSTEM_PROMPT = (
     "你是面向用户的科研分析回答者。必须直接回答用户当前提出的问题，只依据真实执行结果，"
     "不得编造数字；所有数字必须紧跟给定产物锚点。输出自然、简洁的 Markdown。"
-    "只呈现与问题相关的答案、关键证据和必要的数据限制；不得提及智能体、规划、执行步骤、"
+    "以分析报告形式优先给出直接结论，再给关键发现、处理建议与必要限制。"
+    "只呈现与问题相关的答案和证据；不得提及智能体、规划、执行步骤、"
     "Python 代码、工具、stdout、重试或其他内部运行过程。"
 )
 
@@ -77,6 +78,11 @@ def _validate_generated_code(code: str, datasets_selected: bool) -> None:
             uses_dataset_paths = True
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "load_dataset":
             uses_dataset_loader = True
+            if len(node.args) > 1 or node.keywords:
+                raise ValueError(
+                    "load_dataset accepts only one optional positional dataset index; "
+                    "parser options are managed by ingestion"
+                )
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "emit_artifact":
             emits_artifact = True
             if not node.args or not isinstance(node.args[0], ast.Constant) or node.args[0].value not in allowed_artifact_kinds:
@@ -390,6 +396,8 @@ def _plan(
             '返回格式：{"steps":[{"title":"...","rationale":"..."}]}。'
             "只规划需要 Python 执行的步骤；总结与生成结论不是执行步骤。"
             "同一个指标只能出现在一个步骤中，不得让多个步骤重复计算。"
+            "若数据 source_format 为 paired_series_csv，各 axis/intensity 谱系列长度可以不同；"
+            "尾部空值是结构性补齐，不是缺失观测。规划完整性检查时应统计每个谱系列的有效点与内部断点。"
         ), adapter=adapter, route="planner",
     )
     payload = _json_object(response)
@@ -421,14 +429,22 @@ def _generate_code(
                 f"已核验长期记忆：{memories}\n"
                 f"可选技能上下文：{skill}\n"
                 f"当前步骤：{step.model_dump_json()}\n数据集：{datasets}\n"
-                "必须使用 df = load_dataset(index) 读取所选数据集；不得读取或猜测文件路径。"
+                "只执行当前步骤定义的任务，不得顺带重复其他规划步骤的计算。"
+                "必须使用 df = load_dataset(index) 读取所选数据集；这是完整签名，只能传一个可选整数索引。"
+                "数据在入库时已标准化，必须直接使用数据集结构里展示的列名；不得传 header、sep、sheet_name "
+                "或其他解析参数，不得再次推断表头或重读原文件。不得读取或猜测文件路径。"
+                "若 df.attrs.get('reprolab_schema', {}).get('source_format') 为 paired_series_csv，必须按 axis/intensity 成对分析；"
+                "不同谱系列尾部因长度不同产生的 NaN 是结构性补齐，不得计为缺失记录或建议插补。"
+                "完整性应报告每个系列的 valid_point_count 和有效区间内 internal_gap_count。"
                 "不得定义、赋值或删除 load_dataset、emit_artifact、DATASET_PATHS、SEED。"
                 "使用 pandas/numpy/scipy/statsmodels/sklearn/matplotlib。"
                 "重要结果必须调用 emit_artifact(kind, value, title, tol)；"
                 "每个步骤只登记 2-4 个对用户决策最有帮助的产物；相关指标合并成一个 table，最多一张 figure，禁止逐行或逐列滥发产物。"
+                "每个步骤须将 1-2 个最关键的数值结果单独登记为 number 或 coefficient，"
+                "不能只把关键数字埋在 table、text 或 conclusion 中。"
                 "kind 仅可为 number、coefficient、table、figure、text、conclusion；"
                 "table 可直接传 DataFrame、Series 或二维列表。"
-                "绘图需 plt.show()，并可额外 emit_artifact('figure', 结构化绘图数据, title)。"
+                "绘图需 plt.show()，图像会被运行时自动登记；同一张图不得再用 emit_artifact('figure', ...) 重复登记。"
                 "不要安装依赖、不要联网、不要伪造结果。" + error_context
             ), adapter=adapter, route="executor",
         )
@@ -478,14 +494,24 @@ def _artifact_evidence(data: dict[str, Any], limit: int = 2_000) -> dict[str, An
 
 
 def _trusted_artifact_summary(items: list[dict[str, Any]]) -> str:
-    lines = ["分析已完成。以下结论由本次真实运行产物直接收口："]
+    lines = ["## 分析报告", "", "### 已核验结果"]
     seen: set[tuple[str, str, str]] = set()
     for item in items:
-        title = str(item.get("title") or item.get("kind") or "分析产物")
+        kind = str(item.get("kind") or "")
+        title = str(item.get("title") or kind or "分析产物")
+        # Titles are labels, not measured values. Avoid letting incidental digits
+        # such as matplotlib's "figure 2" enter the numeric-verification path.
+        if re.search(r"\d", title):
+            title = {
+                "figure": "分析图形",
+                "table": "分析数据表",
+                "text": "分析说明",
+                "conclusion": "分析结论",
+            }.get(kind, "分析产物")
         anchor = str(item["anchor"])
         value = item.get("value_json")
         scalar = _artifact_scalar(value)
-        key = (str(item.get("kind")), title, json.dumps(scalar if scalar is not None else value, ensure_ascii=False, sort_keys=True, default=str))
+        key = (kind, title, json.dumps(scalar if scalar is not None else value, ensure_ascii=False, sort_keys=True, default=str))
         if key in seen:
             continue
         seen.add(key)
@@ -493,9 +519,56 @@ def _trusted_artifact_summary(items: list[dict[str, Any]]) -> str:
             lines.append(f"- {title}：{scalar:g} {anchor}")
         elif item.get("kind") != "conclusion":
             lines.append(f"- 已生成“{title}” {anchor}")
-    if len(lines) == 1:
+    if len(lines) == 3:
         raise RuntimeError("analysis produced no safe artifact summary")
     return "\n".join(lines)
+
+
+def _safe_report_fallback(
+    db: Session,
+    project_id: uuid.UUID,
+    generated_text: str,
+    artifact_events: list[dict[str, Any]],
+) -> str:
+    """Keep useful qualitative report text while removing untrusted numeric lines."""
+    safe_lines: list[str] = []
+    for line in generated_text.splitlines():
+        checks = check_numbers(db, project_id, line)
+        if not any(item.verdict == "fail" for item in checks):
+            safe_lines.append(line)
+    pruned_lines: list[str] = []
+    for index, line in enumerate(safe_lines):
+        stripped = line.strip()
+        following = next((item.strip() for item in safe_lines[index + 1:] if item.strip()), "")
+        if stripped.startswith("#") and (not following or following.startswith("#")):
+            continue
+        category = re.match(r"^(\s*)[-*]\s+.+[:：]\s*$", line)
+        if category and (
+            not following
+            or following.startswith("#")
+            or re.match(r"^\s*[-*]\s+", following)
+        ):
+            continue
+        pruned_lines.append(line)
+    table_pruned: list[str] = []
+    index = 0
+    while index < len(pruned_lines):
+        if pruned_lines[index].strip().startswith("|"):
+            end = index
+            while end < len(pruned_lines) and pruned_lines[end].strip().startswith("|"):
+                end += 1
+            block = pruned_lines[index:end]
+            if len(block) >= 3:
+                table_pruned.extend(block)
+            index = end
+            continue
+        table_pruned.append(pruned_lines[index])
+        index += 1
+    qualitative = re.sub(r"\n{3,}", "\n\n", "\n".join(table_pruned)).strip()
+    trusted = _trusted_artifact_summary(artifact_events)
+    if not qualitative or qualitative == generated_text.strip() and "⟦art_" in qualitative:
+        return trusted if not qualitative else qualitative
+    return f"{qualitative}\n\n{trusted}"
 
 
 def _artifact_scalar(value: Any) -> float | None:
@@ -508,6 +581,31 @@ def _artifact_scalar(value: Any) -> float | None:
         if isinstance(nested, (int, float)) and not isinstance(nested, bool):
             return float(nested)
     return None
+
+
+def _partial_analysis_report(
+    request: ChatRequest,
+    failed_step: str,
+    artifact_events: list[dict[str, Any]],
+) -> tuple[str, list[str]]:
+    """Return an honest user-facing report even when computation cannot finish."""
+    if artifact_events:
+        trusted = _trusted_artifact_summary(artifact_events)
+        anchors = [str(item["anchor"]) for item in artifact_events if item.get("anchor")]
+        return (
+            "## 部分完成\n\n"
+            f"{trusted}\n\n"
+            "后续计算未能形成可核验结果，因此没有补充未经验证的数字或判断。"
+            "你可以直接重新发送同一问题，系统会从标准化数据表继续分析。",
+            anchors,
+        )
+    return (
+        "## 本次分析未完成\n\n"
+        f"针对“{request.message}”，当前没有形成足以支持结论的可信计算结果，因此我不会用执行代码或未经核验的数字代替回答。\n\n"
+        f"分析停在“{failed_step}”。已保留本次选择的数据与运行记录；请直接重新发送同一问题，"
+        "系统会从标准化数据表重新执行，并在完成后给出结论、关键发现、建议与限制。",
+        [],
+    )
 
 
 async def run_chat(
@@ -658,31 +756,31 @@ async def run_chat(
                 ):
                     yield item
                 return
-            failure_message = "分析代码连续两次执行失败，数据和运行记录已保留，可以调整问题后重试。"
+            failure_message, partial_anchors = _partial_analysis_report(
+                request, step.title, artifact_events
+            )
             db.add(
                 Message(
                     conversation_id=conversation.id,
                     role="assistant",
                     content=failure_message,
                     extra_metadata={
+                        "analysis_status": "partial",
                         "error_code": "analysis_execution_failed",
                         "failed_step": step.title,
                         "run_ids": run_ids,
+                        "artifact_ids": artifact_ids,
+                        "plan": [item.model_dump() for item in steps],
                     },
                 )
             )
             db.commit()
-            yield _event(
-                "error",
-                {
-                    "stage": "execution",
-                    "step": step.title,
-                    "code": "analysis_execution_failed",
-                    "message": failure_message,
-                    "retryable": True,
-                    "conversation_id": conversation.id,
-                },
-            )
+            yield _event("message", {
+                "text": failure_message,
+                "citations": partial_anchors,
+                "status": "partial",
+            })
+            yield _event("done", {"conversation_id": conversation.id})
             return
 
     if not anchors:
@@ -693,23 +791,28 @@ async def run_chat(
             f"用户请求：{request.message}\n数据集结构：{datasets}\n"
             f"真实成果：{json.dumps(tool_summaries, ensure_ascii=False)}\n"
             f"可用锚点：{anchors}\n请针对用户请求直接作答，不复述分析过程；"
+            "对于 paired_series_csv，明确区分不同谱区长度造成的结构性补齐与有效区间内真实断点，禁止建议伪造或插补未采集谱段；"
             "存在可用锚点时至少引用一个，但不要向用户解释锚点或内部机制。"
         ), adapter=adapter, route="critic",
     )
     used_anchors = [anchor for anchor in anchors if anchor in final_text]
     number_checks = check_numbers(db, request.project_id, final_text)
     if anchors and (not used_anchors or any(item.verdict == "fail" for item in number_checks)):
-        final_text = _trusted_artifact_summary(artifact_events)
+        final_text = _safe_report_fallback(
+            db, request.project_id, final_text, artifact_events
+        )
         used_anchors = [anchor for anchor in anchors if anchor in final_text]
         fallback_checks = check_numbers(db, request.project_id, final_text)
         if any(item.verdict == "fail" for item in fallback_checks):
-            raise RuntimeError("deterministic artifact summary failed numeric verification")
+            final_text = _trusted_artifact_summary(artifact_events)
+            used_anchors = [anchor for anchor in anchors if anchor in final_text]
     db.add(
         Message(
             conversation_id=conversation.id,
             role="assistant",
             content=final_text,
             extra_metadata={
+                "analysis_status": "complete",
                 "plan": [item.model_dump() for item in steps],
                 "run_ids": run_ids,
                 "artifact_ids": artifact_ids,
@@ -717,5 +820,9 @@ async def run_chat(
         )
     )
     db.commit()
-    yield _event("message", {"text": final_text, "citations": used_anchors})
+    yield _event("message", {
+        "text": final_text,
+        "citations": used_anchors,
+        "status": "complete",
+    })
     yield _event("done", {"conversation_id": conversation.id})

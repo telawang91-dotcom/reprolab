@@ -103,7 +103,7 @@ CREATE TABLE datasets (
   collection_id UUID REFERENCES collections(id) ON DELETE SET NULL, -- M1b，可空即未分组
   name          TEXT NOT NULL,
   storage_hash  TEXT NOT NULL,               -- sha256 文件内容指纹，防"偷换数据"
-  schema_json   JSONB,                        -- 列名/类型/行数
+  schema_json   JSONB,                        -- 列名/类型/行数；成对科研谱数据另含 series、valid_point_count、internal_gap_count
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```

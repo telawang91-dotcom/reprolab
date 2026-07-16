@@ -73,6 +73,8 @@ def test_csv_parser_normalizes_unambiguous_paired_instrument_series():
     assert parsed.dataset_schema["source_format"] == "paired_series_csv"
     assert parsed.dataset_schema["header_rows"] == 4
     assert parsed.dataset_schema["series"][1]["name"] == "C1s"
+    assert parsed.dataset_schema["series"][1]["valid_point_count"] == 3
+    assert parsed.dataset_schema["series"][1]["internal_gap_count"] == 0
 
 
 def test_tsv_and_multi_sheet_excel_expose_complete_dataset_structure():

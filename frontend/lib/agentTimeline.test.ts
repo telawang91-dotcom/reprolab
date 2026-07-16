@@ -43,6 +43,14 @@ const event = (name: ChatEvent["event"], data: Record<string, unknown>): ChatEve
   assert.equal(result.steps.length, 2);
   assert.deepEqual(result.conclusions.map((item) => item.text), ["第一轮结论", "第二轮结论"]);
   assert.deepEqual(result.conclusions.map((item) => item.question), ["第一个问题", "第二个问题"]);
+  assert.deepEqual(result.conclusions.map((item) => item.status), ["complete", "complete"]);
+}
+{
+  const result = reduceAgentTimeline([
+    event("message", { text: "问题", user: true }),
+    event("message", { text: "部分报告", status: "partial" }),
+  ]);
+  assert.equal(result.conclusion?.status, "partial");
 }
 
-console.log("agentTimeline: 6 cases passed");
+console.log("agentTimeline: 7 cases passed");

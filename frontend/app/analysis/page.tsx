@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowDown, BarChart3, FolderInput, FolderOpen, RotateCcw, Send, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, BarChart3, FolderInput, FolderOpen, RotateCcw, Send, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -27,7 +27,6 @@ function AnalysisWorkspace() {
   const session = useAnalysisSession(collectionId, requestedConversation);
   const [dataOpen, setDataOpen] = useState(false);
   const [artifactOpen, setArtifactOpen] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [following, setFollowing] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -57,7 +56,9 @@ function AnalysisWorkspace() {
   };
   const activeStep = session.liveTimeline.steps.find((step) => step.status === "working" || step.status === "repairing");
   const examples = useMemo(() => datasetAwareExamples(session.selectedDatasets), [session.selectedDatasets]);
-  const requestAnalysis = () => { if (session.message.trim() && session.selected.length && !session.running) setConfirmOpen(true); };
+  const requestAnalysis = () => {
+    if (session.message.trim() && session.selected.length && !session.running) void session.send();
+  };
   return (
     <div className={`grid h-[calc(100dvh-3.5rem)] min-h-0 overflow-hidden bg-canvas ${session.activeCollection ? "xl:grid-cols-[240px_minmax(0,1fr)] 2xl:grid-cols-[240px_minmax(0,1fr)_300px]" : "2xl:grid-cols-[minmax(0,1fr)_300px]"}`}>
       {session.activeCollection && <aside className="material hidden min-h-0 overflow-y-auto overscroll-contain border-r p-4 xl:block">
@@ -67,7 +68,7 @@ function AnalysisWorkspace() {
       </aside>}
       <main className="relative flex min-h-0 min-w-0 flex-col overflow-hidden">
         <header className="material flex min-h-16 shrink-0 items-center border-b px-4 md:px-6">
-          <div><h1 className="font-semibold tracking-tight">{session.activeCollection ? `分析 · ${session.activeCollection.name}` : "Agent 分析"}</h1><p className="mt-0.5 hidden text-xs text-muted sm:block">{session.activeCollection ? "只加载当前文件夹内的数据" : "先选择一个研究文件夹"}</p></div>
+          <div><h1 className="font-semibold tracking-tight">{session.activeCollection ? `研究 Agent · ${session.activeCollection.name}` : "研究 Agent"}</h1><p className="mt-0.5 hidden text-xs text-muted sm:block">{session.activeCollection ? "提问后直接获得分析报告，代码与日志保留在技术详情中" : "先选择一个研究文件夹"}</p></div>
           <div className="ml-auto flex items-center gap-2">
             <div className="hidden lg:block"><LiveStatus running={session.running} step={activeStep?.title} /></div>
             {session.activeCollection && <button onClick={() => setDataOpen(true)} className="btn-secondary h-9 px-3 xl:hidden">数据与技能</button>}
@@ -79,14 +80,14 @@ function AnalysisWorkspace() {
           <div className="mx-auto max-w-3xl">
             {session.activeCollection ? <AgentTimelineView timeline={session.timeline} liveTimeline={session.liveTimeline} running={session.running} hasDatasets={session.datasets.length > 0} hasSelection={session.selected.length > 0} examples={examples} onExample={session.setMessage} onAnchor={session.anchorClick} onArtifact={session.setActiveArtifact} /> : <NoScope hasCollections={scope.collections.length > 0} unfiledCount={scope.unfiledCount} onOrganize={() => scope.openManager({ selectUnfiled: true })} />}
             {session.running && <div className="mt-4"><LiveStatus running step={activeStep?.title} /></div>}
-            {session.error && <div role="alert" className="mt-4 flex items-start gap-2 rounded-apple border border-status-err/25 bg-status-err/[.08] p-3 text-sm text-status-err"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span className="min-w-0 flex-1">{session.error}</span>{session.message.trim() && session.selected.length > 0 && !session.running && <button onClick={() => setConfirmOpen(true)} className="inline-flex shrink-0 items-center gap-1 font-semibold"><RotateCcw size={13} />重新运行</button>}<button onClick={() => session.setError("")} className="shrink-0" aria-label="关闭错误"><X size={14} /></button></div>}
+            {session.error && <div role="alert" className="mt-4 flex items-start gap-2 rounded-apple border border-status-err/25 bg-status-err/[.08] p-3 text-sm text-status-err"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span className="min-w-0 flex-1">{session.error}</span>{session.message.trim() && session.selected.length > 0 && !session.running && <button onClick={requestAnalysis} className="inline-flex shrink-0 items-center gap-1 font-semibold"><RotateCcw size={13} />重新发送</button>}<button onClick={() => session.setError("")} className="shrink-0" aria-label="关闭错误"><X size={14} /></button></div>}
           </div>
         </div>
         {!following && session.events.length > 0 && <button onClick={scrollToLatest} className="btn-secondary absolute bottom-32 right-6 z-10 h-9 bg-surface/90 px-4 backdrop-blur-xl"><ArrowDown size={14} />回到最新</button>}
         <div className="material shrink-0 border-t p-4">
           <div className={`mx-auto max-w-3xl rounded-appleLg border bg-surface p-2 shadow-soft focus-within:border-brand/40 ${!session.activeCollection ? "opacity-60" : ""}`}>
-            <textarea value={session.message} onChange={(event) => session.setMessage(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") requestAnalysis(); }} disabled={!session.activeCollection} rows={2} className="w-full resize-none bg-transparent px-2 py-1 outline-none" placeholder={!session.activeCollection ? "先选择一个研究文件夹…" : session.selected.length ? "描述你想分析的问题…" : "当前文件夹中没有已选择的数据…"} />
-            <div className="flex items-center px-1 pt-1"><span className="text-[11px] text-muted">{!session.activeCollection ? "分析范围尚未选择" : session.selected.length ? "⌘↵ 确认数据范围后运行" : "需要先选择当前文件夹中的数据"}</span>{session.running ? <button onClick={session.stop} className="btn-secondary ml-auto h-8"><X size={14} />停止</button> : <button onClick={requestAnalysis} disabled={!session.activeCollection || !session.message.trim() || !session.selected.length} className="btn-primary ml-auto h-8"><Send size={14} />运行</button>}</div>
+            <textarea value={session.message} onChange={(event) => session.setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); requestAnalysis(); } }} disabled={!session.activeCollection} rows={2} className="w-full resize-none bg-transparent px-2 py-1 outline-none" placeholder={!session.activeCollection ? "先选择一个研究文件夹…" : session.selected.length ? "直接提出你的研究问题…" : "请先从左侧选择要分析的数据…"} />
+            <div className="flex items-center px-1 pt-1"><span className="text-[11px] text-muted">{!session.activeCollection ? "分析范围尚未选择" : session.selected.length ? `${session.selected.length} 个数据已作为当前上下文 · 将记录数据版本、代码与环境` : "需要先选择当前文件夹中的数据"}</span>{session.running ? <button onClick={session.stop} className="btn-secondary ml-auto h-8"><X size={14} />停止</button> : <button onClick={requestAnalysis} disabled={!session.activeCollection || !session.message.trim() || !session.selected.length} className="btn-primary ml-auto h-8"><Send size={14} />发送</button>}</div>
           </div>
         </div>
       </main>
@@ -94,9 +95,6 @@ function AnalysisWorkspace() {
 
       <Sheet open={dataOpen} onOpenChange={setDataOpen} title="数据、会话与技能" side="bottom"><div className="mx-auto max-w-xl">{session.activeCollection && <><ConversationList activeId={session.conversation} collectionId={collectionId} refreshKey={session.conversation} /><div className="my-5 border-t" /><DataPanel datasets={session.datasets} selected={session.selected} onToggle={session.toggleDataset} skill={session.skill} onSelectSkill={session.setSkill} onApplySkill={session.applySkill} refreshKey={session.skillRefresh} /></>}</div></Sheet>
       <Sheet open={artifactOpen} onOpenChange={setArtifactOpen} title="可信产物" side="right"><ArtifactPanel artifact={session.activeArtifact} total={session.artifacts.length} onLineage={session.showLineage} onSave={session.saveAsSkill} /></Sheet>
-      <Sheet open={confirmOpen} onOpenChange={setConfirmOpen} title="确认分析范围" side="bottom">
-        <div className="mx-auto max-w-2xl space-y-3"><div className="rounded-apple bg-ink/[.04] p-4"><div className="text-xs font-semibold text-muted">研究问题</div><p className="mt-2 text-sm leading-6">{session.message}</p></div><div className="rounded-apple bg-ink/[.04] p-4"><div className="text-xs font-semibold text-muted">输入数据</div><div className="mt-2 space-y-1 text-sm">{session.selectedDatasets.map((item) => <div key={item.id}>{item.filename} <span className="text-xs text-muted">· {item.schema_json?.row_count ?? 0} 行 / {item.schema_json?.column_count ?? 0} 列</span></div>)}</div></div><div className="flex items-start gap-2 rounded-apple bg-status-ok/[.08] p-4 text-sm text-status-ok"><ShieldCheck size={16} className="mt-0.5" /><span><strong>将被记录：</strong>输入数据版本、生成代码、固定随机种子和环境快照。</span></div><div className="flex justify-end gap-2"><button onClick={() => setConfirmOpen(false)} className="btn-secondary">返回修改</button><button onClick={() => { setConfirmOpen(false); void session.send(); }} className="btn-primary"><Send size={14} />确认并运行</button></div></div>
-      </Sheet>
       <Sheet open={!!session.lineage} onOpenChange={(open) => { if (!open) session.setLineage(undefined); }} title="完整可信链" side="right"><div className="space-y-2">{session.lineage?.nodes.map((node) => <div key={node.id} className="rounded-apple border p-3"><span className="text-[10px] uppercase text-brand">{node.type}</span><div className="mt-1 truncate text-sm font-semibold">{node.label}</div></div>)}</div></Sheet>
     </div>
   );

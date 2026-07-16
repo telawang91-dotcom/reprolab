@@ -13,6 +13,7 @@ from app.services.agents.orchestrator import (
     _code,
     _generate_code,
     _json_object,
+    _safe_report_fallback,
     _trusted_artifact_summary,
     _validate_generated_code,
     _run_workspace_answer,
@@ -199,6 +200,10 @@ def test_executor_code_policy_protects_injected_paths_and_artifact_protocol():
         _validate_generated_code("print('no data')", True)
     with pytest.raises(ValueError, match="trusted artifact"):
         _validate_generated_code("x=load_dataset(0)\nprint(x)", True)
+    with pytest.raises(ValueError, match="parser options"):
+        _validate_generated_code(
+            "x=load_dataset(0, header=[0, 1])\nemit_artifact('number', 1)", True
+        )
 
 
 def test_critic_fallback_uses_only_real_artifacts_and_exact_anchors():
@@ -209,6 +214,32 @@ def test_critic_fallback_uses_only_real_artifacts_and_exact_anchors():
     assert "3.5 ⟦art_ab12⟧" in text
     assert "分组图” ⟦art_cd34⟧" in text
     assert "{'x'" not in text
+
+
+def test_critic_fallback_does_not_treat_numeric_titles_as_measurements():
+    text = _trusted_artifact_summary([
+        {"kind": "figure", "title": "figure 2", "value_json": {}, "anchor": "⟦art_f222⟧"},
+    ])
+    assert "figure 2" not in text
+    assert "分析图形” ⟦art_f222⟧" in text
+
+
+def test_safe_report_fallback_removes_empty_headings_and_dangling_categories(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.agents.orchestrator.check_numbers",
+        lambda _db, _project_id, line: [SimpleNamespace(verdict="fail")] if any(char.isdigit() for char in line) else [],
+    )
+    text = _safe_report_fallback(
+        SimpleNamespace(),
+        uuid.uuid4(),
+        "## 报告\n### 直接结论\n### 关键发现\n- **严重缺失列**：\n  - C1s 缺失 83%\n- 存在结构性补齐\n| 谱区 | 点数 |\n|---|---|\n| C1s | 241 |\n### 建议\n- 不要插补未采集谱段",
+        [{"kind": "table", "title": "完整性表", "value_json": {}, "anchor": "⟦art_abcd⟧"}],
+    )
+    assert "直接结论" not in text
+    assert "严重缺失列" not in text
+    assert "结构性补齐" in text
+    assert "不要插补" in text
+    assert "| 谱区 |" not in text
 
 
 def test_critic_fallback_unwraps_ledger_scalars_and_removes_exact_duplicates():

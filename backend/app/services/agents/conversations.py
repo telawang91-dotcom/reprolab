@@ -97,17 +97,14 @@ def replay_conversation(
                 select(Artifact).where(Artifact.run_id == run.id).order_by(Artifact.created_at, Artifact.id)
             ))
             events.extend(ConversationEvent(event="artifact", data=_artifact_data(item)) for item in artifacts)
-        if meta.get("error_code"):
-            events.append(ConversationEvent(event="error", data={
-                "stage": "execution",
-                "step": meta.get("failed_step"),
-                "code": meta["error_code"],
-                "message": message.content or "分析执行失败，请重试。",
-                "retryable": True,
-                "conversation_id": conversation.id,
-            }))
-            continue
         text = message.content or ""
+        status = "partial" if meta.get("analysis_status") == "partial" or meta.get("error_code") else "complete"
+        if status == "partial" and not text.lstrip().startswith("#"):
+            text = (
+                "## 本次分析未完成\n\n"
+                f"{text or '当前没有形成足以支持结论的可信计算结果。'}\n\n"
+                "已保留数据范围与运行记录；可以直接重新发送同一问题。"
+            )
         sources = meta.get("sources") or []
         citations = [f"⟦art_{str(item)[:4]}⟧" for item in meta.get("artifact_ids") or [] if f"⟦art_{str(item)[:4]}⟧" in text]
         citations.extend(
@@ -119,6 +116,7 @@ def replay_conversation(
             "text": text,
             "citations": citations,
             "sources": sources,
+            "status": status,
         }))
     events.append(ConversationEvent(event="done", data={"conversation_id": conversation.id}))
     return ConversationReplay(id=conversation.id, title=conversation.title, events=events)

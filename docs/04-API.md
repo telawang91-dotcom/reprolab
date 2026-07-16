@@ -178,21 +178,22 @@ POST /chat                 # 自然语言 → 规划 → 执行 → 返回图/�
      event: code     data: { code, lang }
      event: run      data: { run_id, status, stdout }
      event: artifact data: { artifact_id, kind, title?, value_json | figure_url, anchor }
-     event: message  data: { text, citations }
+     event: message  data: { text, citations, status: "complete"|"partial" }
      event: error    data: { stage, step?, code, message, retryable, conversation_id? }
      event: done     data: { conversation_id }
   # 多轮迭代：带 conversation_id 继续，如"横坐标改对数"
   # workspace 模式：collection_id 必填；先读取文件清单、内容检索、数据结构和记忆，
   # 普通资料问题直接回答，需要计算/清洗/绘图时自动选择当前文件夹内数据进入可信分析。
   # 文本检索为空不得直接失败；可依据 schema 回答。不可读二进制必须明确能力边界。
-  # 分析执行失败时不得伪造结果，回退为基于文件结构的处理建议并保留运行回执。
+  # 分析执行失败时不得伪造结果；返回 status=partial 的用户可读报告并正常 done，
+  # 已完成产物可继续引用。error 仅用于无法形成任何可恢复响应的基础设施级失败。
 GET /conversations?project_id={id}
   -> [{ id, title, created_at, updated_at, message_count }]
 GET /conversations/{id}?project_id={id}
   -> { id, title, events: [{ event, data }] }
 
 历史回放事件复用 POST /chat 的 SSE event/data schema；只从已持久化的 Message、Run、Artifact 还原，不新增第二套事件模型。
-  # error 为流内结构化失败；已创建的 Run 和 Conversation 保留，可带 conversation_id 重试
+  # 已创建的 Run 和 Conversation 均保留，可带 conversation_id 重试；历史失败也回放为 partial 报告。
 ```
 
 ### M4 代码执行沙箱

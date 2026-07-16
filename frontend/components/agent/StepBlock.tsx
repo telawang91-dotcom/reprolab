@@ -9,7 +9,7 @@ import { AttemptView } from "./AttemptView";
 import { RepairConnector } from "./RepairConnector";
 
 export function StepBlock({ step, index, onArtifact }: { step: TimelineStep; index: number; onArtifact: (artifact: TimelineArtifact) => void }) {
-  const [open, setOpen] = useState(step.status !== "pending");
+  const [open, setOpen] = useState(false);
   const reduceMotion = useReducedMotion();
   const repairNote = step.attempts.flatMap((attempt) => attempt.reasoning).at(-1) || step.notes.at(-1);
   return <motion.section layout className="apple-interactive rounded-appleLg border bg-surface" initial={reduceMotion ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={agentSpring}>

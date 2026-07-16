@@ -77,6 +77,26 @@ def test_load_dataset_reads_content_addressed_csv_without_extension(tmp_path):
     assert result.stdout == "(2, 2) 8700"
 
 
+def test_load_dataset_normalizes_paired_scientific_series(tmp_path):
+    dataset = tmp_path / ("b" * 64)
+    dataset.write_text(
+        "Survey,,Scan\nBinding Energy,Counts,Binding Energy,Counts\n"
+        "1,10,1,20\n2,11,2,21\n3,12,3,22\n4,13,4,23\n5,14,5,24\n",
+        encoding="utf-8",
+    )
+    result = execute_code(
+        "df = load_dataset(0)\nprint(df.shape, '|'.join(df.columns))\n"
+        "print(df.attrs['reprolab_schema']['source_format'], df.attrs['reprolab_schema']['series'][0]['valid_point_count'])",
+        dataset_paths=[str(dataset)],
+        timeout=15,
+    )
+    assert result.status == "success"
+    assert result.stdout == (
+        "(5, 4) Survey_axis|Survey_intensity|Scan_axis|Scan_intensity\n"
+        "paired_series_csv 5"
+    )
+
+
 @pytest.mark.parametrize(
     "code,name",
     [
