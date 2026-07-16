@@ -82,7 +82,7 @@ flowchart LR
 
 ### 资料与知识空间
 
-- 上传 PDF、CSV、Excel、代码、Markdown、文件夹和 ZIP；
+- 任意文件、完整文件夹和 ZIP 均可直接入库；系统按内容识别文本、PDF、Office、Notebook 与数据表，暂不可解析的格式保留原文件并明确标记能力状态；
 - 按研究项目与知识空间管理资料；
 - 关键词 BM25、向量语义检索和 RRF 混合检索；
 - bge-reranker-v2-m3 对候选证据进行交叉编码器精排；

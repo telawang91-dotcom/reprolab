@@ -46,19 +46,19 @@ def test_collection_filter_is_only_added_when_requested():
     assert "WHERE documents.project_id" in unscoped
 
 
-def test_batch_expands_supported_zip_entries_and_preserves_folder_name():
+def test_batch_expands_all_zip_entries_and_preserves_folder_name():
     files = batch_ingest.prepare_files([(
         "papers.zip",
         _zip({"review/a.pdf": b"pdf", "review/b.md": b"# b", "review/ignore.exe": b"x"}),
     )])
-    assert [item.filename for item in files] == ["review/a.pdf", "review/b.md"]
+    assert [item.filename for item in files] == ["review/a.pdf", "review/b.md", "review/ignore.exe"]
 
 
-def test_batch_rejects_zip_traversal_and_unsupported_upload():
+def test_batch_rejects_zip_traversal_but_accepts_arbitrary_uploads():
     with pytest.raises(ValueError, match="unsafe zip entry"):
         batch_ingest.prepare_files([("bad.zip", _zip({"../escape.pdf": b"x"}))])
-    with pytest.raises(ValueError, match="no supported files"):
-        batch_ingest.prepare_files([("bad.exe", b"x")])
+    arbitrary = batch_ingest.prepare_files([("instrument.raw", b"\x00\x01")])
+    assert arbitrary[0].filename == "instrument.raw"
     with pytest.raises(ValueError, match="unsafe zip entry or upload path"):
         batch_ingest.prepare_files([("../outside.md", b"x")])
 
@@ -80,7 +80,10 @@ def test_batch_job_records_partial_success(monkeypatch):
     def fake_ingest(_db, filename, *_args):
         if filename == "bad.md":
             raise ValueError("broken")
-        return SimpleNamespace(document_id=uuid.uuid4(), dataset_id=None)
+        return SimpleNamespace(
+            document_id=uuid.uuid4(), dataset_id=None, duplicate=False,
+            parse_status="indexed", parser="text", message=None,
+        )
 
     monkeypatch.setattr(batch_ingest, "ingest", fake_ingest)
     batch_ingest.process_job(job.batch_id, project_id, None, None, files)

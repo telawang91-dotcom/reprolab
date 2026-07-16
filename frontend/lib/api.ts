@@ -80,6 +80,7 @@ export type DocumentItem = {
   year: number | null;
   created_at: string;
   collection_id: string | null;
+  metadata: Record<string, unknown> | null;
 };
 export type DocumentDetail = DocumentItem & {
   project_id: string;
@@ -87,7 +88,6 @@ export type DocumentDetail = DocumentItem & {
   authors: string[] | null;
   doi: string | null;
   source_url: string | null;
-  metadata: Record<string, unknown> | null;
   chunks_count: number;
   dataset_id: string | null;
   schema_json: {
@@ -179,6 +179,9 @@ export type BatchStatus = {
     document_id: string | null;
     dataset_id: string | null;
     duplicate: boolean;
+    parse_status: "indexed" | "structured" | "stored" | "needs_attention" | null;
+    parser: string | null;
+    message: string | null;
     error: string | null;
   }[];
 };

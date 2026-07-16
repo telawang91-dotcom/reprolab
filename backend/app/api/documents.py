@@ -32,8 +32,6 @@ def upload_document(
     db: Session = Depends(get_db),
 ) -> DocumentUploadResponse:
     raw = file.file.read()
-    if not raw:
-        raise HTTPException(status_code=422, detail="uploaded file is empty")
     if len(raw) > batch_ingest.MAX_EXPANDED_BYTES:
         raise HTTPException(status_code=422, detail="file size exceeds 100 MB")
     try:
@@ -52,6 +50,9 @@ def upload_document(
         dataset_id=result.dataset_id,
         collection_id=collection_id,
         duplicate=result.duplicate,
+        parse_status=result.parse_status,
+        parser=result.parser,
+        message=result.message,
     )
 
 

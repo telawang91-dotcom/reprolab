@@ -67,9 +67,10 @@ plaintext
 
 
 ```
-POST /documents            # multipart 上传并入库（PDF/CSV/TSV/XLSX/py/ipynb/md/txt）
+POST /documents            # multipart 上传并入库；接收任意文件，服务端按内容识别能力
   form: file, project_id, type?
-  -> { id, type, filename, storage_hash, chunks_count?, dataset_id?, duplicate }
+  -> { id, type, filename, storage_hash, chunks_count?, dataset_id?, duplicate,
+       parse_status: "indexed"|"structured"|"stored"|"needs_attention", parser?, message? }
 
 GET  /documents            # 列表/筛选
   query: project_id, type?, tag?, q?
@@ -95,7 +96,8 @@ DELETE /collections/{id}         # 文件保留并解除分组
 POST /documents/batch            # multipart；files 可含 ZIP
   form: files[], project_id, collection_id?, type?
   -> 202 { batch_id, status, total, completed, failed,
-           items: [{ filename, status, document_id?, dataset_id?, duplicate, error? }] }
+           items: [{ filename, status, document_id?, dataset_id?, duplicate,
+                     parse_status?, parser?, message?, error? }] }
 GET /documents/batch/{batch_id}?project_id={id}
 
 # 以下均为向后兼容的可选字段；不传时行为不变
@@ -105,7 +107,11 @@ POST /search                     # body 新增 collection_id?
 POST /qa                         # body 新增 collection_id?
 ```
 
-`collection_id` 仅作为 M2 SQL 元数据前置过滤条件；BM25、向量、RRF、reranker 与 `⟦src_*⟧` 引用契约保持不变。批量处理使用 FastAPI BackgroundTasks，后台逐文件复用 M1 `ingest()`。同一项目与研究文件夹内按内容哈希去重，重复内容复用原 Document/Dataset 并显式返回 `duplicate=true`。单批最多 100 个支持文件和 100 MB 解压后内容；ZIP 拒绝路径穿越与加密条目。扫描 PDF 无文本层时返回可操作的 OCR 错误，不得以 0 切块伪装成功；Excel schema 同时返回 `default_sheet` 与所有 `sheets`。
+`collection_id` 仅作为 M2 SQL 元数据前置过滤条件；BM25、向量、RRF、reranker 与 `⟦src_*⟧` 引用契约保持不变。批量处理使用 FastAPI BackgroundTasks，后台逐文件复用 M1 `ingest()`。同一项目与研究文件夹内按内容哈希去重，重复内容复用原 Document/Dataset 并显式返回 `duplicate=true`。
+
+上传层不设扩展名白名单：单文件、文件夹与 ZIP 中的每个文件都先按原始字节进行内容寻址保存，再由解析器识别 PDF、Office Open XML、Notebook、JSON、文本、分隔数据表或通用二进制。`structured` 表示可结构化查询，`indexed` 表示可全文检索，`stored` 表示原文件已保存但当前无文本可提取，`needs_attention` 表示原文件已保存且已给出 OCR、损坏格式等增强解析提示。后两种状态不得伪装成检索成功，也不得导致同批其他文件失败。单批最多 100 个文件和 100 MB 解压后内容；ZIP 拒绝路径穿越与加密条目。
+
+Excel schema 同时返回 `default_sheet` 与所有 `sheets`。CSV 默认严格校验每行列数；对于可无歧义识别的科研仪器成对谱线导出（多行元数据 + 固定宽度数值区），系统将每组谱线规范化为 `<series>_axis` 与 `<series>_intensity` 字段，并在 schema 中标记 `source_format=paired_series_csv` 与原始表头行数。无法满足该结构契约的错列文件不得静默跳行或猜测合并单元格：原文件正常入库并标记 `needs_attention`，但不创建可查询 Dataset。
 
 ### M1c 异构数据目录与结构化查询
 

@@ -16,6 +16,9 @@ class DocumentUploadResponse(BaseModel):
     dataset_id: uuid.UUID | None = None
     collection_id: uuid.UUID | None = None
     duplicate: bool = False
+    parse_status: Literal["indexed", "structured", "stored", "needs_attention"] = "indexed"
+    parser: str | None = None
+    message: str | None = None
 
 
 class DocumentListItem(BaseModel):
@@ -27,6 +30,7 @@ class DocumentListItem(BaseModel):
     year: int | None
     created_at: datetime
     collection_id: uuid.UUID | None = None
+    metadata: dict[str, Any] | None = Field(default=None, validation_alias="extra_metadata")
 
 
 class DocumentDetail(DocumentListItem):
@@ -36,7 +40,6 @@ class DocumentDetail(DocumentListItem):
     authors: list[str] | None
     doi: str | None
     source_url: str | None
-    metadata: dict[str, Any] | None
     chunks_count: int
     dataset_id: uuid.UUID | None = None
     dataset_schema: dict[str, Any] | None = Field(default=None, alias="schema_json", serialization_alias="schema_json")
@@ -72,6 +75,9 @@ class BatchItem(BaseModel):
     document_id: uuid.UUID | None = None
     dataset_id: uuid.UUID | None = None
     duplicate: bool = False
+    parse_status: Literal["indexed", "structured", "stored", "needs_attention"] | None = None
+    parser: str | None = None
+    message: str | None = None
     error: str | None = None
 
 

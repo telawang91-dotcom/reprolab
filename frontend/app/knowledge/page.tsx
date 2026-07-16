@@ -157,12 +157,11 @@ export default function KnowledgePage() {
 
   async function upload(files: FileList | File[], targetCollection = collection) {
     const selectedFiles = Array.from(files);
-    const list = selectedFiles.filter(isSupportedUpload);
-    const ignored = selectedFiles.filter((file) => !isSupportedUpload(file));
+    const list = selectedFiles;
     if (!targetCollection) return;
-    if (!list.length) { setError("所选内容中没有支持的文件。可上传 PDF、CSV/TSV、XLSX、代码、笔记或 ZIP。"); return; }
+    if (!list.length) { setError("没有选择任何文件。"); return; }
     const totalBytes = list.reduce((sum, file) => sum + file.size, 0);
-    if (list.length > 100) { setError("一次最多导入 100 个支持的文件，请分批上传。"); return; }
+    if (list.length > 100) { setError("一次最多导入 100 个文件，请分批上传。"); return; }
     if (totalBytes > 100 * 1024 * 1024) { setError("单个批次最多 100 MB，请拆分后重试。"); return; }
     uploadCancelled.current = false;
     const activity = beginActivity(`导入 ${list.length} 个文件`, "/knowledge");
@@ -173,7 +172,7 @@ export default function KnowledgePage() {
     };
     setUploading(list.map((file) => file.webkitRelativePath || file.name));
     setBatch(undefined);
-    setError(ignored.length ? `已忽略 ${ignored.length} 个不支持的文件：${ignored.slice(0, 3).map((file) => file.name).join("、")}${ignored.length > 3 ? "…" : ""}` : "");
+    setError("");
     try {
       let job = await api.batchUpload(list, targetCollection);
       setBatch(job);
@@ -313,7 +312,7 @@ export default function KnowledgePage() {
 
       <section className="mx-auto min-w-0 max-w-5xl">
 
-          <input ref={fileRef} className="hidden" type="file" multiple accept=".pdf,.csv,.tsv,.xlsx,.py,.ipynb,.md,.txt,.zip" onChange={(event) => event.target.files && void upload(event.target.files)} />
+          <input ref={fileRef} className="hidden" type="file" multiple onChange={(event) => event.target.files && void upload(event.target.files)} />
           <input ref={folderRef} className="hidden" type="file" multiple {...folderPickerAttributes} onChange={(event) => event.target.files && void importFolder(event.target.files)} />
 
           {!activeCollection ? (
@@ -337,7 +336,7 @@ export default function KnowledgePage() {
                 <button onClick={() => { setDeleteError(""); setPendingDelete({ kind: "collection", id: activeCollection.id, name: activeCollection.name }); }} className="grid h-10 w-10 place-items-center rounded-full text-subtle hover:bg-status-err/10 hover:text-status-err" aria-label={`删除空间${activeCollection.name}`} title="删除空间"><Trash2 size={15} /></button>
               </div>
 
-              <p className="mt-3 text-xs leading-5 text-subtle">支持 PDF、CSV/TSV、Excel、Notebook、Python、Markdown、文本与 ZIP；单批最多 100 个文件 / 100 MB。扫描版 PDF 会明确提示先做 OCR，不会伪装成解析成功。</p>
+              <p className="mt-3 text-xs leading-5 text-subtle">可直接导入任意文件、完整文件夹或 ZIP，系统会按内容自动识别。可解析内容会建立全文索引或数据表；暂不能提取的二进制文件仍会安全入库并标明状态。单批最多 100 个文件 / 100 MB。</p>
 
               {batch && <BatchProgress batch={batch} />}
 
@@ -382,17 +381,28 @@ export default function KnowledgePage() {
 function BatchProgress({ batch }: { batch: BatchStatus }) {
   const running = ["queued", "processing"].includes(batch.status);
   const duplicates = batch.items.filter((item) => item.duplicate).length;
-  return <section className="mt-5 rounded-apple border bg-surface p-4"><div className="flex items-center gap-3 text-sm"><UploadCloud size={15} className={running ? "animate-pulse text-brand" : batch.failed ? "text-status-err" : "text-status-ok"} /><span className="font-semibold">{running ? "正在解析并建立索引" : batch.status === "success" ? `已处理 ${batch.completed} 个文件` : `已处理 ${batch.completed} 个，${batch.failed} 个需修正`}</span><div className="h-1 flex-1 overflow-hidden rounded-full bg-ink/[.07]"><div className={`h-full ${batch.failed ? "bg-status-err" : "bg-brand"}`} style={{ width: `${batch.total ? ((batch.completed + batch.failed) / batch.total) * 100 : 0}%` }} /></div><span className="text-xs text-muted">{batch.completed + batch.failed}/{batch.total}</span></div>{!running && <div className="mt-3 flex flex-wrap gap-2 text-xs"><span className="rounded-full bg-status-ok/10 px-2 py-1 text-status-ok">{batch.completed - duplicates} 个新文件</span>{duplicates > 0 && <span className="rounded-full bg-brand/10 px-2 py-1 text-brand">{duplicates} 个重复文件已复用</span>}{batch.failed > 0 && <span className="rounded-full bg-status-err/10 px-2 py-1 text-status-err">{batch.failed} 个失败</span>}</div>}{!running && <details className="mt-3 text-xs"><summary className="cursor-pointer font-semibold text-muted">查看解析明细</summary><div className="mt-2 divide-y">{batch.items.map((item) => <div key={item.filename} className="flex gap-3 py-2"><span className="min-w-0 flex-1 truncate">{item.filename}</span><span className={item.status === "error" ? "text-status-err" : item.duplicate ? "text-brand" : "text-status-ok"}>{item.status === "error" ? item.error : item.duplicate ? "内容重复 · 已复用" : item.dataset_id ? "数据表已就绪" : "文本索引已就绪"}</span></div>)}</div></details>}</section>;
+  const attention = batch.items.filter((item) => item.parse_status === "needs_attention").length;
+  const stored = batch.items.filter((item) => item.parse_status === "stored").length;
+  return <section className="mt-5 rounded-apple border bg-surface p-4"><div className="flex items-center gap-3 text-sm"><UploadCloud size={15} className={running ? "animate-pulse text-brand" : batch.failed ? "text-status-err" : attention ? "text-status-warn" : "text-status-ok"} /><span className="font-semibold">{running ? "正在识别内容并建立索引" : batch.status === "success" ? `已接收 ${batch.completed} 个文件` : `已接收 ${batch.completed} 个，${batch.failed} 个入库失败`}</span><div className="h-1 flex-1 overflow-hidden rounded-full bg-ink/[.07]"><div className={`h-full ${batch.failed ? "bg-status-err" : attention ? "bg-status-warn" : "bg-brand"}`} style={{ width: `${batch.total ? ((batch.completed + batch.failed) / batch.total) * 100 : 0}%` }} /></div><span className="text-xs text-muted">{batch.completed + batch.failed}/{batch.total}</span></div>{!running && <div className="mt-3 flex flex-wrap gap-2 text-xs"><span className="rounded-full bg-status-ok/10 px-2 py-1 text-status-ok">{batch.completed - duplicates} 个新文件</span>{stored > 0 && <span className="rounded-full bg-ink/[.05] px-2 py-1 text-muted">{stored} 个原样保存</span>}{attention > 0 && <span className="rounded-full bg-status-warn/10 px-2 py-1 text-status-warn">{attention} 个待增强解析</span>}{duplicates > 0 && <span className="rounded-full bg-brand/10 px-2 py-1 text-brand">{duplicates} 个重复文件已复用</span>}{batch.failed > 0 && <span className="rounded-full bg-status-err/10 px-2 py-1 text-status-err">{batch.failed} 个入库失败</span>}</div>}{!running && <details className="mt-3 text-xs"><summary className="cursor-pointer font-semibold text-muted">查看解析明细</summary><div className="mt-2 divide-y">{batch.items.map((item) => <div key={item.filename} className="flex gap-3 py-2"><span className="min-w-0 flex-1 truncate">{item.filename}</span><span className={item.status === "error" ? "text-status-err" : item.duplicate ? "text-brand" : item.parse_status === "needs_attention" ? "text-status-warn" : item.parse_status === "stored" ? "text-muted" : "text-status-ok"}>{item.status === "error" ? item.error : item.duplicate ? "内容重复 · 已复用" : item.message || parseStatusLabel(item.parse_status)}</span></div>)}</div></details>}</section>;
 }
 
-const supportedUploadExtensions = [".pdf", ".csv", ".tsv", ".xlsx", ".py", ".ipynb", ".md", ".txt", ".zip"];
-function isSupportedUpload(file: File) {
-  const name = (file.webkitRelativePath || file.name).toLowerCase();
-  return supportedUploadExtensions.some((extension) => name.endsWith(extension));
+type ParseStatus = "indexed" | "structured" | "stored" | "needs_attention";
+
+function documentParseStatus(document: DocumentItem): ParseStatus | undefined {
+  const status = document.metadata?.parse_status;
+  return status === "indexed" || status === "structured" || status === "stored" || status === "needs_attention" ? status : undefined;
+}
+
+function parseStatusLabel(status: ParseStatus | null | undefined) {
+  if (status === "structured") return "数据表已就绪";
+  if (status === "indexed") return "全文索引已就绪";
+  if (status === "stored") return "原始文件已保存";
+  if (status === "needs_attention") return "已保存 · 待增强解析";
+  return "已接收";
 }
 
 function DocumentList({ documents, onOpen }: { documents: DocumentItem[]; onOpen: (id: string) => void }) {
-  return <div className="max-h-[420px] divide-y overflow-y-auto">{documents.map((document) => { const Icon = icons[document.type]; return <button key={document.id} onClick={() => onOpen(document.id)} className="flex min-h-[68px] w-full items-center gap-3 px-5 py-3 text-left hover:bg-ink/[.035]"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-appleSm bg-ink/[.05] text-muted"><Icon size={16} /></span><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{displayDocumentTitle(document)}</strong><span className="mt-1 block truncate text-xs text-muted">{document.filename}</span></span><span className="hidden text-xs text-subtle sm:block">{typeNames[document.type]}</span></button>; })}</div>;
+  return <div className="max-h-[420px] divide-y overflow-y-auto">{documents.map((document) => { const Icon = icons[document.type]; const status = documentParseStatus(document); return <button key={document.id} onClick={() => onOpen(document.id)} className="flex min-h-[68px] w-full items-center gap-3 px-5 py-3 text-left hover:bg-ink/[.035]"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-appleSm bg-ink/[.05] text-muted"><Icon size={16} /></span><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{displayDocumentTitle(document)}</strong><span className="mt-1 block truncate text-xs text-muted">{document.filename}</span></span>{status && <span className={`hidden rounded-full px-2 py-1 text-[11px] sm:block ${status === "needs_attention" ? "bg-status-warn/10 text-status-warn" : status === "stored" ? "bg-ink/[.05] text-muted" : "bg-status-ok/10 text-status-ok"}`}>{parseStatusLabel(status)}</span>}<span className="hidden text-xs text-subtle md:block">{typeNames[document.type]}</span></button>; })}</div>;
 }
 
 function SearchResults({ hits, onOpen }: { hits: SearchHit[]; onOpen: (id: string, hit: SearchHit) => void }) {
@@ -400,5 +410,7 @@ function SearchResults({ hits, onOpen }: { hits: SearchHit[]; onOpen: (id: strin
 }
 
 function DocumentPreview({ preview, focusedHit, copied, onCopy, onDelete }: { preview: DocumentDetail; focusedHit: SearchHit | null; copied: boolean; onCopy: () => Promise<void>; onDelete: (id: string) => void }) {
-  return <div>{focusedHit && <section className="rounded-apple border-l-2 border-brand bg-brand/[.06] px-4 py-3"><div className="flex items-center gap-2 text-xs font-semibold text-brand"><LocateFixed size={13} />检索命中</div><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{focusedHit.content}</p></section>}<dl className="mt-6 grid grid-cols-2 gap-5 text-sm"><div><dt className="text-xs text-muted">类型</dt><dd className="mt-1">{typeNames[preview.type]}</dd></div><div><dt className="text-xs text-muted">年份</dt><dd className="mt-1">{preview.year ?? "—"}</dd></div><div><dt className="text-xs text-muted">文本切块</dt><dd className="mt-1">{preview.chunks_count}</dd></div><div><dt className="text-xs text-muted">DOI</dt><dd className="mt-1 truncate">{preview.doi ?? "—"}</dd></div><div className="col-span-2"><dt className="text-xs text-muted">SHA-256 内容指纹</dt><dd className="mt-1 break-all font-mono text-[11px] text-muted">{preview.storage_hash}</dd></div></dl>{preview.schema_json && <div className="mt-6"><h3 className="text-sm font-semibold">数据结构 · {preview.schema_json.row_count} 行</h3><div className="mt-2 divide-y border-y">{preview.schema_json.columns?.map((column) => <div key={column.name} className="flex justify-between py-2 text-xs"><span className="font-mono">{column.name}</span><span className="text-muted">{column.dtype}</span></div>)}</div></div>}{preview.dataset_id && preview.schema_json && <DatasetInspector datasetId={preview.dataset_id} schema={preview.schema_json}/>}<div className="mt-8 flex gap-2 border-t pt-4"><button onClick={() => void onDelete(preview.id)} className="btn-secondary text-status-err"><Trash2 size={14} />删除</button><button onClick={() => void onCopy()} className="btn-secondary ml-auto">{copied ? <Check size={14} /> : <Clipboard size={14} />}{copied ? "已复制" : "复制指纹"}</button></div></div>;
+  const status = documentParseStatus(preview);
+  const message = typeof preview.metadata?.message === "string" ? preview.metadata.message : undefined;
+  return <div>{focusedHit && <section className="rounded-apple border-l-2 border-brand bg-brand/[.06] px-4 py-3"><div className="flex items-center gap-2 text-xs font-semibold text-brand"><LocateFixed size={13} />检索命中</div><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{focusedHit.content}</p></section>}{status && <section className={`rounded-apple px-4 py-3 text-sm ${focusedHit ? "mt-4" : ""} ${status === "needs_attention" ? "bg-status-warn/[.08] text-status-warn" : status === "stored" ? "bg-ink/[.04] text-muted" : "bg-status-ok/[.08] text-status-ok"}`}><strong>{parseStatusLabel(status)}</strong>{message && <p className="mt-1 text-xs leading-5 opacity-90">{message}</p>}</section>}<dl className="mt-6 grid grid-cols-2 gap-5 text-sm"><div><dt className="text-xs text-muted">类型</dt><dd className="mt-1">{typeNames[preview.type]}</dd></div><div><dt className="text-xs text-muted">年份</dt><dd className="mt-1">{preview.year ?? "—"}</dd></div><div><dt className="text-xs text-muted">文本切块</dt><dd className="mt-1">{preview.chunks_count}</dd></div><div><dt className="text-xs text-muted">DOI</dt><dd className="mt-1 truncate">{preview.doi ?? "—"}</dd></div><div className="col-span-2"><dt className="text-xs text-muted">SHA-256 内容指纹</dt><dd className="mt-1 break-all font-mono text-[11px] text-muted">{preview.storage_hash}</dd></div></dl>{preview.schema_json && <div className="mt-6"><h3 className="text-sm font-semibold">数据结构 · {preview.schema_json.row_count} 行</h3><div className="mt-2 divide-y border-y">{preview.schema_json.columns?.map((column) => <div key={column.name} className="flex justify-between py-2 text-xs"><span className="font-mono">{column.name}</span><span className="text-muted">{column.dtype}</span></div>)}</div></div>}{preview.dataset_id && preview.schema_json && <DatasetInspector datasetId={preview.dataset_id} schema={preview.schema_json}/>}<div className="mt-8 flex gap-2 border-t pt-4"><button onClick={() => void onDelete(preview.id)} className="btn-secondary text-status-err"><Trash2 size={14} />删除</button><button onClick={() => void onCopy()} className="btn-secondary ml-auto">{copied ? <Check size={14} /> : <Clipboard size={14} />}{copied ? "已复制" : "复制指纹"}</button></div></div>;
 }

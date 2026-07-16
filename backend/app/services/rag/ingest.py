@@ -21,15 +21,18 @@ class IngestResult:
     chunks_count: int | None = None
     dataset_id: uuid.UUID | None = None
     duplicate: bool = False
+    parse_status: str = "indexed"
+    parser: str | None = None
+    message: str | None = None
 
 
 def infer_type(filename: str) -> str:
     lowered = filename.lower()
     if lowered.endswith(".pdf"):
         return "paper"
-    if lowered.endswith((".py", ".ipynb")):
+    if lowered.endswith((".py", ".ipynb", ".r", ".jl", ".m", ".js", ".ts", ".tsx", ".jsx", ".java", ".cpp", ".c", ".h", ".go", ".rs", ".sql", ".sh", ".ps1")):
         return "code"
-    if lowered.endswith((".md", ".txt")):
+    if lowered.endswith((".md", ".txt", ".docx", ".pptx", ".rtf", ".html", ".htm", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".xml")):
         return "note"
     return "other"
 
@@ -87,6 +90,7 @@ def ingest(
         chunks_count = db.scalar(
             select(func.count(Chunk.id)).where(Chunk.document_id == existing.id)
         ) or 0
+        metadata = existing.extra_metadata or {}
         return IngestResult(
             existing.id,
             existing.type,
@@ -95,16 +99,31 @@ def ingest(
             chunks_count=chunks_count,
             dataset_id=dataset.id if dataset else None,
             duplicate=True,
+            parse_status=str(metadata.get("parse_status") or ("structured" if dataset else "indexed")),
+            parser=metadata.get("parser"),
+            message=metadata.get("message"),
         )
-    parsed = parser.parse(filename, raw)
     saved_hash = storage.save_bytes(raw)
     if saved_hash != storage_hash:
         raise RuntimeError("content-addressed storage hash mismatch")
+    try:
+        parsed = parser.parse(filename, raw)
+    except ValueError as exc:
+        parsed = parser.ParsedDoc(
+            kind="binary",
+            metadata={
+                "parse_status": "needs_attention",
+                "parser": "fallback",
+                "message": f"原始文件已保存，但自动解析需要处理：{str(exc)[:400]}",
+                "parse_error": str(exc)[:500],
+            },
+        )
     resolved_type = document_type or infer_type(filename)
     if resolved_type not in {"paper", "note", "code", "other"}:
         raise ValueError("type must be paper, note, code, or other")
 
     if parsed.kind == "dataset":
+        metadata = {"kind": "dataset", **parsed.metadata}
         dataset = Dataset(
             project_id=project_id,
             collection_id=collection_id,
@@ -119,13 +138,47 @@ def ingest(
             filename=filename,
             storage_hash=storage_hash,
             title=filename,
-            extra_metadata={"kind": "dataset"},
+            extra_metadata=metadata,
         )
         db.add_all([dataset, document])
         db.commit()
         db.refresh(dataset)
         db.refresh(document)
-        return IngestResult(document.id, document.type, filename, storage_hash, dataset_id=dataset.id)
+        return IngestResult(
+            document.id,
+            document.type,
+            filename,
+            storage_hash,
+            dataset_id=dataset.id,
+            parse_status=str(metadata.get("parse_status", "structured")),
+            parser=metadata.get("parser"),
+            message=metadata.get("message"),
+        )
+
+    if parsed.kind == "binary":
+        metadata = {"kind": "file", **parsed.metadata}
+        document = Document(
+            project_id=project_id,
+            collection_id=collection_id,
+            type=resolved_type,
+            filename=filename,
+            storage_hash=storage_hash,
+            title=PurePosixPath(filename).name,
+            extra_metadata=metadata,
+        )
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+        return IngestResult(
+            document.id,
+            document.type,
+            filename,
+            storage_hash,
+            chunks_count=0,
+            parse_status=str(metadata.get("parse_status", "stored")),
+            parser=metadata.get("parser"),
+            message=metadata.get("message"),
+        )
 
     title, year, doi = _metadata(parsed.text, filename)
     document = Document(
@@ -137,6 +190,7 @@ def ingest(
         title=title,
         year=year,
         doi=doi,
+        extra_metadata={"kind": "text", **parsed.metadata},
     )
     db.add(document)
     db.flush()
@@ -156,7 +210,16 @@ def ingest(
     )
     db.commit()
     db.refresh(document)
-    return IngestResult(document.id, document.type, filename, storage_hash, chunks_count=len(text_chunks))
+    return IngestResult(
+        document.id,
+        document.type,
+        filename,
+        storage_hash,
+        chunks_count=len(text_chunks),
+        parse_status=str(parsed.metadata.get("parse_status", "indexed")),
+        parser=parsed.metadata.get("parser"),
+        message=parsed.metadata.get("message"),
+    )
 
 
 def list_documents(

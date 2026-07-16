@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+import zipfile
 
 import fitz
 import pandas as pd
@@ -40,11 +41,38 @@ def test_csv_parser_reports_inconsistent_row_without_silently_dropping_it():
     assert "不会静默丢弃" in message
 
 
+def test_csv_parser_does_not_let_pandas_infer_an_extra_field_as_an_index():
+    with pytest.raises(ValueError, match="第 2 行有 3 列"):
+        parser.parse("broken.csv", b"a,b\n1,2,3\n")
+
+
 def test_csv_parser_accepts_common_gb18030_encoding():
     raw = "姓名,数值\n样本甲,1\n".encode("gb18030")
     parsed = parser.parse("中文数据.csv", raw)
     assert parsed.dataset_schema["row_count"] == 1
     assert parsed.dataset_schema["columns"][0]["name"] == "姓名"
+
+
+def test_csv_parser_normalizes_unambiguous_paired_instrument_series():
+    raw = (
+        "1,,1\n"
+        " ,, \n"
+        "Su1s,,C1s\n"
+        "1,,1\n"
+        "1200.0,147562.5,297.0,57934.4\n"
+        "1199.2,148112.5,296.9,58065.6\n"
+        "1198.4,146575.0,296.8,58382.8\n"
+    ).encode()
+    frame = parser.read_dataset_frame("xps.csv", raw)
+    parsed = parser.parse("xps.csv", raw)
+    assert list(frame.columns) == [
+        "Su1s_axis", "Su1s_intensity", "C1s_axis", "C1s_intensity",
+    ]
+    assert frame.shape == (3, 4)
+    assert frame.iloc[0].tolist() == [1200.0, 147562.5, 297.0, 57934.4]
+    assert parsed.dataset_schema["source_format"] == "paired_series_csv"
+    assert parsed.dataset_schema["header_rows"] == 4
+    assert parsed.dataset_schema["series"][1]["name"] == "C1s"
 
 
 def test_tsv_and_multi_sheet_excel_expose_complete_dataset_structure():
@@ -95,6 +123,29 @@ def test_plain_text_accepts_gb18030_and_rejects_empty_content():
     assert "实验记录" in parser.parse("notes.md", "实验记录".encode("gb18030")).text
     with pytest.raises(ValueError, match="没有可索引"):
         parser.parse("empty.txt", b" \n")
+
+
+def test_content_detection_accepts_extensionless_tables_and_arbitrary_binary():
+    table = parser.parse("instrument-output", b"sample;value\nA;1\nB;2\n")
+    binary = parser.parse("vendor-format.raw", b"\x00\x01\x02\xff")
+    assert table.kind == "dataset"
+    assert table.dataset_schema["delimiter"] == ";"
+    assert table.metadata["parse_status"] == "structured"
+    assert binary.kind == "binary"
+    assert binary.metadata["parse_status"] == "stored"
+
+
+def test_docx_text_is_detected_by_content_even_with_unknown_extension():
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as archive:
+        archive.writestr("word/document.xml", """<?xml version="1.0" encoding="UTF-8"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body><w:p><w:r><w:t>可复现研究记录</w:t></w:r></w:p></w:body>
+        </w:document>""")
+    parsed = parser.parse("renamed.payload", stream.getvalue())
+    assert parsed.kind == "text"
+    assert "可复现研究记录" in parsed.text
+    assert parsed.metadata["parser"] == "docx"
 
 
 def test_three_page_pdf_extracts_text_and_positions():
