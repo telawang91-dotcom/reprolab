@@ -22,18 +22,40 @@ export function ArtifactPanel({ artifact, total, onLineage, onSave }: { artifact
   const [discipline, setDiscipline] = useState("general");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [libraryState, setLibraryState] = useState<"checking" | "saved" | "candidate">("checking");
+  const [librarySaving, setLibrarySaving] = useState(false);
+  const [libraryError, setLibraryError] = useState("");
   const reduceMotion = useReducedMotion();
 
   useEffect(() => {
     if (!artifact) return;
     let live = true;
     setTrust("checking");
+    setLibraryState("checking");
+    setLibraryError("");
     api.lineage(artifact.artifact_id).then((result) => {
       const types = new Set(result.nodes.map((node) => node.type));
       if (live) setTrust(types.has("dataset") && types.has("run") && types.has("artifact") ? "complete" : "incomplete");
     }).catch(() => { if (live) setTrust("incomplete"); });
+    api.artifactLibraryState(artifact.artifact_id).then((library) => {
+      if (live) setLibraryState(library.saved ? "saved" : "candidate");
+    }).catch(() => { if (live) setLibraryState("candidate"); });
     return () => { live = false; };
   }, [artifact]);
+
+  async function saveToLibrary() {
+    if (!artifact || librarySaving || libraryState === "saved") return;
+    setLibrarySaving(true);
+    setLibraryError("");
+    try {
+      await api.setArtifactLibraryState(artifact.artifact_id, true);
+      setLibraryState("saved");
+    } catch (reason) {
+      setLibraryError(reason instanceof Error ? reason.message : "保存到成果库失败");
+    } finally {
+      setLibrarySaving(false);
+    }
+  }
 
   function openHarvest() {
     if (!artifact) return;
@@ -69,7 +91,8 @@ export function ArtifactPanel({ artifact, total, onLineage, onSave }: { artifact
         <details className="border-t px-3 py-2 text-xs text-muted"><summary className="cursor-pointer">查看原始数据</summary><pre className="mt-2 max-h-48 overflow-auto rounded-apple bg-ink/[.035] p-3 font-mono text-[11px]">{JSON.stringify(artifact.value_json, null, 2)}</pre></details>
       </div>
       <ProvenanceStrip state={trust}/>
-      <Link href="/results?tab=writing" onClick={() => addArtifactToWriting(activeProjectId(), artifact)} className="btn-primary w-full"><PenLine size={14}/>写入研究结论</Link>
+      <div className="grid grid-cols-2 gap-2"><button disabled={libraryState === "checking" || librarySaving || libraryState === "saved"} onClick={() => void saveToLibrary()} className={libraryState === "saved" ? "btn-secondary px-3" : "btn-primary px-3"}>{librarySaving ? <Loader2 size={14} className="animate-spin"/> : libraryState === "saved" ? <Check size={14}/> : <BookmarkPlus size={14}/>} {librarySaving ? "保存中…" : libraryState === "saved" ? "已保存" : "保存成果"}</button><Link href="/results?tab=writing" onClick={() => addArtifactToWriting(activeProjectId(), artifact)} className="btn-secondary px-3"><PenLine size={14}/>用于写作</Link></div>
+      {libraryError && <div role="alert" className="text-xs leading-5 text-status-err">{libraryError}</div>}
       <div className="grid grid-cols-2 gap-2"><Link href={`/lineage/${artifact.artifact_id}`} className="btn-secondary px-3"><ExternalLink size={14}/>完整溯源</Link><button onClick={openHarvest} className="btn-secondary px-3"><BookmarkPlus size={14}/>沉淀为技能</button></div>
       <button onClick={() => void onLineage(artifact.artifact_id)} className="w-full text-center text-xs text-muted hover:text-brand">快速检查可信链</button>
     </motion.div>

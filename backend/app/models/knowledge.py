@@ -130,6 +130,7 @@ class Artifact(Base):
     value_json: Mapped[dict[str, Any] | list[Any] | float | int | str | None] = mapped_column(JSONB)
     content_hash: Mapped[str | None] = mapped_column(Text)
     tol: Mapped[float | None]
+    saved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

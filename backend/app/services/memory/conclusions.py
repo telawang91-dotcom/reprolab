@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -70,6 +71,7 @@ def write_back_conclusion(
         claim.doc_id = document.id
         claim.status = "verified"
     for artifact in resolved_artifacts:
+        artifact.saved_at = artifact.saved_at or datetime.now(timezone.utc)
         _edge_once(db, "artifact", artifact.id, "claim", claim.id, "supports")
     for source in resolved_documents:
         _edge_once(db, "claim", claim.id, "document", source.id, "cites")

@@ -7,6 +7,7 @@ def test_workbench_and_project_scoped_read_routes_are_exposed():
     assert "/api/v1/projects/{project_id}/review" in paths
     assert "/api/v1/projects/{project_id}/quality-report" in paths
     assert "/api/v1/projects/{project_id}/artifacts" in paths
+    assert "/api/v1/artifacts/{artifact_id}/library" in paths
     assert "/api/v1/runs/{run_id}/report" in paths
     assert "/api/v1/runs/{run_id}/bundle" in paths
     assert "/api/v1/runs/{run_id}/compare" in paths

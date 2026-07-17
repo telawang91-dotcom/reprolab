@@ -275,10 +275,26 @@ def test_m4_m5_real_ledger_match_and_drift(client: TestClient, project_id: uuid.
     run = run_response.json()
     assert run["status"] == "success" and len(run["code_hash"]) == 64
     artifact_id = run["artifacts"][0]["artifact_id"]
-    artifact_list = client.get(f"/api/v1/projects/{project_id}/artifacts")
+    artifact_list = client.get(f"/api/v1/projects/{project_id}/artifacts", params={"view": "all"})
     assert artifact_list.status_code == 200, artifact_list.text
     listed_artifact = next(item for item in artifact_list.json()["items"] if item["id"] == artifact_id)
     assert listed_artifact["source_complete"] is True
+    assert listed_artifact["saved_at"] is None
+    saved_library = client.get(f"/api/v1/projects/{project_id}/artifacts")
+    assert all(item["id"] != artifact_id for item in saved_library.json()["items"])
+    save_result = client.put(f"/api/v1/artifacts/{artifact_id}/library", json={
+        "project_id": str(project_id), "saved": True,
+    })
+    assert save_result.status_code == 200 and save_result.json()["saved"] is True
+    assert any(item["id"] == artifact_id for item in client.get(f"/api/v1/projects/{project_id}/artifacts").json()["items"])
+    remove_result = client.put(f"/api/v1/artifacts/{artifact_id}/library", json={
+        "project_id": str(project_id), "saved": False,
+    })
+    assert remove_result.status_code == 200 and remove_result.json()["saved"] is False
+    assert all(item["id"] != artifact_id for item in client.get(f"/api/v1/projects/{project_id}/artifacts").json()["items"])
+    assert any(item["id"] == artifact_id for item in client.get(
+        f"/api/v1/projects/{project_id}/artifacts", params={"view": "candidates"}
+    ).json()["items"])
     with SessionLocal() as db:
         assert db.get(Run, uuid.UUID(run["run_id"])) is not None
         assert db.scalar(select(func.count(EnvSnapshot.id))) >= 1
@@ -559,6 +575,7 @@ def test_m8_real_writeback_is_searchable_and_linked(client: TestClient, project_
         assert db.scalar(select(Edge.id).where(
             Edge.from_id == uuid.UUID(artifact_id), Edge.to_id == claim.id, Edge.relation == "supports",
         )) is not None
+        assert db.get(Artifact, uuid.UUID(artifact_id)).saved_at is not None
 
     search = client.post("/api/v1/search", json={
         "project_id": str(project_id), "query": marker,

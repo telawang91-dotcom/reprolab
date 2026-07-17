@@ -346,6 +346,7 @@ export type ReviewSummary = {
     successful_runs: number;
     failed_runs: number;
     artifacts: number;
+    saved_artifacts: number;
     verified_claims: number;
     flagged_claims: number;
   };
@@ -376,9 +377,21 @@ export type ArtifactSummary = {
   title: string | null;
   value: unknown;
   content_hash: string | null;
+  saved_at: string | null;
   created_at: string;
   source_complete: boolean;
   run_status: string | null;
+};
+export type ArtifactListResponse = {
+  items: ArtifactSummary[];
+  total_count: number;
+  saved_count: number;
+  candidate_count: number;
+};
+export type ArtifactLibraryState = {
+  artifact_id: string;
+  saved: boolean;
+  saved_at: string | null;
 };
 export type EvidenceExcerpt = {
   section: string | null;
@@ -743,10 +756,18 @@ export const api = {
   review: () => request<ReviewSummary>(`/projects/${activeProjectId()}/review`),
   qualityReport: () =>
     request<QualityReport>(`/projects/${activeProjectId()}/quality-report`),
-  artifacts: (limit = 50) =>
-    request<{ items: ArtifactSummary[] }>(
-      `/projects/${activeProjectId()}/artifacts?limit=${limit}`,
+  artifacts: (view: "saved" | "candidates" | "all" = "saved", limit = 50) =>
+    request<ArtifactListResponse>(
+      `/projects/${activeProjectId()}/artifacts?view=${view}&limit=${limit}`,
     ),
+  artifactLibraryState: (artifactId: string) =>
+    request<ArtifactLibraryState>(`/artifacts/${artifactId}/library?project_id=${activeProjectId()}`),
+  setArtifactLibraryState: (artifactId: string, saved: boolean) =>
+    request<ArtifactLibraryState>(`/artifacts/${artifactId}/library`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: activeProjectId(), saved }),
+    }),
   runReport: (runId: string) =>
     request<RunReport>(`/runs/${runId}/report?project_id=${activeProjectId()}`),
   downloadRunBundle: async (runId: string) => {

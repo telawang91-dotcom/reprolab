@@ -120,7 +120,9 @@ def test_two_projects_do_not_expose_each_others_documents_runs_or_lineage():
             assert client.get(
                 f"/api/v1/artifacts/{artifact_id}/lineage", params={"project_id": str(project_ids[1])}
             ).status_code == 404
-            other_artifacts = client.get(f"/api/v1/projects/{project_ids[1]}/artifacts")
+            other_artifacts = client.get(
+                f"/api/v1/projects/{project_ids[1]}/artifacts", params={"view": "all"}
+            )
             assert artifact_id not in {item["id"] for item in other_artifacts.json()["items"]}
             assert client.get(
                 f"/api/v1/runs/{run.json()['run_id']}/report", params={"project_id": str(project_ids[1])}

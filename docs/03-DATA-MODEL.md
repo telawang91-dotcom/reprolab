@@ -189,8 +189,11 @@ CREATE TABLE artifacts (
   value_json   JSONB,                         -- 标量值或结构化内容（系数/统计量/表数据）
   content_hash TEXT,                          -- 图/文件型产物的内容哈希；storage/<hash>
   tol          DOUBLE PRECISION,              -- 数值型复现容差（默认见 05-PROVENANCE）
+  saved_at     TIMESTAMPTZ,                   -- 非空才进入成果库；空值仍保留在技术记录与血缘账本
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+`artifacts` 是不可随意删除的可信账本；成果库只是它的策展视图。用户“删除成果”实际将 `saved_at` 置空，运行、锚点、写作引用和血缘边继续保留。经过校验并写回的结论所引用的产物自动进入成果库，其他步骤产物由用户按需保存。
 
 -- 结论（正文中的一条论断），校验对账的目标
 CREATE TABLE claims (

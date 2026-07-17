@@ -38,8 +38,13 @@ GET /projects/{project_id}/timeline
   -> { events: [{ kind, title, detail, created_at, href?, trusted }] }
 GET /projects/{project_id}/review
   -> { project, counts, risks: [], next_actions: [] }
-GET /projects/{project_id}/artifacts?limit=50
-  -> { items: [{ id, run_id?, kind, title?, value?, content_hash?, created_at, source_complete, run_status? }] }
+GET /projects/{project_id}/artifacts?view=saved|candidates|all&limit=50
+  -> { items: [{ id, run_id?, kind, title?, value?, content_hash?, saved_at?, created_at, source_complete, run_status? }], total_count, saved_count, candidate_count }
+GET /artifacts/{artifact_id}/library?project_id={id}
+  -> { artifact_id, saved, saved_at? }
+PUT /artifacts/{artifact_id}/library
+  body: { project_id, saved }
+  -> { artifact_id, saved, saved_at? }
 GET /runs/{run_id}/report?project_id={id}
   -> { run, datasets, environment, artifacts, reproduction_note }
 GET /runs/{run_id}/bundle?project_id={id}
@@ -52,7 +57,7 @@ GET /projects/{project_id}/quality-report
   -> { project_id, generated_at, ready_for_demo, metrics: [], blockers: [], next_actions: [] }
 ```
 
-这些接口只读取现有账本实体，不创建第二套“报告/时间线”事实来源。所有按 ID 读取的文档、运行和产物必须校验 `project_id`；跨项目统一返回 404，避免泄露存在性。
+成果库状态只控制展示，不删除可信账本。`saved=false` 表示移出成果库，产物、运行、锚点和血缘边仍可从记录与溯源入口访问。所有按 ID 读取的文档、运行和产物必须校验 `project_id`；跨项目统一返回 404，避免泄露存在性。
 
 ### M1 知识库入库
 

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.knowledge import Artifact, Chunk, Claim, Conversation, Dataset, Document, Edge, EnvSnapshot, Project, Run
 from app.schemas.workbench import (
-    ArtifactChange, ArtifactListResponse, ArtifactSummary, EvidenceExcerpt, EvidenceResponse, ReportArtifact, ReviewCounts,
+    ArtifactChange, ArtifactLibraryState, ArtifactListResponse, ArtifactSummary, EvidenceExcerpt, EvidenceResponse, ReportArtifact, ReviewCounts,
     ProjectQualityReport, QualityMetric, ReviewResponse, RunCompare, RunReport, TimelineItem, TimelineResponse,
 )
 
@@ -33,6 +33,13 @@ def project_run(db: Session, project_id: uuid.UUID, run_id: uuid.UUID) -> Run:
     return run
 
 
+def project_artifact(db: Session, project_id: uuid.UUID, artifact_id: uuid.UUID) -> Artifact:
+    artifact = db.get(Artifact, artifact_id)
+    if artifact is None or artifact.project_id != project_id:
+        raise LookupError("artifact not found")
+    return artifact
+
+
 def project_timeline(db: Session, project_id: uuid.UUID, limit: int = 30) -> TimelineResponse:
     _project(db, project_id)
     events: list[TimelineItem] = []
@@ -55,6 +62,7 @@ def project_review(db: Session, project_id: uuid.UUID) -> ReviewResponse:
     successful = count(Run, Run.project_id == project_id, Run.status == "success")
     failed = count(Run, Run.project_id == project_id, Run.status == "error")
     artifacts = count(Artifact, Artifact.project_id == project_id)
+    saved_artifacts = count(Artifact, Artifact.project_id == project_id, Artifact.saved_at.is_not(None))
     verified = count(Claim, Claim.project_id == project_id, Claim.status == "verified")
     flagged = count(Claim, Claim.project_id == project_id, Claim.status == "flagged")
     risks = ([] if flagged == 0 else [f"有 {flagged} 条结论未通过可信校验。"]) + ([] if failed == 0 else [f"有 {failed} 次分析运行失败，需要复核。"])
@@ -64,13 +72,24 @@ def project_review(db: Session, project_id: uuid.UUID) -> ReviewResponse:
     elif successful == 0: next_actions.append("选择数据提出一个分析问题，生成首个可信产物。")
     elif verified == 0: next_actions.append("把可信产物写入结论，并运行来源校验。")
     else: next_actions.append("导出复现报告，或与导师分享只读审阅页。")
-    return ReviewResponse(project_id=project.id, project_name=project.name, counts=ReviewCounts(documents=documents, datasets=datasets, successful_runs=successful, failed_runs=failed, artifacts=artifacts, verified_claims=verified, flagged_claims=flagged), risks=risks, next_actions=next_actions)
+    return ReviewResponse(project_id=project.id, project_name=project.name, counts=ReviewCounts(documents=documents, datasets=datasets, successful_runs=successful, failed_runs=failed, artifacts=artifacts, saved_artifacts=saved_artifacts, verified_claims=verified, flagged_claims=flagged), risks=risks, next_actions=next_actions)
 
 
-def project_artifacts(db: Session, project_id: uuid.UUID, limit: int = 50) -> ArtifactListResponse:
+def project_artifacts(db: Session, project_id: uuid.UUID, limit: int = 50, view: str = "saved") -> ArtifactListResponse:
     _project(db, project_id)
+    total_count = db.scalar(select(func.count()).select_from(Artifact).where(Artifact.project_id == project_id)) or 0
+    saved_count = db.scalar(select(func.count()).select_from(Artifact).where(
+        Artifact.project_id == project_id, Artifact.saved_at.is_not(None)
+    )) or 0
+    statement = select(Artifact).where(Artifact.project_id == project_id)
+    if view == "saved":
+        statement = statement.where(Artifact.saved_at.is_not(None))
+    elif view == "candidates":
+        statement = statement.where(Artifact.saved_at.is_(None))
+    elif view != "all":
+        raise ValueError("artifact view must be saved, candidates, or all")
     artifacts = list(db.scalars(
-        select(Artifact).where(Artifact.project_id == project_id).order_by(Artifact.created_at.desc()).limit(limit)
+        statement.order_by(Artifact.saved_at.desc().nullslast(), Artifact.created_at.desc()).limit(limit)
     ))
     items: list[ArtifactSummary] = []
     for artifact in artifacts:
@@ -84,10 +103,30 @@ def project_artifacts(db: Session, project_id: uuid.UUID, limit: int = 50) -> Ar
         source_complete = bool(run and run.status == "success" and produced and (reads or not run.input_hashes))
         items.append(ArtifactSummary(
             id=artifact.id, run_id=artifact.run_id, kind=artifact.kind, title=artifact.title,
-            value=artifact.value_json, content_hash=artifact.content_hash, created_at=artifact.created_at,
+            value=artifact.value_json, content_hash=artifact.content_hash, saved_at=artifact.saved_at, created_at=artifact.created_at,
             source_complete=source_complete, run_status=run.status if run else None,
         ))
-    return ArtifactListResponse(items=items)
+    return ArtifactListResponse(
+        items=items,
+        total_count=total_count,
+        saved_count=saved_count,
+        candidate_count=total_count - saved_count,
+    )
+
+
+def artifact_library_state(db: Session, project_id: uuid.UUID, artifact_id: uuid.UUID) -> ArtifactLibraryState:
+    artifact = project_artifact(db, project_id, artifact_id)
+    return ArtifactLibraryState(artifact_id=artifact.id, saved=artifact.saved_at is not None, saved_at=artifact.saved_at)
+
+
+def set_artifact_library_state(
+    db: Session, project_id: uuid.UUID, artifact_id: uuid.UUID, saved: bool
+) -> ArtifactLibraryState:
+    artifact = project_artifact(db, project_id, artifact_id)
+    artifact.saved_at = datetime.now(timezone.utc) if saved else None
+    db.commit()
+    db.refresh(artifact)
+    return ArtifactLibraryState(artifact_id=artifact.id, saved=saved, saved_at=artifact.saved_at)
 
 
 def project_quality_report(db: Session, project_id: uuid.UUID) -> ProjectQualityReport:

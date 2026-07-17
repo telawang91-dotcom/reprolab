@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.schemas.workbench import ArtifactListResponse, EvidenceResponse, ProjectQualityReport, ReviewResponse, RunCompare, RunReport, TimelineResponse
+from app.schemas.workbench import ArtifactLibraryState, ArtifactLibraryUpdate, ArtifactListResponse, EvidenceResponse, ProjectQualityReport, ReviewResponse, RunCompare, RunReport, TimelineResponse
 from app.services import workbench
 from app.services.lineage.bundle import build_reproducibility_bundle
 
@@ -35,8 +35,25 @@ def quality_report(project_id: uuid.UUID, db: Session = Depends(get_db)) -> Proj
 
 
 @router.get("/projects/{project_id}/artifacts", response_model=ArtifactListResponse)
-def artifacts(project_id: uuid.UUID, limit: int = 50, db: Session = Depends(get_db)) -> ArtifactListResponse:
-    return guarded(lambda: workbench.project_artifacts(db, project_id, min(max(limit, 1), 100)))
+def artifacts(project_id: uuid.UUID, limit: int = 50, view: str = "saved", db: Session = Depends(get_db)) -> ArtifactListResponse:
+    try:
+        return workbench.project_artifacts(db, project_id, min(max(limit, 1), 100), view)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/artifacts/{artifact_id}/library", response_model=ArtifactLibraryState)
+def artifact_library(artifact_id: uuid.UUID, project_id: uuid.UUID, db: Session = Depends(get_db)) -> ArtifactLibraryState:
+    return guarded(lambda: workbench.artifact_library_state(db, project_id, artifact_id))
+
+
+@router.put("/artifacts/{artifact_id}/library", response_model=ArtifactLibraryState)
+def update_artifact_library(
+    artifact_id: uuid.UUID, request: ArtifactLibraryUpdate, db: Session = Depends(get_db)
+) -> ArtifactLibraryState:
+    return guarded(lambda: workbench.set_artifact_library_state(db, request.project_id, artifact_id, request.saved))
 
 
 @router.get("/runs/{run_id}/report", response_model=RunReport)

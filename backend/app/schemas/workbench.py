@@ -24,6 +24,7 @@ class ReviewCounts(BaseModel):
     successful_runs: int
     failed_runs: int
     artifacts: int
+    saved_artifacts: int
     verified_claims: int
     flagged_claims: int
 
@@ -43,6 +44,7 @@ class ArtifactSummary(BaseModel):
     title: str | None
     value: Any | None
     content_hash: str | None
+    saved_at: datetime | None
     created_at: datetime
     source_complete: bool
     run_status: str | None
@@ -50,6 +52,20 @@ class ArtifactSummary(BaseModel):
 
 class ArtifactListResponse(BaseModel):
     items: list[ArtifactSummary]
+    total_count: int
+    saved_count: int
+    candidate_count: int
+
+
+class ArtifactLibraryUpdate(BaseModel):
+    project_id: uuid.UUID
+    saved: bool
+
+
+class ArtifactLibraryState(BaseModel):
+    artifact_id: uuid.UUID
+    saved: bool
+    saved_at: datetime | None
 
 
 class EvidenceExcerpt(BaseModel):

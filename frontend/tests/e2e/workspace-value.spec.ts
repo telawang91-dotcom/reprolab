@@ -126,6 +126,49 @@ test("SkillHub 展示真实契约并防止重复导入", async ({ page }) => {
   await expect(page.getByRole("button", { name: "已导入", exact: true })).toBeDisabled();
 });
 
+test("成果库只展示已保存结果并支持安全移出和重新整理", async ({ page }) => {
+  const savedId = "00000000-0000-0000-0000-000000000301";
+  const candidateId = "00000000-0000-0000-0000-000000000302";
+  const savedState: Record<string, boolean> = { [savedId]: true, [candidateId]: false };
+  const artifacts = [
+    { id: savedId, run_id: "r1", kind: "number", title: "关键效应量", value: { value: 0.82 }, content_hash: null, saved_at: "2026-07-16T10:00:00Z", created_at: "2026-07-16T09:00:00Z", source_complete: true, run_status: "success" },
+    { id: candidateId, run_id: "r1", kind: "table", title: "过程统计", value: { data: [{ group: "A", n: 10 }] }, content_hash: null, saved_at: null, created_at: "2026-07-16T08:00:00Z", source_complete: true, run_status: "success" },
+  ];
+  await page.route("**/api/v1/collections?*", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/v1/documents?*", (route) => route.fulfill({ json: [] }));
+  await page.route(`**/api/v1/projects/${projectId}/review`, (route) => route.fulfill({ json: {
+    project_id: projectId, project_name: "真实研究", counts: { documents: 1, datasets: 1, successful_runs: 1, failed_runs: 0, artifacts: 2, saved_artifacts: 1, verified_claims: 0, flagged_claims: 0 }, risks: [], next_actions: [],
+  } }));
+  await page.route(`**/api/v1/projects/${projectId}/artifacts?*`, (route) => {
+    const view = new URL(route.request().url()).searchParams.get("view") || "saved";
+    const selected = artifacts.filter((item) => view === "all" || (view === "saved" ? savedState[item.id] : !savedState[item.id])).map((item) => ({ ...item, saved_at: savedState[item.id] ? (item.saved_at || "2026-07-16T10:00:00Z") : null }));
+    const savedCount = Object.values(savedState).filter(Boolean).length;
+    return route.fulfill({ json: { items: selected, total_count: artifacts.length, saved_count: savedCount, candidate_count: artifacts.length - savedCount } });
+  });
+  await page.route("**/api/v1/artifacts/*/library", (route) => {
+    const id = route.request().url().split("/artifacts/")[1].split("/library")[0];
+    const saved = route.request().postDataJSON().saved as boolean;
+    savedState[id] = saved;
+    return route.fulfill({ json: { artifact_id: id, saved, saved_at: saved ? "2026-07-16T11:00:00Z" : null } });
+  });
+
+  await page.goto("/results");
+  await expect(page.getByText("关键效应量")).toBeVisible();
+  await expect(page.getByText("过程统计")).toHaveCount(0);
+  await page.getByRole("button", { name: "移出成果库：关键效应量" }).click();
+  await expect(page.getByRole("dialog", { name: "移出成果库？" })).toBeVisible();
+  await page.getByRole("button", { name: "移出成果库", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "成果库还是空的" })).toBeVisible();
+
+  await page.getByRole("button", { name: "整理候选成果" }).click();
+  await expect(page.getByRole("dialog", { name: "整理候选成果" })).toBeVisible();
+  await expect(page.getByText("过程统计")).toBeVisible();
+  await page.getByRole("button", { name: "保存到成果库：过程统计" }).click();
+  await page.getByRole("button", { name: "关闭整理候选成果" }).click();
+  await expect(page.getByText("过程统计")).toBeVisible();
+  await expect(page.getByText("关键效应量")).toHaveCount(0);
+});
+
 test("记忆可解释、可召回也可明确遗忘", async ({ page }) => {
   let deleted = false;
   const memory = {
