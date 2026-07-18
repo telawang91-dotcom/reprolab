@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import re
 import uuid
 from dataclasses import dataclass
@@ -10,6 +11,8 @@ from sqlalchemy.orm import Session
 from app.models.knowledge import Chunk, Collection, Dataset, Document, Project
 from app.schemas.documents import DocumentOrganizeRequest, DocumentUpdate
 from app.services.rag import chunker, embedder, parser, storage
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -195,7 +198,20 @@ def ingest(
     db.add(document)
     db.flush()
     text_chunks = chunker.split(parsed)
-    vectors = embedder.encode([item.content for item in text_chunks])
+    try:
+        vectors: list[list[float] | None] = embedder.encode([item.content for item in text_chunks])
+    except Exception as exc:
+        logger.exception("embedding generation failed; preserving keyword-searchable chunks")
+        vectors = [None] * len(text_chunks)
+        parsed.metadata = {
+            **parsed.metadata,
+            "parse_status": "needs_attention",
+            "message": (
+                "全文与关键词索引已建立；语义向量暂未生成，可在模型环境恢复后重新增强。"
+                f"技术提示：{str(exc)[:180]}"
+            ),
+        }
+        document.extra_metadata = {"kind": "text", **parsed.metadata}
     db.add_all(
         [
             Chunk(

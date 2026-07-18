@@ -17,7 +17,7 @@ ReproLab 的主叙事不是“又一个科研聊天机器人”，而是：**让
 | 复杂检索（RAG） | 元数据预过滤 + BM25 + pgvector + RRF + reranker；回答生成 `⟦src_*⟧` 证据锚点 | `/knowledge` | 在研究文件夹内切换关键词、语义、智能混合检索，并点开引用原文 |
 | 数据分析 | Planner / Executor / Critic 动态生成并执行 Python；运行前确认数据范围 | `/analysis` | 选择 CSV/XLSX，用自然语言提出未预设的分析问题，展示真实 SSE 计划与产物 |
 | 长期记忆 | 项目隔离的情节、语义、技能三层记忆；召回前核验范围与来源 | `/memory` | 查看分析后形成的记忆，在新会话中召回已核验偏好或方法 |
-| 多源异构管理 | PDF、CSV、XLSX、Markdown、TXT、Python、Notebook 统一入库；项目/文件夹两级隔离 | `/knowledge`、`/projects` | 导入混合文件夹，查看文献片段、数据 schema 与代码资料 |
+| 多源异构管理 | PDF、Office、CSV/TSV/XLSX、JSON、Markdown、代码、Notebook 与二进制统一入库；不规则数据表无损规整；项目/文件夹两级隔离 | `/knowledge`、`/projects` | 导入混合文件夹，查看文献片段、规整回执、数据 schema 与声明式查询 |
 
 底线：演示页对能力的说明必须能落到真实页面、REST API 或自动化测试；不能用动画代替实现证据。
 

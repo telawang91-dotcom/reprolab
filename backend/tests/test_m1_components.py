@@ -31,19 +31,22 @@ def test_csv_parser_extracts_complete_schema():
     assert [column["name"] for column in parsed.dataset_schema["columns"]] == ["species", "mass", "valid"]
 
 
-def test_csv_parser_reports_inconsistent_row_without_silently_dropping_it():
+def test_csv_parser_repairs_inconsistent_row_without_silently_dropping_it():
     raw = b"a,b,c\n1,2,3\n4,5,6,7\n"
-    with pytest.raises(ValueError) as caught:
-        parser.parse("broken.csv", raw)
-    message = str(caught.value)
-    assert "第 3 行有 4 列" in message
-    assert "表头应为 3 列" in message
-    assert "不会静默丢弃" in message
+    parsed = parser.parse("broken.csv", raw)
+    frame = parser.read_dataset_frame("broken.csv", raw)
+    assert parsed.kind == "dataset"
+    assert parsed.metadata["parser"] == "ragged_csv"
+    assert parsed.dataset_schema["repair"]["repaired_lines"] == [1, 2]
+    assert list(frame.columns) == ["a", "b", "c", "column_4"]
+    assert frame.shape == (2, 4)
+    assert frame.iloc[1].tolist() == [4, 5, 6, 7]
 
 
 def test_csv_parser_does_not_let_pandas_infer_an_extra_field_as_an_index():
-    with pytest.raises(ValueError, match="第 2 行有 3 列"):
-        parser.parse("broken.csv", b"a,b\n1,2,3\n")
+    frame = parser.read_dataset_frame("broken.csv", b"a,b\n1,2,3\n")
+    assert list(frame.columns) == ["a", "b", "column_3"]
+    assert frame.iloc[0].tolist() == [1, 2, 3]
 
 
 def test_csv_parser_accepts_common_gb18030_encoding():

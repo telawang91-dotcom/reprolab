@@ -1,4 +1,5 @@
 import math
+import logging
 import re
 import uuid
 from collections import defaultdict
@@ -18,6 +19,7 @@ from app.services.rag.embedder import encode_one
 RECALL_LIMIT = 50
 RERANK_LIMIT = settings.rerank_limit
 RRF_K = 60
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -159,12 +161,26 @@ def complex_retrieve(
     scope = metadata_prefilter(db, project_id, filters, collection_id)
     if mode == "keyword":
         return _to_hits(bm25_search(query, scope, k))
-    semantic = pgvector_search(
-        db, project_id, query, filters, RECALL_LIMIT, collection_id
-    )
+    try:
+        semantic = pgvector_search(
+            db, project_id, query, filters, RECALL_LIMIT, collection_id
+        )
+    except Exception:
+        if mode == "semantic":
+            raise
+        logger.exception("semantic recall unavailable; continuing with keyword recall")
+        semantic = []
     if mode == "semantic":
         return _to_hits(semantic[:k])
     keyword = bm25_search(query, scope, RECALL_LIMIT)
     by_id = {item.id: item for item in [*semantic, *keyword]}
-    fused_ids = [item_id for item_id, _ in rrf([semantic, keyword])[:RERANK_LIMIT]]
-    return _to_hits(rerank(query, [by_id[item_id] for item_id in fused_ids], k))
+    fused = rrf([semantic, keyword])[:RERANK_LIMIT]
+    fused_candidates = [
+        Candidate(by_id[item_id].chunk, by_id[item_id].document, score)
+        for item_id, score in fused
+    ]
+    try:
+        return _to_hits(rerank(query, fused_candidates, k))
+    except Exception:
+        logger.exception("cross-encoder reranker unavailable; returning fused recall order")
+        return _to_hits(fused_candidates[:k])

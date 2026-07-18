@@ -7,7 +7,7 @@ from app.models.knowledge import Chunk, Document
 from app.schemas.search import Citation, SearchRequest
 from app.services.rag.qa import extract_citations, source_anchor
 from app.services.rag import retrieval
-from app.services.rag.retrieval import Candidate, bm25_search, rerank, rrf
+from app.services.rag.retrieval import Candidate, bm25_search, complex_retrieve, rerank, rrf
 
 
 def candidate(identifier: int, content: str = "evidence") -> Candidate:
@@ -66,3 +66,18 @@ def test_citation_mapping_only_accepts_known_anchors():
 def test_search_contract_forbids_unknown_fields():
     with pytest.raises(ValidationError):
         SearchRequest(project_id=uuid.uuid4(), query="x", unexpected=True)
+
+
+def test_hybrid_retrieval_keeps_keyword_results_when_models_are_unavailable(monkeypatch):
+    items = [candidate(1, "目标证据"), candidate(2, "其他内容")]
+    monkeypatch.setattr(retrieval, "metadata_prefilter", lambda *_args, **_kwargs: items)
+
+    def unavailable(*_args, **_kwargs):
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(retrieval, "pgvector_search", unavailable)
+    monkeypatch.setattr(retrieval, "rerank", unavailable)
+    hits = complex_retrieve(None, uuid.uuid4(), "目标证据", mode="hybrid", k=1)  # type: ignore[arg-type]
+    assert len(hits) == 1
+    assert hits[0].content == "目标证据"
+    assert hits[0].score > 0

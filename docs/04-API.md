@@ -116,7 +116,7 @@ POST /qa                         # body 新增 collection_id?
 
 上传层不设扩展名白名单：单文件、文件夹与 ZIP 中的每个文件都先按原始字节进行内容寻址保存，再由解析器识别 PDF、Office Open XML、Notebook、JSON、文本、分隔数据表或通用二进制。`structured` 表示可结构化查询，`indexed` 表示可全文检索，`stored` 表示原文件已保存但当前无文本可提取，`needs_attention` 表示原文件已保存且已给出 OCR、损坏格式等增强解析提示。后两种状态不得伪装成检索成功，也不得导致同批其他文件失败。单批最多 100 个文件和 100 MB 解压后内容；ZIP 拒绝路径穿越与加密条目。
 
-Excel schema 同时返回 `default_sheet` 与所有 `sheets`。CSV 默认严格校验每行列数；对于可无歧义识别的科研仪器成对谱线导出（多行元数据 + 固定宽度数值区），系统将每组谱线规范化为 `<series>_axis` 与 `<series>_intensity` 字段，并在 schema 中标记 `source_format=paired_series_csv` 与原始表头行数。无法满足该结构契约的错列文件不得静默跳行或猜测合并单元格：原文件正常入库并标记 `needs_attention`，但不创建可查询 Dataset。
+Excel schema 同时返回 `default_sheet` 与所有 `sheets`。CSV/TSV 先执行严格列宽校验；对于可无歧义识别的科研仪器成对谱线导出（多行元数据 + 固定宽度数值区），系统将每组谱线规范化为 `<series>_axis` 与 `<series>_intensity` 字段，并在 schema 中标记 `source_format=paired_series_csv` 与原始表头行数。其他错列数据表不得被拒绝或静默丢行：系统使用最大实际列宽无损补齐缺失单元格，为无表头列生成稳定字段名，并在 schema 的 `repair` 回执中记录原表头宽度、规整行号和规整策略；该文件仍创建可查询 Dataset，前端以“数据表已无损规整”明确提示。只有文本编码不可识别或内容损坏到无法读取记录时才降级为 `needs_attention`。
 
 ### M1c 异构数据目录与结构化查询
 
@@ -437,9 +437,11 @@ GET /settings/metrics
      }
 ```
 
-语义查询向量按原始查询缓存，混合检索的 CrossEncoder 分数按“查询 + 完整候选文本序列”缓存；只有输入完全一致时复用，不跳过项目/文件夹 SQL 作用域，也不改变 BM25、pgvector、RRF 或 reranker 排序。RRF 默认取前 12 个候选进入 CrossEncoder（`RERANK_LIMIT` 可在 5–50 内配置），避免 CPU 环境对 30 个长文本逐一重排造成不可接受的首问延迟；召回仍使用 BM25 与 pgvector 各 50 个候选。文档入库的批量 embedding 不走查询缓存。
+语义查询向量按原始查询缓存，混合检索的 CrossEncoder 分数按“查询 + 完整候选文本序列”缓存；只有输入完全一致时复用，不跳过项目/文件夹 SQL 作用域，也不改变 BM25、pgvector、RRF 或 reranker 排序。RRF 默认取前 12 个候选进入 CrossEncoder（`RERANK_LIMIT` 可在 5–50 内配置），避免 CPU 环境对 30 个长文本逐一重排造成不可接受的首问延迟；召回仍使用 BM25 与 pgvector 各 50 个候选。文档入库的批量 embedding 不走查询缓存。若向量模型暂时不可用，混合模式保留 BM25 召回；若 CrossEncoder 暂时不可用，则返回 RRF 融合顺序。显式 `semantic` 模式仍返回真实错误，不伪装为语义检索。文本入库在 embedding 失败时保留全文切块与关键词可检索能力，并标记为可恢复增强状态。
 
 前端不得把网络异常原样显示为 `Failed to fetch`。它应调用本接口展示受影响能力、下一步操作和设置入口；接口只检查本机配置与依赖可达性，不主动发送模型请求或泄露密钥。
+
+普通 REST 请求默认在 30 秒后安全停止并展示可恢复超时提示；模型连通测试为 90 秒、演示项目准备为 120 秒、单文件上传为 300 秒、批量/文件夹上传为 600 秒。用户主动取消请求与系统超时必须保持不同语义。设置页的模型配置与运行状态分别维护加载、失败和重试状态，任一接口失败都不得让页面永久停留在“正在检查”。
 
 数据库连接错误返回 `503 database_unavailable`；已连接数据库内的约束冲突返回 `409 database_conflict`，不得把约束冲突误报为“数据库未启动”。流式聊天即使在 `done` 前断开或未产生非空 `message`，前端也必须保留问题、呈现 `partial` 恢复卡并允许直接重发。
 

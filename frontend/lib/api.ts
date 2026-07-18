@@ -438,17 +438,37 @@ export type RunCompare = {
   }[];
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+type RequestOptions = RequestInit & { timeoutMs?: number };
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
+async function request<T>(path: string, init?: RequestOptions): Promise<T> {
+  const { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, ...fetchInit } = init ?? {};
+  const controller = new AbortController();
+  const sourceSignal = fetchInit.signal;
+  let timedOut = false;
+  const abortFromSource = () => controller.abort(sourceSignal?.reason);
+  if (sourceSignal?.aborted) abortFromSource();
+  else sourceSignal?.addEventListener("abort", abortFromSource, { once: true });
+  const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
-      ...init,
+      ...fetchInit,
       cache: "no-store",
+      signal: controller.signal,
     });
-  } catch {
+  } catch (error) {
+    if (timedOut) {
+      throw new Error("请求等待时间过长，已安全停止。请检查后端运行状态或网络连接后重试。");
+    }
+    if (sourceSignal?.aborted) throw error;
     throw new Error(
       "无法连接 ReproLab 服务。请确认后端已启动，再在设置中查看运行状态。",
     );
+  } finally {
+    clearTimeout(timeout);
+    sourceSignal?.removeEventListener("abort", abortFromSource);
   }
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
@@ -471,7 +491,7 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, description: description || null }),
     }),
-  prepareDemo: () => request<ProjectItem>("/projects/demo", { method: "POST" }),
+  prepareDemo: () => request<ProjectItem>("/projects/demo", { method: "POST", timeoutMs: 120_000 }),
   updateProject: (
     id: string,
     payload: { name?: string; description?: string | null },
@@ -528,7 +548,7 @@ export const api = {
         id: string;
         chunks_count?: number;
         dataset_id?: string;
-      }>("/documents", { method: "POST", body });
+      }>("/documents", { method: "POST", body, timeoutMs: 300_000 });
       finishActivity(activity, "success");
       return result;
     } catch (error) {
@@ -543,7 +563,7 @@ export const api = {
     );
     body.append("project_id", activeProjectId());
     if (collectionId) body.append("collection_id", collectionId);
-    return request<BatchStatus>("/documents/batch", { method: "POST", body });
+    return request<BatchStatus>("/documents/batch", { method: "POST", body, timeoutMs: 600_000 });
   },
   batchStatus: (batchId: string) =>
     request<BatchStatus>(
@@ -806,7 +826,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   testModel: () =>
-    request<ModelTestResult>("/settings/model/test", { method: "POST" }),
+    request<ModelTestResult>("/settings/model/test", { method: "POST", timeoutMs: 90_000 }),
   conversations: (collectionId?: string) =>
     request<ConversationSummary[]>(`/conversations?project_id=${activeProjectId()}${collectionId ? `&collection_id=${collectionId}` : ""}`),
   conversation: (id: string) =>

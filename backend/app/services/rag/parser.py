@@ -235,6 +235,79 @@ def _parse_csv(raw: bytes, separator: str = ",") -> pd.DataFrame:
     ) from last_decode_error
 
 
+def _unique_headers(values: list[str], width: int) -> list[str]:
+    """Create stable, queryable column names without discarding malformed cells."""
+    names = [value.strip() for value in values]
+    names.extend("" for _ in range(width - len(names)))
+    seen: dict[str, int] = {}
+    result: list[str] = []
+    for index, value in enumerate(names):
+        base = value or f"column_{index + 1}"
+        seen[base] = seen.get(base, 0) + 1
+        result.append(base if seen[base] == 1 else f"{base}_{seen[base]}")
+    return result
+
+
+def _parse_ragged_table(raw: bytes, separator: str) -> pd.DataFrame:
+    """Losslessly normalize inconsistent delimited rows into a rectangular table."""
+    last_error: Exception | None = None
+    for encoding in ("utf-8-sig", "gb18030"):
+        try:
+            decoded = raw.decode(encoding)
+            numbered_rows = [
+                (line, row)
+                for line, row in enumerate(csv.reader(io.StringIO(decoded), delimiter=separator), start=1)
+                if any(value.strip() for value in row)
+            ]
+        except (UnicodeDecodeError, csv.Error) as exc:
+            last_error = exc
+            continue
+        if not numbered_rows:
+            raise ValueError("数据表中没有可读取的记录")
+        header_line, header = numbered_rows[0]
+        width = max(len(row) for _, row in numbered_rows)
+        headers = _unique_headers(header, width)
+        repaired_lines = [line for line, row in numbered_rows if len(row) != width]
+        values = [
+            [*row, *([None] * (width - len(row)))]
+            for _, row in numbered_rows[1:]
+        ]
+        frame = pd.DataFrame(values, columns=headers)
+        for column in frame.columns:
+            present = frame[column].dropna().astype(str).str.strip()
+            if not present.empty:
+                numeric = pd.to_numeric(present, errors="coerce")
+                if numeric.notna().all():
+                    frame.loc[present.index, column] = numeric
+                    frame[column] = pd.to_numeric(frame[column], errors="coerce")
+        frame.attrs["reprolab_schema"] = {
+            "source_format": "ragged_delimited_text",
+            "delimiter": separator,
+            "repair": {
+                "strategy": "pad_to_max_width",
+                "header_line": header_line,
+                "header_column_count": len(header),
+                "normalized_column_count": width,
+                "repaired_row_count": len(repaired_lines),
+                "repaired_lines": repaired_lines[:50],
+                "truncated_line_receipt": len(repaired_lines) > 50,
+            },
+        }
+        return frame
+    raise ValueError("数据表文本编码无法识别") from last_error
+
+
+def _parse_delimited_file(raw: bytes, separator: str) -> tuple[pd.DataFrame, str | None]:
+    try:
+        return _parse_csv(raw, separator), None
+    except ValueError as strict_error:
+        frame = _parse_ragged_table(raw, separator)
+        return frame, (
+            "检测到不规则行，系统已保留全部记录并补齐缺失单元格；"
+            f"原始解析提示：{str(strict_error)[:220]}"
+        )
+
+
 def _parse_excel(raw: bytes) -> dict[str, Any]:
     try:
         sheets = pd.read_excel(io.BytesIO(raw), sheet_name=None)
@@ -375,12 +448,12 @@ def _parse_json_text(raw: bytes, json_lines: bool = False) -> ParsedDoc:
 
 
 def read_dataset_frame(filename: str, raw: bytes, sheet: str | None = None) -> pd.DataFrame:
-    """Read a supported table using the same strict decoding rules as ingestion."""
+    """Read a table using the same lossless normalization rules as ingestion."""
     extension = Path(filename).suffix.lower()
     if extension == ".csv":
-        return _parse_csv(raw)
+        return _parse_delimited_file(raw, ",")[0]
     if extension == ".tsv":
-        return _parse_csv(raw, separator="\t")
+        return _parse_delimited_file(raw, "\t")[0]
     if extension == ".xlsx":
         try:
             return pd.read_excel(io.BytesIO(raw), sheet_name=sheet if sheet is not None else 0)
@@ -402,11 +475,11 @@ def parse(filename: str, raw: bytes) -> ParsedDoc:
         parsed.metadata.update({"parse_status": "indexed", "parser": "pdf"})
         return parsed
     if extension == ".csv":
-        frame = _parse_csv(raw)
-        return ParsedDoc(kind="dataset", dataset_schema=_dataset_schema(frame), metadata={"parse_status": "structured", "parser": "csv"})
+        frame, message = _parse_delimited_file(raw, ",")
+        return ParsedDoc(kind="dataset", dataset_schema=_dataset_schema(frame), metadata={"parse_status": "structured", "parser": "ragged_csv" if message else "csv", **({"message": message} if message else {})})
     if extension == ".tsv":
-        frame = _parse_csv(raw, separator="\t")
-        return ParsedDoc(kind="dataset", dataset_schema=_dataset_schema(frame), metadata={"parse_status": "structured", "parser": "tsv"})
+        frame, message = _parse_delimited_file(raw, "\t")
+        return ParsedDoc(kind="dataset", dataset_schema=_dataset_schema(frame), metadata={"parse_status": "structured", "parser": "ragged_tsv" if message else "tsv", **({"message": message} if message else {})})
 
     members = _archive_members(raw) if raw.startswith(b"PK") else set()
     if extension == ".xlsx" or "xl/workbook.xml" in members:

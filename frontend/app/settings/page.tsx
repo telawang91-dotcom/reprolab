@@ -1,8 +1,8 @@
 "use client";
 
-import { Check, CheckCircle2, CircleHelp, Database, Eye, EyeOff, KeyRound, Loader2, Save, Server, ShieldCheck, SlidersHorizontal, UserRound, Wifi } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, CircleHelp, Database, Eye, EyeOff, KeyRound, RefreshCw, Save, Server, ShieldCheck, SlidersHorizontal, UserRound, Wifi } from "lucide-react";
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import { api, type ModelConfig, type ModelTestResult, type RuntimeStatus } from "@/lib/api";
 
@@ -18,15 +18,29 @@ export default function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [runtimeLoading, setRuntimeLoading] = useState(true);
+  const [configError, setConfigError] = useState("");
+  const [runtimeError, setRuntimeError] = useState("");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [notice, setNotice] = useState<{ kind: "success" | "error"; text: string }>();
   const [testResult, setTestResult] = useState<ModelTestResult>();
 
-  useEffect(() => {
-    api.runtimeStatus().then(setRuntime).catch((reason) => setNotice({ kind: "error", text: reason instanceof Error ? reason.message : "运行状态读取失败" }));
-    api.modelConfig().then(setConfig).catch((reason) => setNotice({ kind: "error", text: reason instanceof Error ? reason.message : "模型配置读取失败" })).finally(() => setLoading(false));
+  const loadConfig = useCallback(async () => {
+    setLoading(true); setConfigError("");
+    try { setConfig(await api.modelConfig()); }
+    catch (reason) { setConfigError(reason instanceof Error ? reason.message : "模型配置读取失败"); }
+    finally { setLoading(false); }
   }, []);
+
+  const loadRuntime = useCallback(async () => {
+    setRuntimeLoading(true); setRuntimeError("");
+    try { setRuntime(await api.runtimeStatus()); }
+    catch (reason) { setRuntime(undefined); setRuntimeError(reason instanceof Error ? reason.message : "运行状态读取失败"); }
+    finally { setRuntimeLoading(false); }
+  }, []);
+
+  useEffect(() => { void loadConfig(); void loadRuntime(); }, [loadConfig, loadRuntime]);
 
   function changeProvider(provider: ModelConfig["provider"]) {
     const preset = providerMeta[provider];
@@ -67,7 +81,7 @@ export default function SettingsPage() {
 
       <form onSubmit={submit} className="card overflow-hidden">
         <div className="flex items-start gap-3 border-b p-5"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand"><KeyRound size={18}/></span><div><h2 className="font-semibold">模型服务</h2><p className="mt-1 text-sm text-muted">选择日常分析和结果校验使用的模型。</p></div>{config?.api_key_configured && <span className="ml-auto hidden items-center gap-1 rounded-full bg-status-ok/10 px-3 py-1 text-xs font-medium text-status-ok sm:flex"><CheckCircle2 size={13}/>密钥已配置</span>}</div>
-        {loading || !config ? <div className="flex min-h-72 items-center justify-center gap-2 text-sm text-subtle"><Loader2 size={16} className="animate-spin"/>读取模型设置…</div> : <div className="space-y-5 p-5">
+        {loading ? <div aria-label="读取模型设置" className="min-h-72 space-y-5 p-5"><div className="h-4 w-24 animate-pulse rounded-full bg-ink/[.07]"/><div className="grid gap-2 sm:grid-cols-3">{[0, 1, 2].map((item) => <div key={item} className="h-20 animate-pulse rounded-xl bg-ink/[.05]"/>)}</div><div className="h-11 animate-pulse rounded-full bg-ink/[.05]"/><div className="grid gap-4 sm:grid-cols-2"><div className="h-11 animate-pulse rounded-full bg-ink/[.05]"/><div className="h-11 animate-pulse rounded-full bg-ink/[.05]"/></div></div> : config ? <div className="space-y-5 p-5">
           <fieldset><legend className="mb-2 text-sm font-medium">服务提供方</legend><div className="grid gap-2 sm:grid-cols-3">{(Object.keys(providerMeta) as ModelConfig["provider"][]).map((provider) => <label key={provider} className={`interactive cursor-pointer rounded-xl border p-3 ${config.provider === provider ? "border-brand/40 bg-brand/[.06]" : "hover:border-ink/20"}`}><input type="radio" name="provider" className="sr-only" checked={config.provider === provider} onChange={() => changeProvider(provider)}/><span className="flex items-center text-sm font-medium">{providerMeta[provider].label}{config.provider === provider && <Check size={14} className="ml-auto text-brand"/>}</span><span className="mt-1 block text-xs text-subtle">{provider === "custom" ? "支持 OpenAI 接口格式" : "使用官方接口"}</span></label>)}</div></fieldset>
 
           <label className="block"><span className="text-sm font-medium">服务地址</span><input value={config.base_url} onChange={(event) => setConfig({ ...config, base_url: event.target.value })} className="input mt-2 w-full" placeholder="https://api.example.com/v1" required/><span className="mt-1.5 block text-xs text-subtle">通常保留默认值；使用代理或私有服务时再修改。</span></label>
@@ -79,11 +93,25 @@ export default function SettingsPage() {
           {testResult && <div className={`rounded-apple border p-4 text-sm ${testResult.ok ? "border-status-ok/20 bg-status-ok/[.06] text-status-ok" : "border-status-err/20 bg-status-err/[.06] text-status-err"}`}><div className="font-medium">{testResult.ok ? "连接测试通过" : "连接测试失败"}</div><p className="mt-1">{testResult.message}</p><p className="mt-2 text-xs opacity-70">{testResult.model} · {testResult.latency_ms} ms</p></div>}
 
           <div className="flex flex-wrap justify-end gap-2 border-t pt-5"><button type="button" onClick={() => void save(true)} disabled={saving || testing} className="btn-secondary"><Wifi size={15}/>{testing ? "测试中…" : "保存并测试"}</button><button type="submit" disabled={saving || testing} className="btn-primary"><Save size={15}/>{saving ? "保存中…" : "保存设置"}</button></div>
-        </div>}
+        </div> : <div className="p-5"><UnavailablePanel
+          title="模型设置暂不可用"
+          message={configError || "没有读取到模型设置。"}
+          action="重新读取模型设置"
+          onRetry={() => void loadConfig()}
+        /></div>}
       </form>
     </section>
 
-    <section id="system-status" className="scroll-mt-20"><div className="mb-3"><h2 className="font-semibold">运行状态</h2><p className="mt-1 text-sm text-muted">页面、资料和分析能力是否可用，以及下一步该如何恢复。</p></div>{runtime ? <><div className={`mb-3 rounded-xl border px-4 py-3 text-sm ${runtime.state === "ready" ? "border-status-ok/20 bg-status-ok/[.06] text-status-ok" : "border-status-warn/20 bg-status-warn/[.06] text-status-warn"}`}>{runtime.summary}</div><div className="grid gap-3 md:grid-cols-3">{runtime.components.map((item) => <RuntimeCard key={item.key} item={item}/>)}</div></> : <div className="grid gap-3 md:grid-cols-3"><StatusCard icon={Server} title="运行状态" state="checking"/><StatusCard icon={Database} title="数据与向量库" state="checking"/><StatusCard icon={ShieldCheck} title="可信运行环境" state="checking"/></div>}</section>
+    <section id="system-status" className="scroll-mt-20"><div className="mb-3"><h2 className="font-semibold">运行状态</h2><p className="mt-1 text-sm text-muted">页面、资料和分析能力是否可用，以及下一步该如何恢复。</p></div>{runtimeLoading ? <div className="grid gap-3 md:grid-cols-3"><StatusCard icon={Server} title="运行状态" state="checking"/><StatusCard icon={Database} title="数据与向量库" state="checking"/><StatusCard icon={ShieldCheck} title="可信运行环境" state="checking"/></div> : runtime ? <><div className={`mb-3 rounded-xl border px-4 py-3 text-sm ${runtime.state === "ready" ? "border-status-ok/20 bg-status-ok/[.06] text-status-ok" : "border-status-warn/20 bg-status-warn/[.06] text-status-warn"}`}>{runtime.summary}</div><div className="grid gap-3 md:grid-cols-3">{runtime.components.map((item) => <RuntimeCard key={item.key} item={item}/>)}</div></> : <UnavailablePanel title="运行状态暂不可用" message={runtimeError || "没有读取到运行状态。"} action="重新检查运行状态" onRetry={() => void loadRuntime()}/>}</section>
+  </div>;
+}
+
+function UnavailablePanel({ title, message, action, onRetry }: { title: string; message: string; action: string; onRetry: () => void }) {
+  return <div role="alert" className="flex min-h-52 flex-col items-center justify-center rounded-apple border border-status-err/20 bg-status-err/[.04] px-6 py-8 text-center">
+    <span className="grid h-11 w-11 place-items-center rounded-full bg-status-err/10 text-status-err"><AlertTriangle size={19}/></span>
+    <h3 className="mt-4 font-semibold">{title}</h3>
+    <p className="mt-2 max-w-lg text-sm leading-6 text-muted">{message}</p>
+    <button type="button" onClick={onRetry} className="btn-secondary mt-5"><RefreshCw size={14}/>{action}</button>
   </div>;
 }
 
