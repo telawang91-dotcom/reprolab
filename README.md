@@ -8,15 +8,13 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL 16](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
 
-**赛道 A · AI4S 基础设施及工具（Infrastructure & Tools）**
-
 ReproLab 不是给科研流程再套一层聊天界面，而是把“结论是否有证据、数字能否重算、数据变化后结果是否仍成立”变成系统必须执行的检查。
 
 ![ReproLab 工作台](docs/images/workbench-home.png)
 
-## 赛道能力覆盖
+## 核心能力覆盖
 
-| 赛道要求 | 当前实现 | 可验证入口 |
+| 用户需求 | 当前实现 | 可验证入口 |
 | --- | --- | --- |
 | 复杂检索（RAG） | 元数据预过滤、BM25、pgvector、RRF 融合、交叉编码重排、原文锚点 | `/knowledge` |
 | 数据分析 | Planner / Executor / Critic 按真实数据动态生成并执行 Python | `/analysis` |
@@ -284,7 +282,7 @@ npm.cmd --prefix frontend run dev
 - 后端健康检查：[http://localhost:8000/health](http://localhost:8000/health)
 - 运行环境诊断：[http://localhost:8000/api/v1/settings/runtime](http://localhost:8000/api/v1/settings/runtime)
 
-首次使用也可以打开 `/demo`：页面会先展示赛道必备能力与真实运行状态，再创建或复用隔离的 Palmer Penguins 演示项目和研究文件夹，不会污染真实研究空间。
+首次使用也可以打开 `/demo`：页面会先展示核心能力与真实运行状态，再创建或复用隔离的 Palmer Penguins 演示项目和研究文件夹，不会污染真实研究空间。
 
 ![首次使用引导](docs/images/getting-started.png)
 

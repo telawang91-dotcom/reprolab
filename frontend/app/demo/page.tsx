@@ -30,7 +30,7 @@ const steps = [
     icon: Layers3,
     preview: "结构化科研空间",
     rows: ["多格式解析与内容寻址", "项目 / 文件夹范围隔离", "元数据、全文与表结构统一管理"],
-    proof: "对应赛道必备：多源异构科研数据的结构化管理与查询",
+    proof: "用户价值：多源异构科研数据可以统一管理、检索与追溯",
     href: "/knowledge",
     action: "进入资料空间验证",
   },
@@ -41,7 +41,7 @@ const steps = [
     icon: SearchCheck,
     preview: "混合检索与证据问答",
     rows: ["关键词 + 语义双路召回", "RRF 融合 + 交叉编码重排", "答案引用可回到原文 ⟦src_xxxx⟧"],
-    proof: "对应赛道必备：复杂检索（RAG）",
+    proof: "用户价值：复杂问题可以通过多路检索获得可回溯证据",
     href: "/knowledge",
     action: "进入证据检索验证",
   },
@@ -52,7 +52,7 @@ const steps = [
     icon: FlaskConical,
     preview: "可复现分析运行",
     rows: ["Planner 拆解研究问题", "Executor 在沙箱执行动态代码", "Critic 检查产物与来源"],
-    proof: "对应赛道必备：数据分析与智能体设计",
+    proof: "用户价值：自然语言研究问题可以转化为真实、可检查的分析运行",
     href: "/analysis",
     action: "运行一个真实分析",
   },
@@ -85,7 +85,7 @@ const steps = [
     icon: Brain,
     preview: "可核验长期记忆",
     rows: ["情节记忆：做过什么", "语义记忆：确认过的偏好与事实", "技能记忆：可复用分析方法"],
-    proof: "对应赛道必备：长期记忆能力",
+    proof: "用户价值：经过核验的方法与偏好可以跨会话复用，也可以明确遗忘",
     href: "/memory",
     action: "检查记忆来源与遗忘",
   },
@@ -97,6 +97,14 @@ const scoreEvidence = [
   { value: "20%", title: "技术落地性", text: "真实 REST API、PostgreSQL/pgvector、执行沙箱、内容寻址存储与自动化测试均可独立验证。", icon: Server },
   { value: "20%", title: "演示效果", text: "评委可亲手运行分析、追溯来源、修改输入重跑，并用错误数字现场触发校验。", icon: PlayCircle },
 ];
+
+const qualityActions: Record<string, { href: string; label: string }> = {
+  datasets: { href: "/knowledge", label: "导入可分析数据" },
+  searchable_documents: { href: "/knowledge", label: "补充可检索资料" },
+  run_success: { href: "/analysis", label: "运行一个真实分析" },
+  provenance: { href: "/results?tab=lineage", label: "检查产物血缘" },
+  verification: { href: "/results?tab=writing", label: "完成三查校验" },
+};
 
 export default function DemoPage() {
   const [current, setCurrent] = useState(0);
@@ -141,7 +149,7 @@ export default function DemoPage() {
     <main>
       <section className="grid gap-8 py-10 lg:grid-cols-[1.05fr_.95fr] lg:items-center lg:py-14">
         <div>
-          <div className="eyebrow text-brand">赛道 A · AI4S 基础设施及工具</div>
+          <div className="eyebrow text-brand">可信科研智能体工作台</div>
           <h1 className="mt-4 max-w-3xl text-4xl font-semibold leading-[1.08] tracking-[-.045em] sm:text-5xl">让科研 Agent 的每个结论，<br className="hidden sm:block"/>都经得起追问与重跑。</h1>
           <p className="mt-5 max-w-2xl text-[16px] leading-8 text-muted">ReproLab 把多源资料管理、复杂 RAG、动态数据分析、长期记忆和可信复现连成一条研究工作流。下面既说明机制，也能进入隔离项目真实操作。</p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -161,7 +169,7 @@ export default function DemoPage() {
       {quality && <DemoReadiness quality={quality} />}
 
       <section id="capabilities" className="scroll-mt-8 border-t py-10 lg:py-14">
-        <div className="mb-7 max-w-2xl"><div className="eyebrow text-brand">必备能力验证</div><h2 className="mt-2 text-3xl font-semibold tracking-[-.035em]">六步看懂完整技术闭环</h2><p className="mt-3 text-sm leading-7 text-muted">每一步都对应赛道要求或高权重评分点，不用把功能名称和真实价值分开猜。</p></div>
+        <div className="mb-7 max-w-2xl"><div className="eyebrow text-brand">核心能力验证</div><h2 className="mt-2 text-3xl font-semibold tracking-[-.035em]">六步看懂完整技术闭环</h2><p className="mt-3 text-sm leading-7 text-muted">每一步都能进入真实功能验证，让技术机制、用户价值和运行证据保持一致。</p></div>
         <div className="grid gap-5 lg:grid-cols-[.78fr_1.22fr]">
           <nav aria-label="演示能力步骤" className="space-y-2">
             {steps.map((item, index) => {
@@ -209,10 +217,16 @@ function DemoReadiness({ quality }: { quality: QualityReport }) {
     { href: "/results?tab=writing", label: "4. 三查与修复" },
     { href: "/memory", label: "5. 长期记忆" },
   ];
+  const nextMetric = quality.metrics.find((item) => item.state === "block") ?? quality.metrics.find((item) => item.state === "warn");
+  const nextAction = nextMetric ? qualityActions[nextMetric.key] : { href: "/analysis", label: "继续真实演示" };
   return <section aria-label="演示就绪检查" className="mb-10 rounded-appleXl border bg-surface p-6 lg:p-8">
     <div className="flex flex-wrap items-start gap-4"><div><div className="eyebrow text-brand">真实项目预检</div><h2 className="mt-2 text-2xl font-semibold">{quality.ready_for_demo ? "可信闭环已就绪" : "演示项目已隔离，按主线补齐证据"}</h2><p className="mt-2 text-sm text-muted">以下数字直接读取项目账本，不是静态演示文案。</p></div><span className={`ml-auto rounded-full px-3 py-2 text-xs font-semibold ${quality.ready_for_demo ? "bg-status-ok/10 text-status-ok" : "bg-status-warn/10 text-status-warn"}`}>{quality.ready_for_demo ? "READY" : `${quality.blockers.length} 项待完成`}</span></div>
-    <div className="mt-6 grid gap-3 md:grid-cols-5">{quality.metrics.map((item) => <article key={item.key} className="rounded-apple border bg-ink/[.025] p-4"><div className={`text-2xl font-semibold ${item.state === "ready" ? "text-status-ok" : item.state === "block" ? "text-status-err" : "text-status-warn"}`}>{item.ratio == null ? item.value : `${Math.round(item.ratio * 100)}%`}</div><h3 className="mt-2 text-sm font-semibold">{item.title}</h3><p className="mt-1 text-xs leading-5 text-muted">{item.evidence}</p></article>)}</div>
+    <div className="mt-6 grid gap-3 md:grid-cols-5">{quality.metrics.map((item) => {
+      const action = qualityActions[item.key] ?? { href: "/results", label: "查看证据" };
+      return <Link key={item.key} href={action.href} aria-label={`${item.title}：${action.label}`} className="interactive-card rounded-apple border bg-ink/[.025] p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/35"><div className={`text-2xl font-semibold ${item.state === "ready" ? "text-status-ok" : item.state === "block" ? "text-status-err" : "text-status-warn"}`}>{item.ratio == null ? item.value : `${Math.round(item.ratio * 100)}%`}</div><h3 className="mt-2 text-sm font-semibold">{item.title}</h3><p className="mt-1 text-xs leading-5 text-muted">{item.evidence}</p><span className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-brand">{action.label}<ArrowRight size={11}/></span></Link>;
+    })}</div>
     {quality.blockers.length > 0 && <div className="mt-5 rounded-apple bg-status-warn/[.07] p-4 text-sm text-muted"><strong className="text-status-warn">当前待完成</strong><ul className="mt-2 space-y-1">{quality.blockers.map((item) => <li key={item}>• {item}</li>)}</ul></div>}
+    <div className="mt-5 flex flex-wrap items-center gap-3 rounded-apple border border-brand/15 bg-brand/[.045] p-4"><div className="min-w-0 flex-1"><div className="text-xs font-semibold text-brand">推荐下一步</div><p className="mt-1 text-sm leading-6 text-muted">{quality.next_actions[0] ?? (quality.ready_for_demo ? "所有关键证据已经齐备，可以进入真实分析继续演示。" : `先完成“${nextMetric?.title ?? "当前检查"}”，系统会自动刷新后续建议。`)}</p></div><Link href={nextAction.href} className="btn-primary min-h-10 shrink-0 px-4">{nextAction.label}<ArrowRight size={13}/></Link></div>
     <nav aria-label="三分钟演示主线" className="mt-5 flex flex-wrap gap-2">{routes.map((item) => <Link key={item.href} href={item.href} className="btn-secondary min-h-10 px-3">{item.label}<ArrowRight size={13}/></Link>)}</nav>
   </section>;
 }

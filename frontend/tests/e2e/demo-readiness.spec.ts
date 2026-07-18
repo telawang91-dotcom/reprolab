@@ -45,6 +45,9 @@ test("真实运行状态和项目质量指标形成可操作演示主线", async
   await expect(page.getByRole("region", { name: "演示就绪检查" })).toBeVisible();
   await expect(page.getByText("以下数字直接读取项目账本，不是静态演示文案。")).toBeVisible();
   await expect(page.getByRole("link", { name: /2\. 动态分析/ })).toHaveAttribute("href", "/analysis");
+  await expect(page.getByText("推荐下一步")).toBeVisible();
+  await expect(page.getByRole("link", { name: "运行一个真实分析" }).first()).toHaveAttribute("href", "/analysis");
+  await expect(page.getByRole("link", { name: /分析运行成功率：运行一个真实分析/ })).toHaveAttribute("href", "/analysis");
   await expect(page.getByText("3 项待完成")).toBeVisible();
 });
 
