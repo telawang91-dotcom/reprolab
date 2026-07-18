@@ -52,5 +52,6 @@ test("窄屏仍可切换能力证据并进入主流程", async ({ page }) => {
   await page.goto("/demo");
   await page.getByRole("button", { name: /04 · 漂移归因/ }).click();
   await expect(page.getByRole("heading", { name: "改了数据，不只告诉你结果变了，还定位为什么变" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "检查溯源与漂移" })).toHaveAttribute("href", "/results?tab=lineage");
   await expect(page.getByRole("button", { name: "准备并检查演示项目" }).first()).toBeVisible();
 });

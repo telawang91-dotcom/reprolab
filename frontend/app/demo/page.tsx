@@ -31,6 +31,8 @@ const steps = [
     preview: "结构化科研空间",
     rows: ["多格式解析与内容寻址", "项目 / 文件夹范围隔离", "元数据、全文与表结构统一管理"],
     proof: "对应赛道必备：多源异构科研数据的结构化管理与查询",
+    href: "/knowledge",
+    action: "进入资料空间验证",
   },
   {
     eyebrow: "02 · 复杂检索 RAG",
@@ -40,6 +42,8 @@ const steps = [
     preview: "混合检索与证据问答",
     rows: ["关键词 + 语义双路召回", "RRF 融合 + 交叉编码重排", "答案引用可回到原文 ⟦src_xxxx⟧"],
     proof: "对应赛道必备：复杂检索（RAG）",
+    href: "/knowledge",
+    action: "进入证据检索验证",
   },
   {
     eyebrow: "03 · Agent 动态分析",
@@ -49,6 +53,8 @@ const steps = [
     preview: "可复现分析运行",
     rows: ["Planner 拆解研究问题", "Executor 在沙箱执行动态代码", "Critic 检查产物与来源"],
     proof: "对应赛道必备：数据分析与智能体设计",
+    href: "/analysis",
+    action: "运行一个真实分析",
   },
   {
     eyebrow: "04 · 漂移归因",
@@ -58,6 +64,8 @@ const steps = [
     preview: "溯源、复现与根因定位",
     rows: ["数据 + 代码 + 环境完整血缘", "一键重跑与容差比对", "受控消融定位漂移来源"],
     proof: "对应技术深度：自研漂移归因与可信计算闭环",
+    href: "/results?tab=lineage",
+    action: "检查溯源与漂移",
   },
   {
     eyebrow: "05 · 对抗校验与自修复",
@@ -67,6 +75,8 @@ const steps = [
     preview: "三查校验",
     rows: ["数字 / 图表来源检查", "引用 NLI：蕴含、中立、矛盾", "Reflexion 多轮修正后再校验"],
     proof: "对应技术深度：语义校验与多智能体自修复",
+    href: "/results?tab=writing",
+    action: "进入三查与修复",
   },
   {
     eyebrow: "06 · 长期科研记忆",
@@ -76,6 +86,8 @@ const steps = [
     preview: "可核验长期记忆",
     rows: ["情节记忆：做过什么", "语义记忆：确认过的偏好与事实", "技能记忆：可复用分析方法"],
     proof: "对应赛道必备：长期记忆能力",
+    href: "/memory",
+    action: "检查记忆来源与遗忘",
   },
 ];
 
@@ -170,6 +182,7 @@ export default function DemoPage() {
               <p className="mt-4 max-w-2xl text-sm leading-7 text-muted">{step.text}</p>
               <div className="mt-6 grid gap-2 sm:grid-cols-3">{step.rows.map((row, index) => <div key={row} className="rounded-apple bg-ink/[.035] p-4"><span className="grid h-6 w-6 place-items-center rounded-full bg-brand/10 text-xs font-semibold text-brand">{index + 1}</span><p className="mt-3 text-sm leading-6">{row}</p></div>)}</div>
               <div className="mt-5 flex items-start gap-2 rounded-apple bg-status-ok/[.07] px-4 py-3 text-xs leading-5 text-status-ok"><ShieldCheck size={14} className="mt-0.5 shrink-0"/><strong>{step.proof}</strong></div>
+              <Link href={step.href} className="btn-primary mt-5 min-h-11 w-full sm:w-auto">{step.action}<ArrowRight size={14}/></Link>
             </div>
           </article>
         </div>
