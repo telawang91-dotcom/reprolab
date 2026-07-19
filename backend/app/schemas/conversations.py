@@ -11,6 +11,7 @@ class StrictModel(BaseModel):
 
 class ConversationSummary(StrictModel):
     id: uuid.UUID
+    collection_id: uuid.UUID | None
     title: str | None
     created_at: datetime
     updated_at: datetime
@@ -24,5 +25,6 @@ class ConversationEvent(StrictModel):
 
 class ConversationReplay(StrictModel):
     id: uuid.UUID
+    collection_id: uuid.UUID | None
     title: str | None
     events: list[ConversationEvent]

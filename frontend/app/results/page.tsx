@@ -1,6 +1,6 @@
 import { ResultsHub, type ResultsTab } from "@/components/results/ResultsHub";
 
-const validTabs = new Set<ResultsTab>(["artifacts", "writing", "lineage", "records"]);
+const validTabs = new Set<ResultsTab>(["artifacts", "writing"]);
 
 export default function ResultsPage({ searchParams }: { searchParams: { tab?: string } }) {
   const requested = searchParams.tab as ResultsTab | undefined;

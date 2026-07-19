@@ -124,6 +124,7 @@ sql
 CREATE TABLE conversations (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id  UUID REFERENCES projects(id),
+  collection_id UUID REFERENCES collections(id) ON DELETE SET NULL,
   title       TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -137,6 +138,9 @@ CREATE TABLE messages (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
+
+`collection_id` 是会话的稳定工作范围。一个研究文件夹可以拥有多个独立会话；
+继续追问必须复用同一会话与文件夹范围，禁止仅依赖消息元数据推断归属。
 
 ### 4. 溯源核心（M5 / M7）—— 招牌，结构要扎实
 

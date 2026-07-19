@@ -134,6 +134,7 @@ export type DatasetQueryResult = {
 };
 export type ConversationSummary = {
   id: string;
+  collection_id: string | null;
   title: string | null;
   created_at: string;
   updated_at: string;
@@ -141,6 +142,7 @@ export type ConversationSummary = {
 };
 export type ConversationReplay = {
   id: string;
+  collection_id: string | null;
   title: string | null;
   events: ChatEvent[];
 };

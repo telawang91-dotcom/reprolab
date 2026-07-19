@@ -15,16 +15,12 @@ import {
   FolderPlus,
   LocateFixed,
   MessageSquarePlus,
-  Send,
   ShieldCheck,
-  Sparkles,
   Trash2,
   UploadCloud,
   X,
 } from "lucide-react";
 
-import { AgentTimelineView } from "@/components/agent/AgentTimelineView";
-import { useAnalysisSession } from "@/components/agent/useAnalysisSession";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Sheet } from "@/components/ui/Sheet";
@@ -273,7 +269,8 @@ export default function KnowledgePage() {
               {dragging && <div className="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-appleXl border-2 border-dashed border-brand bg-surface/95 text-sm font-semibold text-brand">松手添加到“{activeCollection.name}”</div>}
 
               <div className="flex flex-wrap items-start gap-3 border-b pb-5">
-                <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-2xl font-semibold">{activeCollection.name}</h2><span className="inline-flex items-center gap-1 rounded-full bg-status-ok/10 px-2.5 py-1 text-[11px] font-semibold text-status-ok"><ShieldCheck size={12} />当前问答范围</span></div><p className="mt-1 text-sm text-muted">{activeCollection.description || `${documents.length} 份资料，只在此空间内检索`}</p></div>
+                <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-2xl font-semibold">{activeCollection.name}</h2><span className="inline-flex items-center gap-1 rounded-full bg-status-ok/10 px-2.5 py-1 text-[11px] font-semibold text-status-ok"><ShieldCheck size={12} />独立研究范围</span></div><p className="mt-1 text-sm text-muted">{activeCollection.description || `${documents.length} 份资料，仅供该文件夹下的对话使用`}</p></div>
+                <Link href={`/analysis?collection=${activeCollection.id}`} className="btn-primary h-10 px-4"><MessageSquarePlus size={14} />进入对话</Link>
                 <button onClick={() => fileRef.current?.click()} className="btn-secondary h-10 px-4"><UploadCloud size={14} />添加文件</button>
                 <button onClick={() => folderRef.current?.click()} className="btn-secondary h-10 px-4"><FolderOpen size={14} />导入文件夹</button>
                 <button onClick={() => { setDeleteError(""); setPendingDelete({ kind: "collection", id: activeCollection.id, name: activeCollection.name }); }} className="grid h-10 w-10 place-items-center rounded-full text-subtle hover:bg-status-err/10 hover:text-status-err" aria-label={`删除空间${activeCollection.name}`} title="删除空间"><Trash2 size={15} /></button>
@@ -287,9 +284,7 @@ export default function KnowledgePage() {
                 <div className="mt-8 rounded-appleLg border border-dashed py-14"><EmptyState title="这个空间还没有资料" description="添加文件或导入文件夹后，才会开启当前空间的可信问答。" action={<div className="flex flex-wrap justify-center gap-2"><button onClick={() => fileRef.current?.click()} className="btn-primary"><UploadCloud size={14} />添加文件</button><button onClick={() => folderRef.current?.click()} className="btn-secondary"><FolderOpen size={14} />导入文件夹</button></div>} /></div>
               ) : (
                 <>
-                  <WorkspaceAgent collectionId={activeCollection.id} collectionName={activeCollection.name} documentCount={documents.length} onOpenDocument={openDocument} />
-
-                  <details className="mt-6 overflow-hidden rounded-appleLg border bg-surface">
+                  <details className="mt-8 overflow-hidden rounded-appleLg border bg-surface" open>
                     <summary className="flex min-h-16 cursor-pointer list-none items-center gap-3 px-5"><Folder size={17} className="text-brand" /><span><strong className="block text-sm">资料来源</strong><span className="mt-0.5 block text-xs text-muted">{documents.length} 份文件，默认收起</span></span><ChevronDown size={16} className="ml-auto text-subtle" /></summary>
                     <div className="border-t">
                       <div className="flex flex-wrap items-center gap-2 px-5 py-3"><select value={type} onChange={(event) => setType(event.target.value)} className="input h-9 py-0 text-xs"><option value="">所有类型</option><option value="paper">论文</option><option value="note">笔记</option><option value="code">代码</option><option value="other">数据/其他</option></select><input value={year} onChange={(event) => setYear(event.target.value)} className="input h-9 w-24 py-0 text-xs" inputMode="numeric" placeholder="年份 ≥" /><span className="ml-auto text-xs text-muted">{visible.length} 项</span></div>
@@ -312,67 +307,6 @@ export default function KnowledgePage() {
       <ConfirmDialog open={!!pendingDelete} title={pendingDelete?.kind === "collection" ? "删除研究文件夹" : "永久删除资料"} description={pendingDelete?.kind === "collection" ? `“${pendingDelete.name}”中的资料会保留并移到未归档，不会删除原文件。` : `将删除“${pendingDelete?.name || ""}”、文本切块和关联数据记录。此操作无法撤销；既有运行与产物账本仍保留审计信息。`} confirmLabel={pendingDelete?.kind === "collection" ? "删除文件夹" : "删除资料"} busy={deleting} error={deleteError} onCancel={() => setPendingDelete(undefined)} onConfirm={() => pendingDelete?.kind === "collection" ? removeCollection() : pendingDelete ? removeDocument(pendingDelete.id) : undefined}/>
     </main>
   );
-}
-
-function WorkspaceAgent({ collectionId, collectionName, documentCount, onOpenDocument }: { collectionId: string; collectionName: string; documentCount: number; onOpenDocument: (id: string, hit?: SearchHit | null) => Promise<void> }) {
-  const session = useAnalysisSession(collectionId, undefined, { mode: "workspace", autoSelectAll: true, refreshKey: documentCount });
-  const [modelReady, setModelReady] = useState<boolean>();
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const examples = useMemo(() => [
-    "这个文件夹里有哪些资料和可分析的数据？",
-    "检查数据质量、缺失值和异常值，并告诉我应该怎么处理",
-    "结合现有资料，给出下一步最有价值的研究建议",
-  ], []);
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }));
-    return () => window.cancelAnimationFrame(frame);
-  }, [session.events, session.running]);
-
-  useEffect(() => {
-    let live = true;
-    void api.runtimeStatus().then((runtime) => {
-      if (!live) return;
-      setModelReady(runtime.components.find((item) => item.key === "model")?.state === "ready");
-    }).catch(() => { if (live) setModelReady(false); });
-    return () => { live = false; };
-  }, []);
-
-  function openAnchor(anchor: string) {
-    for (const event of [...session.events].reverse()) {
-      const sources = Array.isArray(event.data.sources) ? event.data.sources : [];
-      const source = sources.find((item) => item && typeof item === "object" && (item as Record<string, unknown>).anchor === anchor) as Record<string, unknown> | undefined;
-      if (source && typeof source.document_id === "string") {
-        void onOpenDocument(source.document_id);
-        return;
-      }
-    }
-    session.anchorClick(anchor);
-  }
-
-  function submit() {
-    if (!session.message.trim() || session.running) return;
-    void session.send();
-  }
-
-  return <section className="mt-8 overflow-hidden rounded-appleXl border bg-surface shadow-soft">
-    <header className="flex min-h-16 items-center gap-3 border-b px-4 sm:px-5">
-      <span className="grid h-9 w-9 place-items-center rounded-appleSm bg-brand/10 text-brand"><Sparkles size={17} /></span>
-      <div className="min-w-0"><h3 className="truncate text-sm font-semibold">Agent · {collectionName}</h3><p className="mt-0.5 text-[11px] text-muted">自动选择检索、文件读取、数据分析与记忆工具</p></div>
-      <div className="ml-auto flex items-center gap-2">{modelReady === false ? <Link href="/settings" className="hidden text-[11px] font-semibold text-status-warn sm:inline">配置模型 API</Link> : <span className={`hidden items-center gap-1.5 text-[11px] sm:inline-flex ${session.running ? "text-status-warn" : modelReady ? "text-status-ok" : "text-muted"}`}><span className={`h-1.5 w-1.5 rounded-full ${session.running ? "animate-pulse bg-status-warn" : modelReady ? "bg-status-ok" : "animate-pulse bg-muted"}`} />{session.running ? "Agent 工作中" : modelReady ? "API 已连接" : "检查 API"}</span>}<button onClick={session.newConversation} disabled={session.running} className="btn-secondary h-9 px-3"><MessageSquarePlus size={14} />新对话</button></div>
-    </header>
-
-    <div ref={scrollRef} className="max-h-[680px] min-h-[440px] overflow-y-auto overscroll-contain px-4 py-6 sm:px-6">
-      <div className="mx-auto max-w-3xl"><AgentTimelineView timeline={session.timeline} liveTimeline={session.liveTimeline} running={session.running} hasDatasets={session.datasets.length > 0} hasSelection={session.selected.length > 0} examples={examples} onExample={session.setMessage} onAnchor={openAnchor} onArtifact={session.setActiveArtifact} workspaceMode />{session.error && <div role="alert" className="mt-4 flex items-start gap-2 rounded-apple border border-status-err/20 bg-status-err/[.07] px-4 py-3 text-sm text-status-err"><span className="min-w-0 flex-1">{session.error}</span><button onClick={() => session.setError("")} aria-label="关闭 Agent 错误"><X size={14} /></button></div>}</div>
-    </div>
-
-    <div className="border-t bg-canvas/45 p-3 sm:p-4">
-      <div className="mx-auto max-w-3xl rounded-appleLg border bg-surface p-2 shadow-soft focus-within:border-brand/40">
-        <textarea value={session.message} onChange={(event) => session.setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } }} disabled={modelReady === false} rows={3} className="w-full resize-none bg-transparent px-2 py-1 text-[15px] leading-6 outline-none placeholder:text-subtle disabled:opacity-50" placeholder={modelReady === false ? "先到设置页配置模型 API…" : `向“${collectionName}”中的 Agent 发送消息…`} />
-        <div className="flex flex-wrap items-center gap-2 border-t px-1 pt-2 text-[11px] text-muted"><ShieldCheck size={12} className="text-status-ok" /><span>{documentCount} 个文件</span><span>·</span><span>{session.datasets.length} 个可分析数据集</span><span className="hidden sm:inline">· Enter 发送，Shift+Enter 换行</span>{session.running ? <button onClick={session.stop} className="btn-secondary ml-auto h-8 px-3"><X size={13} />停止</button> : <button onClick={submit} disabled={!session.message.trim() || modelReady === false} className="btn-primary ml-auto h-8 w-8 p-0" aria-label="发送给 Agent"><Send size={14} /></button>}</div>
-      </div>
-    </div>
-  </section>;
 }
 
 function BatchProgress({ batch }: { batch: BatchStatus }) {

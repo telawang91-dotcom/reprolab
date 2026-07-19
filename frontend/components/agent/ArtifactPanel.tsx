@@ -80,7 +80,7 @@ export function ArtifactPanel({ artifact, total, onLineage, onSave }: { artifact
     }
   }
 
-  if (!artifact) return <div className="grid min-h-64 place-items-center rounded-appleLg border border-dashed p-6 text-center"><div><BarChart3 className="mx-auto text-subtle"/><strong className="mt-4 block">产物等待区</strong><p className="mt-2 text-xs leading-5 text-muted">分析生成的图、表和数字会进入这里，并立即核对可信链。</p></div></div>;
+  if (!artifact) return <div className="grid min-h-64 place-items-center rounded-appleLg border border-dashed p-6 text-center"><div><BarChart3 className="mx-auto text-subtle"/><strong className="mt-4 block">暂无选中产物</strong><p className="mt-2 text-xs leading-5 text-muted">从回答的技术详情中打开图、表或数字，再决定是否保存。</p></div></div>;
 
   return <>
     <motion.div layoutId={`artifact-${artifact.artifact_id}`} transition={reduceMotion ? { duration: 0 } : agentSpring} className="space-y-4">
@@ -93,18 +93,18 @@ export function ArtifactPanel({ artifact, total, onLineage, onSave }: { artifact
       <ProvenanceStrip state={trust}/>
       <div className="grid grid-cols-2 gap-2"><button disabled={libraryState === "checking" || librarySaving || libraryState === "saved"} onClick={() => void saveToLibrary()} className={libraryState === "saved" ? "btn-secondary px-3" : "btn-primary px-3"}>{librarySaving ? <Loader2 size={14} className="animate-spin"/> : libraryState === "saved" ? <Check size={14}/> : <BookmarkPlus size={14}/>} {librarySaving ? "保存中…" : libraryState === "saved" ? "已保存" : "保存成果"}</button><Link href="/results?tab=writing" onClick={() => addArtifactToWriting(activeProjectId(), artifact)} className="btn-secondary px-3"><PenLine size={14}/>用于写作</Link></div>
       {libraryError && <div role="alert" className="text-xs leading-5 text-status-err">{libraryError}</div>}
-      <div className="grid grid-cols-2 gap-2"><Link href={`/lineage/${artifact.artifact_id}`} className="btn-secondary px-3"><ExternalLink size={14}/>完整溯源</Link><button onClick={openHarvest} className="btn-secondary px-3"><BookmarkPlus size={14}/>沉淀为技能</button></div>
+      <div className="grid grid-cols-2 gap-2"><Link href={`/lineage/${artifact.artifact_id}`} className="btn-secondary px-3"><ExternalLink size={14}/>完整溯源</Link><button onClick={openHarvest} className="btn-secondary px-3"><BookmarkPlus size={14}/>保存工作流</button></div>
       <button onClick={() => void onLineage(artifact.artifact_id)} className="w-full text-center text-xs text-muted hover:text-brand">快速检查可信链</button>
     </motion.div>
 
-    <Sheet open={harvestOpen} onOpenChange={setHarvestOpen} title="沉淀为可复用技能" side="bottom">
+    <Sheet open={harvestOpen} onOpenChange={setHarvestOpen} title="保存为可复用工作流" side="bottom">
       <div className="mx-auto max-w-2xl space-y-5">
-        <div className="flex items-start gap-3 rounded-apple bg-status-ok/[.08] p-4 text-sm text-status-ok"><ShieldCheck size={17} className="mt-0.5 shrink-0"/><span><strong>可信来源已锁定。</strong> 系统会从运行代码识别语义字段，保留受控数据加载与产物登记协议；应用到新数据时仍会重新执行。</span></div>
+        <div className="flex items-start gap-3 rounded-apple bg-status-ok/[.08] p-4 text-sm text-status-ok"><ShieldCheck size={17} className="mt-0.5 shrink-0"/><span><strong>只有确认后才会保存。</strong> 系统会从本次运行提取可复用步骤；应用到新数据时仍会重新执行并登记来源。</span></div>
         <div className="grid gap-4 sm:grid-cols-2"><label className="block"><span className="label">技能名称</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={200} className="input mt-2 w-full"/></label><label className="block"><span className="label">领域</span><select value={discipline} onChange={(event) => setDiscipline(event.target.value)} className="input mt-2 w-full"><option value="general">通用</option><option value="materials">材料</option><option value="biology">生物</option><option value="chemistry">化学</option><option value="medicine">医学</option></select></label></div>
         <label className="block"><span className="label">适用意图</span><textarea value={intent} onChange={(event) => setIntent(event.target.value)} maxLength={500} rows={4} className="input mt-2 h-auto w-full resize-y rounded-apple py-3" placeholder="说明这个流程解决什么问题，以及何时适用。"/></label>
         <div className="rounded-apple border bg-surface p-4"><div className="flex items-center gap-2 text-sm font-semibold"><Check size={14} className="text-status-ok"/>来源产物</div><div className="mt-2 flex flex-wrap gap-2 text-xs text-muted"><span>{artifact.title || artifact.kind}</span><span className="font-mono text-brand">{artifact.anchor}</span><span>· 完整血缘由后端再次校验</span></div></div>
         {saveError && <div role="alert" className="status-error">{saveError}</div>}
-        <div className="flex justify-end gap-2"><button onClick={() => setHarvestOpen(false)} className="btn-secondary">取消</button><button disabled={!name.trim() || !intent.trim() || saving} onClick={() => void save()} className="btn-primary">{saving ? <Loader2 size={14} className="animate-spin"/> : <BookmarkPlus size={14}/>} {saving ? "正在识别字段…" : "确认沉淀"}</button></div>
+        <div className="flex justify-end gap-2"><button onClick={() => setHarvestOpen(false)} className="btn-secondary">取消</button><button disabled={!name.trim() || !intent.trim() || saving} onClick={() => void save()} className="btn-primary">{saving ? <Loader2 size={14} className="animate-spin"/> : <BookmarkPlus size={14}/>} {saving ? "正在识别字段…" : "保存工作流"}</button></div>
       </div>
     </Sheet>
   </>;

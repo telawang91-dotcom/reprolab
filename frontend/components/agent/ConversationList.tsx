@@ -14,6 +14,7 @@ type Props = {
   onNew: () => void;
   onDeleted?: (id: string) => void;
   disabled?: boolean;
+  compact?: boolean;
 };
 
 export function ConversationList({
@@ -23,6 +24,7 @@ export function ConversationList({
   onNew,
   onDeleted,
   disabled = false,
+  compact = false,
 }: Props) {
   const reduceMotion = useReducedMotion();
   const [items, setItems] = useState<ConversationSummary[]>([]);
@@ -82,8 +84,8 @@ export function ConversationList({
   };
 
   return (
-    <section>
-      <div className="flex min-h-9 items-center gap-2">
+    <section aria-label="文件夹会话">
+      {!compact && <div className="flex min-h-9 items-center gap-2">
         <MessageSquareText size={14} className="text-brand" />
         <strong className="text-xs">分析会话</strong>
         <button
@@ -96,11 +98,11 @@ export function ConversationList({
         >
           <Plus size={16} />
         </button>
-      </div>
+      </div>}
       <div className="mt-1 space-y-1">
         {loading && !items.length ? <div className="h-12 animate-pulse rounded-appleSm bg-ink/[.05]" /> : (
           <AnimatePresence initial={false}>
-            {items.slice(0, 20).map((item) => {
+            {items.slice(0, compact ? 12 : 20).map((item) => {
               const isConfirming = confirming === item.id;
               const isDeleting = deleting === item.id;
               return (
@@ -110,7 +112,7 @@ export function ConversationList({
                   initial={false}
                   exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -12, height: 0 }}
                   transition={reduceMotion ? { duration: 0 } : agentSpring}
-                  className={`flex min-h-12 items-center overflow-hidden rounded-appleSm transition-colors ${activeId === item.id ? "bg-brand/10 text-brand" : "text-muted hover:bg-ink/[.04] hover:text-ink"}`}
+                  className={`flex items-center overflow-hidden rounded-appleSm transition-colors ${compact ? "min-h-10" : "min-h-12"} ${activeId === item.id ? "bg-ink/[.06] text-ink" : "text-muted hover:bg-ink/[.04] hover:text-ink"}`}
                 >
                   {isConfirming ? (
                     <div className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-2">
@@ -122,9 +124,9 @@ export function ConversationList({
                     </div>
                   ) : (
                     <>
-                      <Link href={`/analysis${collectionId ? `?collection=${collectionId}&` : "?"}conversation=${item.id}`} className="min-w-0 flex-1 px-3 py-2 text-xs">
+                      <Link href={`/analysis${collectionId ? `?collection=${collectionId}&` : "?"}conversation=${item.id}`} className={`min-w-0 flex-1 px-3 text-xs ${compact ? "py-1.5" : "py-2"}`}>
                         <strong className="block truncate font-semibold">{item.title || "未命名分析"}</strong>
-                        <span className="mt-0.5 block text-[10px] opacity-70">{new Date(item.updated_at).toLocaleString("zh-CN")} · {item.message_count} 条记录</span>
+                        {!compact && <span className="mt-0.5 block text-[10px] opacity-70">{new Date(item.updated_at).toLocaleString("zh-CN")} · {item.message_count} 条记录</span>}
                       </Link>
                       <button
                         type="button"
@@ -143,7 +145,7 @@ export function ConversationList({
             })}
           </AnimatePresence>
         )}
-        {!loading && !items.length && !error && <p className="px-2 py-3 text-xs leading-5 text-muted">这里还没有会话。点击右上角 + 开始新的分析。</p>}
+        {!loading && !items.length && !error && <p className={`px-2 text-xs leading-5 text-muted ${compact ? "py-2" : "py-3"}`}>{compact ? "暂无对话" : "这里还没有会话。点击右上角 + 开始新的分析。"}</p>}
         {error && <div role="alert" className="flex items-start gap-2 rounded-appleSm bg-status-err/[.07] px-2.5 py-2 text-xs leading-5 text-status-err"><span className="min-w-0 flex-1">{error}</span><button type="button" onClick={() => setReloadVersion((value) => value + 1)} className="inline-flex shrink-0 items-center gap-1 font-semibold"><RotateCcw size={12} />重试</button></div>}
       </div>
     </section>

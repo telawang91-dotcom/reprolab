@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { Suspense } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { WorkspaceGate } from "./WorkspaceGate";
@@ -16,7 +17,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <WorkspaceScopeProvider>
         <div className="min-h-screen bg-canvas">
           <Topbar />
-          <aside className="material fixed bottom-0 left-0 top-14 z-30 hidden w-[248px] border-r p-3 md:block"><Sidebar /></aside>
+          <aside className="material fixed bottom-0 left-0 top-14 z-30 hidden w-[248px] border-r p-3 md:block"><Suspense fallback={<div className="h-40 animate-pulse rounded-apple bg-ink/[.05]" />}><Sidebar /></Suspense></aside>
           <main className="min-h-screen pt-14 md:pl-[248px]"><WorkspaceGate>{children}</WorkspaceGate></main>
           <DocumentManager />
         </div>

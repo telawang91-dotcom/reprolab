@@ -124,8 +124,14 @@ def _conversation(db: Session, request: ChatRequest) -> Conversation:
             raise LookupError("conversation not found")
         if conversation.project_id != request.project_id:
             raise PermissionError("conversation belongs to another project")
+        if conversation.collection_id != request.collection_id:
+            raise PermissionError("conversation belongs to another research folder")
         return conversation
-    conversation = Conversation(project_id=request.project_id, title=request.message[:80])
+    conversation = Conversation(
+        project_id=request.project_id,
+        collection_id=request.collection_id,
+        title=request.message[:80],
+    )
     db.add(conversation)
     db.flush()
     return conversation

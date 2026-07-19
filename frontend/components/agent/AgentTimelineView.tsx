@@ -50,7 +50,7 @@ export function AgentTimelineView({
           <h2 className="mt-5 text-2xl font-semibold tracking-tight">{workspaceMode ? "开始和当前文件夹对话" : hasDatasets ? "从一个科研问题开始" : "先添加一份可分析的数据"}</h2>
           <p className="mt-3 text-sm leading-6 text-muted">
             {workspaceMode
-              ? "像使用 Codex 一样直接提出问题。Agent 会按需读取文件、检索内容、检查数据结构、调用分析环境，并保留工具回执。"
+              ? "直接提出问题，不需要选择功能模式。Agent 会按需读取文件、检索内容、检查数据结构、调用分析环境，并保留工具回执。"
               : hasDatasets
               ? hasSelection
                 ? "下面的问题根据已选数据字段生成。Agent 会展示真实规划、执行、自检与可信产物。"

@@ -18,7 +18,7 @@ def list_conversations(
     project_id: uuid.UUID,
     collection_id: uuid.UUID | None = None,
 ) -> list[ConversationSummary]:
-    rows = list(db.execute(
+    statement = (
         select(
             Conversation,
             func.count(Message.id),
@@ -28,24 +28,13 @@ def list_conversations(
         .where(Conversation.project_id == project_id)
         .group_by(Conversation.id)
         .order_by(func.coalesce(func.max(Message.created_at), Conversation.created_at).desc())
-    ))
+    )
     if collection_id is not None:
-        scoped_ids = {
-            conversation_id
-            for conversation_id, metadata in db.execute(
-                select(Message.conversation_id, Message.extra_metadata)
-                .join(Conversation, Conversation.id == Message.conversation_id)
-                .where(
-                    Conversation.project_id == project_id,
-                    Message.role == "user",
-                )
-            )
-            if isinstance(metadata, dict)
-            and metadata.get("collection_id") == str(collection_id)
-        }
-        rows = [row for row in rows if row[0].id in scoped_ids]
+        statement = statement.where(Conversation.collection_id == collection_id)
+    rows = list(db.execute(statement))
     return [ConversationSummary(
         id=conversation.id,
+        collection_id=conversation.collection_id,
         title=conversation.title,
         created_at=conversation.created_at,
         updated_at=updated_at,
@@ -164,4 +153,9 @@ def replay_conversation(
             "status": status,
         }))
     events.append(ConversationEvent(event="done", data={"conversation_id": conversation.id}))
-    return ConversationReplay(id=conversation.id, title=conversation.title, events=events)
+    return ConversationReplay(
+        id=conversation.id,
+        collection_id=conversation.collection_id,
+        title=conversation.title,
+        events=events,
+    )

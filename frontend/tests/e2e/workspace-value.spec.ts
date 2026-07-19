@@ -55,7 +55,6 @@ test("异构数据详情提供真实字段目录与声明式查询", async ({ pa
     }] } });
   });
   await page.goto("/knowledge");
-  await page.getByText("资料来源", { exact: true }).click();
   await page.getByRole("button", { name: /experiment\.csv/ }).click();
   await expect(page.getByText("结构化数据查询")).toBeVisible();
   await expect(page.getByText("2 行匹配")).toBeVisible();
@@ -81,10 +80,40 @@ test("Agent 断流后恢复研究问题并提供重试", async ({ page }) => {
   await page.goto("/analysis");
   await expect(page.getByRole("button", { name: "比较“group”各组的“score”差异，报告效应量并绘图" })).toBeVisible();
   const question = "比较各组得分并报告效应量";
-  await page.getByPlaceholder("直接提出你的研究问题…").fill(question);
+  await page.getByPlaceholder("直接提出问题，Agent 会自行选择需要的文件和工具…").fill(question);
   await page.getByRole("button", { name: "发送" }).click();
   await expect(page.getByRole("button", { name: "重新发送" })).toBeVisible();
-  await expect(page.getByPlaceholder("直接提出你的研究问题…")).toHaveValue(question);
+  await expect(page.getByPlaceholder("直接提出问题，Agent 会自行选择需要的文件和工具…")).toHaveValue(question);
+});
+
+test("同一文件夹支持稳定的多轮对话且复用会话 ID", async ({ page }) => {
+  const collection = { id: collectionId, project_id: projectId, name: "实验数据", description: null, document_count: 0, created_at: "2026-07-15T00:00:00Z" };
+  const conversationId = "00000000-0000-0000-0000-000000000299";
+  const requests: Record<string, unknown>[] = [];
+  await page.route("**/api/v1/collections?*", (route) => route.fulfill({ json: [collection] }));
+  await page.route("**/api/v1/documents?*", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/v1/conversations?*", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/v1/chat", (route) => {
+    const body = route.request().postDataJSON();
+    requests.push(body);
+    const round = requests.length;
+    return route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: `event: message\ndata: {"text":"第${round}轮回答","citations":[],"status":"complete"}\n\nevent: done\ndata: {"conversation_id":"${conversationId}"}\n\n`,
+    });
+  });
+  await page.goto(`/analysis?collection=${collectionId}`);
+  const input = page.getByPlaceholder("直接提出问题，Agent 会自行选择需要的文件和工具…");
+  await input.fill("第一问");
+  await page.getByRole("button", { name: "发送" }).click();
+  await expect(page.getByText("第1轮回答")).toBeVisible();
+  await input.fill("继续追问");
+  await page.getByRole("button", { name: "发送" }).click();
+  await expect(page.getByText("第2轮回答")).toBeVisible();
+  expect(requests[0].conversation_id).toBeUndefined();
+  expect(requests[1].conversation_id).toBe(conversationId);
+  await expect(page).toHaveURL(new RegExp(`conversation=${conversationId}`));
 });
 
 test("SkillHub 展示真实契约并防止重复导入", async ({ page }) => {
@@ -113,8 +142,8 @@ test("SkillHub 展示真实契约并防止重复导入", async ({ page }) => {
   }] }));
   await page.route("**/api/v1/skills/hub/community-data-quality/import", (route) => { imported = true; return route.fulfill({ status: 201, json: importedSkill }); });
   await page.goto("/analysis");
-  if (page.viewportSize()!.width < 1280) await page.getByRole("button", { name: "数据与技能" }).click();
-  const skillSurface = page.viewportSize()!.width < 1280 ? page.getByRole("dialog", { name: "数据、会话与技能" }) : page;
+  await page.getByRole("button", { name: "文件与能力" }).click();
+  const skillSurface = page.getByRole("dialog", { name: "当前文件夹 · 实验数据" });
   await expect(skillSurface.getByText("默认由 Agent 根据问题动态规划；技能只是可选工具，不限制学科与分析类型。")).toBeVisible();
   await expect(skillSurface.getByRole("combobox", { name: "全部领域" })).toHaveCount(0);
   await skillSurface.getByRole("button", { name: "SkillHub" }).click();
@@ -126,7 +155,7 @@ test("SkillHub 展示真实契约并防止重复导入", async ({ page }) => {
   await expect(page.getByRole("button", { name: "已导入", exact: true })).toBeDisabled();
 });
 
-test("成果库只展示已保存结果并支持安全移出和重新整理", async ({ page }) => {
+test("成果库只展示用户主动保存的结果并支持安全移出", async ({ page }) => {
   const savedId = "00000000-0000-0000-0000-000000000301";
   const candidateId = "00000000-0000-0000-0000-000000000302";
   const savedState: Record<string, boolean> = { [savedId]: true, [candidateId]: false };
@@ -158,14 +187,11 @@ test("成果库只展示已保存结果并支持安全移出和重新整理", as
   await page.getByRole("button", { name: "移出成果库：关键效应量" }).click();
   await expect(page.getByRole("dialog", { name: "移出成果库？" })).toBeVisible();
   await page.getByRole("button", { name: "移出成果库", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "成果库还是空的" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "还没有保存成果" })).toBeVisible();
 
-  await page.getByRole("button", { name: "整理候选成果" }).click();
-  await expect(page.getByRole("dialog", { name: "整理候选成果" })).toBeVisible();
-  await expect(page.getByText("过程统计")).toBeVisible();
-  await page.getByRole("button", { name: "保存到成果库：过程统计" }).click();
-  await page.getByRole("button", { name: "关闭整理候选成果" }).click();
-  await expect(page.getByText("过程统计")).toBeVisible();
+  await expect(page.getByText("分析过程中产生的代码、日志和中间指标不会自动堆到这里。")).toBeVisible();
+  await expect(page.getByRole("button", { name: /整理候选/ })).toHaveCount(0);
+  await expect(page.getByText("过程统计")).toHaveCount(0);
   await expect(page.getByText("关键效应量")).toHaveCount(0);
 });
 

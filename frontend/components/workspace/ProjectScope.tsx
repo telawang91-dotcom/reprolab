@@ -32,8 +32,10 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
     try {
       const items = await api.projects(true);
       const stored = selectedProjectId();
-      const chosen = items.find((item) => item.id === stored);
+      const chosen = items.find((item) => item.id === stored)
+        ?? items.find((item) => !item.archived_at);
       if (!chosen && stored) clearActiveProjectId();
+      if (chosen && chosen.id !== stored) setActiveProjectId(chosen.id);
       setProjects(items);
       setActive(chosen);
     } catch (reason) {

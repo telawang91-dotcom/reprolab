@@ -2,7 +2,7 @@
 
 import { FlaskConical, Menu, Search } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { AccountMenu } from "./AccountMenu";
 import { ActivityCenter } from "./ActivityCenter";
 import { CommandPalette } from "./CommandPalette";
@@ -34,7 +34,7 @@ export function Topbar() {
         </div>
       </header>
       <CommandPalette open={command} onOpenChange={setCommand} />
-      <Sheet open={mobile} onOpenChange={setMobile} title="ReproLab" side="bottom"><Sidebar mobile onNavigate={() => setMobile(false)} /></Sheet>
+      <Sheet open={mobile} onOpenChange={setMobile} title="ReproLab" side="bottom"><Suspense fallback={<div className="h-40 animate-pulse rounded-apple bg-ink/[.05]" />}><Sidebar mobile onNavigate={() => setMobile(false)} /></Suspense></Sheet>
     </>
   );
 }

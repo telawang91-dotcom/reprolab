@@ -24,9 +24,9 @@ class FakeSession:
 
 
 class ConversationManagementSession:
-    def __init__(self, conversations, aggregate_rows, scope_rows):
+    def __init__(self, conversations, aggregate_rows):
         self.conversations = {item.id: item for item in conversations}
-        self.results = iter([aggregate_rows, scope_rows, []])
+        self.results = iter([aggregate_rows, []])
         self.deleted = None
         self.committed = False
         self.executed = []
@@ -49,14 +49,10 @@ class ConversationManagementSession:
 
 def test_conversation_management_is_collection_scoped_and_deletable(monkeypatch):
     project_id, collection_a, collection_b = (uuid.uuid4() for _ in range(3))
-    first = SimpleNamespace(id=uuid.uuid4(), project_id=project_id, title="A", created_at=datetime.now(timezone.utc))
-    second = SimpleNamespace(id=uuid.uuid4(), project_id=project_id, title="B", created_at=datetime.now(timezone.utc))
-    rows = [(first, 3, first.created_at), (second, 5, second.created_at)]
-    scopes = [
-        (first.id, {"collection_id": str(collection_a)}),
-        (second.id, {"collection_id": str(collection_b)}),
-    ]
-    db = ConversationManagementSession([first, second], rows, scopes)
+    first = SimpleNamespace(id=uuid.uuid4(), project_id=project_id, collection_id=collection_a, title="A", created_at=datetime.now(timezone.utc))
+    second = SimpleNamespace(id=uuid.uuid4(), project_id=project_id, collection_id=collection_b, title="B", created_at=datetime.now(timezone.utc))
+    rows = [(first, 3, first.created_at)]
+    db = ConversationManagementSession([first, second], rows)
     listed = list_conversations(db, project_id, collection_a)
     assert [item.id for item in listed] == [first.id]
 
@@ -68,14 +64,14 @@ def test_conversation_management_is_collection_scoped_and_deletable(monkeypatch)
     delete_conversation(db, project_id, first.id)
     assert db.deleted is first
     assert db.committed is True
-    assert len(db.executed) == 3
+    assert len(db.executed) == 2
     assert "UPDATE runs SET conversation_id" in str(db.executed[-1])
     assert closed == [first.id]
 
 
 def test_replay_restores_questions_conclusions_and_artifact_titles():
     project_id, conversation_id, run_id, artifact_id = (uuid.uuid4() for _ in range(4))
-    conversation = SimpleNamespace(id=conversation_id, project_id=project_id, title="Penguins")
+    conversation = SimpleNamespace(id=conversation_id, project_id=project_id, collection_id=None, title="Penguins")
     run = SimpleNamespace(
         id=run_id,
         project_id=project_id,
@@ -117,7 +113,7 @@ def test_replay_restores_questions_conclusions_and_artifact_titles():
 
 def test_replay_restores_failed_turn_as_partial_report():
     project_id, conversation_id, run_id = (uuid.uuid4() for _ in range(3))
-    conversation = SimpleNamespace(id=conversation_id, project_id=project_id, title="Failed")
+    conversation = SimpleNamespace(id=conversation_id, project_id=project_id, collection_id=None, title="Failed")
     run = SimpleNamespace(
         id=run_id,
         project_id=project_id,
@@ -154,7 +150,7 @@ def test_replay_restores_failed_turn_as_partial_report():
 
 def test_replay_preserves_workspace_document_sources():
     project_id, conversation_id, document_id = (uuid.uuid4() for _ in range(3))
-    conversation = SimpleNamespace(id=conversation_id, project_id=project_id, title="Workspace")
+    conversation = SimpleNamespace(id=conversation_id, project_id=project_id, collection_id=None, title="Workspace")
     anchor = f"⟦src_{str(document_id)[:4]}⟧"
     source = {
         "anchor": anchor,

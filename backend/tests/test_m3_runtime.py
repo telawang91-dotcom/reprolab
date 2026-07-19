@@ -11,6 +11,7 @@ from app.services.agents.orchestrator import (
     FINAL_ANSWER_SYSTEM_PROMPT,
     _artifact_evidence,
     _code,
+    _conversation,
     _generate_code,
     _json_object,
     _safe_report_fallback,
@@ -260,6 +261,31 @@ def test_workspace_mode_routes_analysis_requests_but_keeps_file_questions_lightw
     assert not _workspace_needs_analysis("请告诉我这里有什么数据，可以做哪些分析", datasets)
     assert _workspace_needs_analysis("这个文件夹里有哪些数据，并检查缺失值", datasets)
     assert not _workspace_needs_analysis("检查缺失值", [])
+
+
+def test_existing_conversation_cannot_jump_to_another_research_folder():
+    project_id, collection_a, collection_b, conversation_id = (
+        uuid.uuid4() for _ in range(4)
+    )
+    conversation = SimpleNamespace(
+        id=conversation_id,
+        project_id=project_id,
+        collection_id=collection_a,
+    )
+
+    class FakeDb:
+        def get(self, _model, item_id):
+            return conversation if item_id == conversation_id else None
+
+    request = ChatRequest(
+        project_id=project_id,
+        collection_id=collection_b,
+        conversation_id=conversation_id,
+        mode="workspace",
+        message="继续分析",
+    )
+    with pytest.raises(PermissionError, match="another research folder"):
+        _conversation(FakeDb(), request)  # type: ignore[arg-type]
 
 
 def test_workspace_answer_uses_manifest_without_rag_hits(monkeypatch):

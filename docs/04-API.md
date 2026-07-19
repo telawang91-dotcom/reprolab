@@ -193,7 +193,7 @@ POST /chat                 # 自然语言 → 规划 → 执行 → 返回图/�
   # 分析执行失败时不得伪造结果；返回 status=partial 的用户可读报告并正常 done，
   # 已完成产物可继续引用。error 仅用于无法形成任何可恢复响应的基础设施级失败。
 GET /conversations?project_id={id}&collection_id={id?}
-  -> [{ id, title, created_at, updated_at, message_count }]
+  -> [{ id, collection_id, title, created_at, updated_at, message_count }]
 GET /conversations/{id}?project_id={id}
   -> { id, title, events: [{ event, data }] }
 DELETE /conversations/{id}?project_id={id}
@@ -201,7 +201,7 @@ DELETE /conversations/{id}?project_id={id}
   # 删除会话仅删除消息与会话入口；可信 Run、Artifact 和血缘账本继续保留，
   # Run.conversation_id 自动置空，历史账本不得因外键冲突阻塞删除。
 
-历史列表可按研究文件夹过滤。历史回放事件复用 POST /chat 的 SSE event/data schema；只从已持久化的 Message、Run、Artifact 还原，不新增第二套事件模型。
+历史列表可按研究文件夹过滤；会话创建后稳定绑定该文件夹，续聊不得切换范围。历史回放事件复用 POST /chat 的 SSE event/data schema；只从已持久化的 Message、Run、Artifact 还原，不新增第二套事件模型。
   # 已创建的 Run 和 Conversation 均保留，可带 conversation_id 重试；历史失败也回放为 partial 报告。
 ```
 
