@@ -133,6 +133,9 @@ export function reduceAgentTimeline(events: readonly ChatEvent[] | null | undefi
         });
         return { ...state, activeStepId: next[0]?.id, steps: [...state.steps, ...next] };
       }
+      // Workspace/RAG answers may emit a short thinking receipt without a
+      // Python plan. Do not fabricate an implicit execution step for them.
+      if (event.event === "thinking" && state.steps.length === 0) return state;
       if (event.event === "thinking") return withCurrent(state, (step) => {
         const note = text(event.data.text);
         const attempts = [...step.attempts];

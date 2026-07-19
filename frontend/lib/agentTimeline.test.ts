@@ -29,6 +29,16 @@ const event = (name: ChatEvent["event"], data: Record<string, unknown>): ChatEve
 }
 {
   const result = reduceAgentTimeline([
+    event("message", { text: "有哪些资料", user: true }),
+    event("context", { tools: [{ name: "file.scope", label: "读取文件夹", status: "used", detail: "2 份", count: 2 }] }),
+    event("thinking", { text: "正在结合文件清单组织回答" }),
+    event("message", { text: "共有两份资料" }),
+  ]);
+  assert.equal(result.steps.length, 0);
+  assert.equal(result.conclusion?.text, "共有两份资料");
+}
+{
+  const result = reduceAgentTimeline([
     event("message", { text: "第一个问题", user: true }),
     event("plan", { steps: [{ title: "第一轮" }] }),
     event("code", { code: "one()" }),
@@ -62,4 +72,4 @@ const event = (name: ChatEvent["event"], data: Record<string, unknown>): ChatEve
   assert.match(result.conclusion?.text ?? "", /连接中断/);
 }
 
-console.log("agentTimeline: 8 cases passed");
+console.log("agentTimeline: 9 cases passed");

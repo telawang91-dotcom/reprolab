@@ -53,15 +53,60 @@ def _capture_artifact(output: CapturedOutput) -> tuple[ArtifactCapture, str]:
 
 
 def _enforce_artifact_budget(execution: ExecResult, max_artifacts: int | None) -> ExecResult:
-    if max_artifacts is None or len(execution.artifacts) <= max_artifacts:
+    if max_artifacts is None or execution.status != "success":
         return execution
-    message = (
-        f"artifact budget exceeded: produced {len(execution.artifacts)}, maximum {max_artifacts}. "
-        "Keep only decision-relevant evidence, combine related metrics into one table, "
-        "and emit at most one figure for this step."
+    unique: list[CapturedOutput] = []
+    signatures: set[str] = set()
+    for artifact in execution.artifacts:
+        if artifact.data is not None:
+            signature = f"{artifact.kind}:{artifact.mime_type}:{hashlib.sha256(artifact.data).hexdigest()}"
+        else:
+            signature = f"{artifact.kind}:{artifact.mime_type}:{artifact.title}:{artifact.value!r}"
+        if signature not in signatures:
+            signatures.add(signature)
+            unique.append(artifact)
+    if len(unique) <= max_artifacts:
+        if len(unique) == len(execution.artifacts):
+            return execution
+        return ExecResult(
+            status=execution.status,
+            stdout=execution.stdout,
+            artifacts=unique,
+            timed_out=execution.timed_out,
+        )
+
+    # Artifact count is a presentation/curation concern, not a reason to turn a
+    # correct computation into a failed run.  Preserve evidence diversity: one
+    # figure, one explicit summary table, then other explicitly named results.
+    ranked: list[CapturedOutput] = []
+    preferred_groups = (
+        lambda item: item.kind == "figure",
+        lambda item: item.kind == "table" and item.title is not None,
+        lambda item: item.title is not None,
     )
-    stdout = f"{execution.stdout}\n{message}".strip()
-    return ExecResult(status="error", stdout=stdout, artifacts=[], timed_out=execution.timed_out)
+    ranked_ids: set[int] = set()
+    for predicate in preferred_groups:
+        artifact = next((item for item in unique if id(item) not in ranked_ids and predicate(item)), None)
+        if artifact is not None:
+            ranked.append(artifact)
+            ranked_ids.add(id(artifact))
+        if len(ranked) == max_artifacts:
+            break
+    for artifact in unique:
+        if len(ranked) == max_artifacts:
+            break
+        if id(artifact) not in ranked_ids:
+            ranked.append(artifact)
+            ranked_ids.add(id(artifact))
+    selected_ids = {id(item) for item in ranked}
+    selected = [item for item in unique if id(item) in selected_ids]
+    message = f"artifact curation: retained {len(selected)} decision-relevant outputs from {len(unique)} captured outputs"
+    return ExecResult(
+        status=execution.status,
+        stdout=f"{execution.stdout}\n{message}".strip(),
+        artifacts=selected,
+        timed_out=execution.timed_out,
+    )
 
 
 def _discard_untrusted_artifacts(execution: ExecResult) -> ExecResult:

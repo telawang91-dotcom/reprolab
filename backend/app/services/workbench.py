@@ -154,6 +154,13 @@ def project_quality_report(db: Session, project_id: uuid.UUID) -> ProjectQuality
     datasets = count(Dataset, Dataset.project_id == project_id)
     successful = count(Run, Run.project_id == project_id, Run.status == "success")
     failed = count(Run, Run.project_id == project_id, Run.status == "error")
+    replayed_families = db.scalar(select(func.count()).select_from(
+        select(Run.code_hash, Run.input_hash, Run.env_snapshot_id, Run.seed)
+        .where(Run.project_id == project_id, Run.status == "success")
+        .group_by(Run.code_hash, Run.input_hash, Run.env_snapshot_id, Run.seed)
+        .having(func.count(Run.id) > 1)
+        .subquery()
+    )) or 0
     artifacts = list(db.scalars(select(Artifact).join(
         Run, Artifact.run_id == Run.id
     ).where(Artifact.project_id == project_id, Run.status == "success")))
@@ -184,6 +191,7 @@ def project_quality_report(db: Session, project_id: uuid.UUID) -> ProjectQuality
         QualityMetric(key="searchable_documents", title="可检索证据文档", value=searchable_documents, total=documents, ratio=searchable_documents / documents if documents else None, state="ready" if searchable_documents else "warn", evidence="至少含一个文本切块的项目文档"),
         QualityMetric(key="run_success", title="分析运行成功率", value=successful, total=run_total, ratio=run_ratio, state="ready" if successful and failed == 0 else ("warn" if successful else "block"), evidence="项目内成功/全部运行"),
         QualityMetric(key="provenance", title="完整血缘覆盖率", value=complete, total=len(artifacts), ratio=provenance_ratio, state="ready" if artifacts and complete == len(artifacts) else "block", evidence="成功 Run、reads 与 produces 边均完整的 Artifact"),
+        QualityMetric(key="reproduction", title="一键复现验证", value=replayed_families, total=1, ratio=min(replayed_families, 1), state="ready" if replayed_families else "block", evidence="相同代码、输入、环境与随机种子的成功重放运行族"),
         QualityMetric(key="verification", title="可信结论通过率", value=verified, total=claims, ratio=verification_ratio, state="ready" if verified and flagged == 0 else ("warn" if claims == 0 else "block"), evidence="verified Claim / 全部 Claim"),
     ]
     blockers = []
@@ -191,13 +199,15 @@ def project_quality_report(db: Session, project_id: uuid.UUID) -> ProjectQuality
     if not successful: blockers.append("还没有成功的动态分析运行。")
     if not artifacts: blockers.append("还没有可展示的分析产物。")
     elif complete != len(artifacts): blockers.append(f"有 {len(artifacts) - complete} 个产物缺少完整 Dataset → Run → Artifact 血缘。")
+    if successful and not replayed_families: blockers.append("还没有完成一次结果一致的一键复现。")
     if not verified: blockers.append("还没有通过三查的可信结论。")
     if flagged: blockers.append(f"仍有 {flagged} 条结论处于 flagged 状态。")
     next_actions = []
     if not datasets: next_actions.append("进入知识空间上传 CSV/XLSX。")
     if datasets and not successful: next_actions.append("进入分析页选择数据并运行一个未预设问题。")
     if successful and not verified: next_actions.append("从成果箱进入写作，运行检查并修复后保存结论。")
-    if artifacts and complete == len(artifacts): next_actions.append("从任一产物打开溯源页并执行一次复现。")
+    if artifacts and complete == len(artifacts) and not replayed_families: next_actions.append("从任一产物打开溯源页并执行一次复现。")
+    if not blockers: next_actions.append("演示闭环已就绪，可导出复现报告或进入只读审阅。")
     return ProjectQualityReport(
         project_id=project_id,
         generated_at=datetime.now(timezone.utc),

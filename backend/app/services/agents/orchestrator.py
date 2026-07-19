@@ -55,6 +55,14 @@ WORKSPACE_EXPLICIT_ANALYSIS_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+WORKSPACE_NO_ANALYSIS_PATTERN = re.compile(
+    r"(?:不要|不用|无需|先不|暂不|不需要|无需开始|不要开始).{0,12}"
+    r"(?:执行|运行|开始|进行)?\s*(?:分析|统计|计算|绘图|画图|建模|检验)|"
+    r"(?:只|仅).{0,12}(?:介绍|概括|列出|说明|查看).{0,16}(?:资料|文件|数据|结构)|"
+    r"do\s+not\s+(?:run|execute|analy[sz]e|calculate|plot)",
+    re.IGNORECASE,
+)
+
 
 def _json_object(text: str) -> dict[str, Any]:
     stripped = text.strip()
@@ -198,6 +206,8 @@ def _workspace_scope(
 
 def _workspace_needs_analysis(message: str, datasets: list[Dataset]) -> bool:
     if not datasets:
+        return False
+    if WORKSPACE_NO_ANALYSIS_PATTERN.search(message):
         return False
     # “有哪些资料、哪些数据可分析”是在询问工作区清单与能力，不是在下达
     # 分析任务。只有同时出现明确的计算/检查动作时才升级到沙箱执行。
@@ -472,8 +482,8 @@ def _generate_code(
                 "不得定义、赋值或删除 load_dataset、emit_artifact、DATASET_PATHS、SEED。"
                 "使用 pandas/numpy/scipy/statsmodels/sklearn/matplotlib。"
                 "重要结果必须调用 emit_artifact(kind, value, title, tol)；"
-                "每个步骤登记 1-4 个对用户决策最有帮助的产物；每一次 emit_artifact 调用和每一次 plt.show 都计入上限。"
-                "相关指标必须合并成一个 table；最多再登记 1-2 个最关键的 number 或 coefficient，以及最多一张 figure。"
+                "每个步骤只登记 1-2 个对用户决策最有帮助的产物；每一次 emit_artifact 调用和每一次 plt.show 都计入上限。"
+                "相关指标必须合并成一个 table；如需绘图，另保留最多一张 figure。不要把表中已有数字重复登记为 number。"
                 "禁止在 for/apply/map 等数据驱动循环中调用 emit_artifact，禁止为每个分组、字段或中间步骤逐项登记产物。"
                 "不要把分析报告重复登记为 text 或 conclusion；系统会在全部计算成功后根据可信产物生成面向用户的最终报告。"
                 "kind 仅可为 number、coefficient、table、figure、text、conclusion；"
@@ -717,7 +727,7 @@ async def run_chat(
     anchors: list[str] = []
     artifact_events: list[dict[str, Any]] = []
     tool_summaries: list[dict[str, Any]] = []
-    artifact_budget_per_step = 4
+    artifact_budget_per_step = 2
     for step in steps:
         yield _event("thinking", {"text": step.rationale})
         previous_error: str | None = None
@@ -774,7 +784,7 @@ async def run_chat(
             if attempt == 0:
                 yield _event("thinking", {"text": "执行失败，依据完整报错修正代码后重试。"})
         else:
-            if request.mode == "workspace":
+            if request.mode == "workspace" and not artifact_events:
                 documents, scoped_datasets = _workspace_scope(db, request)
                 yield _event("thinking", {"text": "代码执行未完成，正在基于文件结构给出可操作回答。"})
                 async for item in _run_workspace_answer(

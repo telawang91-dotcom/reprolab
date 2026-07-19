@@ -76,7 +76,7 @@ export function AgentTimelineView({
   const processComplete = processTimeline.steps.length > 0 && processTimeline.steps.every((step) => step.status === "success");
   const processStatus = processFailures
     ? processComplete ? `已完成自动修复 · ${processFailures} 次` : `分析未完成 · ${processFailures} 次未通过`
-    : "全部运行成功";
+    : processComplete ? "全部运行成功" : "分析未完成";
   const context = liveTimeline.contexts.at(-1) ?? timeline.contexts.at(-1);
   const process = <section className="space-y-4" aria-label="分析过程">
     <PlanTracker steps={processTimeline.steps} />

@@ -259,6 +259,11 @@ def test_workspace_mode_routes_analysis_requests_but_keeps_file_questions_lightw
     assert not _workspace_needs_analysis("这个文件夹里有哪些文件？", datasets)
     assert not _workspace_needs_analysis("这个文件夹里有哪些资料和可分析的数据？", datasets)
     assert not _workspace_needs_analysis("请告诉我这里有什么数据，可以做哪些分析", datasets)
+    assert not _workspace_needs_analysis(
+        "这个文件夹里有哪些资料？概括时间范围和可研究问题，不要开始执行分析。",
+        datasets,
+    )
+    assert not _workspace_needs_analysis("只查看数据结构，不需要计算或绘图", datasets)
     assert _workspace_needs_analysis("这个文件夹里有哪些数据，并检查缺失值", datasets)
     assert not _workspace_needs_analysis("检查缺失值", [])
 

@@ -150,16 +150,23 @@ def test_period_index_table_artifact_is_serialized_without_recursion():
     assert result.artifacts[0].value["data"] == [[1.2], [2.4]]
 
 
-def test_artifact_budget_rejects_noisy_runs_before_persistence():
+def test_artifact_budget_curates_noisy_runs_without_failing_computation():
     execution = ExecResult(
         status="success",
         stdout="computed",
-        artifacts=[CapturedOutput(kind="number", mime_type="application/json", value=index) for index in range(5)],
+        artifacts=[
+            CapturedOutput(kind="number", mime_type="application/json", value=1, title="metric"),
+            CapturedOutput(kind="figure", mime_type="image/png", data=b"figure"),
+            CapturedOutput(kind="figure", mime_type="image/png", data=b"figure"),
+            CapturedOutput(kind="figure", mime_type="image/png", data=b"second-figure"),
+            CapturedOutput(kind="table", mime_type="application/json", value={"rows": [1]}, title="summary"),
+            CapturedOutput(kind="text", mime_type="text/plain", value="debug"),
+        ],
     )
-    limited = _enforce_artifact_budget(execution, 4)
-    assert limited.status == "error"
-    assert limited.artifacts == []
-    assert "produced 5, maximum 4" in limited.stdout
+    limited = _enforce_artifact_budget(execution, 2)
+    assert limited.status == "success"
+    assert [item.kind for item in limited.artifacts] == ["figure", "table"]
+    assert "retained 2 decision-relevant outputs from 5" in limited.stdout
 
 
 def test_failed_execution_discards_values_emitted_before_exception():
