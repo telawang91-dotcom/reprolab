@@ -256,6 +256,9 @@ def test_workspace_mode_routes_analysis_requests_but_keeps_file_questions_lightw
     datasets = [SimpleNamespace(id=uuid.uuid4())]
     assert _workspace_needs_analysis("检查缺失值并告诉我怎么处理", datasets)
     assert not _workspace_needs_analysis("这个文件夹里有哪些文件？", datasets)
+    assert not _workspace_needs_analysis("这个文件夹里有哪些资料和可分析的数据？", datasets)
+    assert not _workspace_needs_analysis("请告诉我这里有什么数据，可以做哪些分析", datasets)
+    assert _workspace_needs_analysis("这个文件夹里有哪些数据，并检查缺失值", datasets)
     assert not _workspace_needs_analysis("检查缺失值", [])
 
 

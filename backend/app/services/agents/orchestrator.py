@@ -37,6 +37,24 @@ WORKSPACE_ANALYSIS_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+WORKSPACE_INVENTORY_PATTERN = re.compile(
+    r"(?:有哪些|有什么|列出|清单|目录|概览|介绍|包含|包括|查看|看看|告诉我).{0,32}"
+    r"(?:文件夹|文件|资料|数据集|数据|内容)|"
+    r"(?:文件夹|文件|资料|数据集|数据|内容).{0,24}"
+    r"(?:有哪些|有什么|列出|清单|目录|概览|介绍|包含|包括)",
+    re.IGNORECASE,
+)
+
+WORKSPACE_EXPLICIT_ANALYSIS_PATTERN = re.compile(
+    r"检查|统计|计算|绘图|画图|可视化|比较|相关|回归|聚类|建模|检验|异常|缺失|清洗|"
+    r"数据质量|怎么处理|如何处理|处理建议|趋势|分布|效应量|置信区间|"
+    r"(?:帮我|请|开始|进行|执行|深入|全面|重新)\s*分析|"
+    r"分析(?:一下|这些|这个|该|所选|数据|文件|其中|结果|并|后|：|:)|"
+    r"analy[sz]e|statistics?|calculate|plot|visuali[sz]e|compare|correlation|regression|"
+    r"cluster|model|missing|outlier|clean|distribution|confidence interval",
+    re.IGNORECASE,
+)
+
 
 def _json_object(text: str) -> dict[str, Any]:
     stripped = text.strip()
@@ -173,7 +191,16 @@ def _workspace_scope(
 
 
 def _workspace_needs_analysis(message: str, datasets: list[Dataset]) -> bool:
-    return bool(datasets and WORKSPACE_ANALYSIS_PATTERN.search(message))
+    if not datasets:
+        return False
+    # “有哪些资料、哪些数据可分析”是在询问工作区清单与能力，不是在下达
+    # 分析任务。只有同时出现明确的计算/检查动作时才升级到沙箱执行。
+    if (
+        WORKSPACE_INVENTORY_PATTERN.search(message)
+        and not WORKSPACE_EXPLICIT_ANALYSIS_PATTERN.search(message)
+    ):
+        return False
+    return bool(WORKSPACE_ANALYSIS_PATTERN.search(message))
 
 
 def _workspace_manifest(
