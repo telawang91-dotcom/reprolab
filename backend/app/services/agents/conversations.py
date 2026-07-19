@@ -127,9 +127,12 @@ def replay_conversation(
             events.append(ConversationEvent(event="run", data={
                 "run_id": run.id, "status": run.status, "stdout": run.stdout or "",
             }))
+            # Older failed runs may contain outputs emitted before an exception.
+            # Keep their code/logs for diagnosis, but never replay those partial
+            # values as trusted artifacts.
             artifacts = list(db.scalars(
                 select(Artifact).where(Artifact.run_id == run.id).order_by(Artifact.created_at, Artifact.id)
-            ))
+            )) if run.status == "success" else []
             events.extend(ConversationEvent(event="artifact", data=_artifact_data(item)) for item in artifacts)
         text = message.content or ""
         status = "partial" if meta.get("analysis_status") == "partial" or meta.get("error_code") else "complete"

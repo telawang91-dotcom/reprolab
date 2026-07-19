@@ -8,7 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
-    "test:api": "tsc lib/api.ts lib/api.test.ts lib/documentTitle.ts lib/documentTitle.test.ts lib/artifactValue.ts lib/artifactValue.test.ts --target es2022 --module commonjs --moduleResolution node --outDir node_modules/.cache/reprolab-api --skipLibCheck --esModuleInterop --types node,react && node node_modules/.cache/reprolab-api/api.test.js && node node_modules/.cache/reprolab-api/documentTitle.test.js && node node_modules/.cache/reprolab-api/artifactValue.test.js",
+    "test:api": "tsc lib/api.ts lib/api.test.ts lib/documentTitle.ts lib/documentTitle.test.ts lib/artifactValue.ts lib/artifactValue.test.ts lib/writingStorage.ts lib/writingStorage.test.ts --target es2022 --module commonjs --moduleResolution node --outDir node_modules/.cache/reprolab-api --skipLibCheck --esModuleInterop --types node,react && node node_modules/.cache/reprolab-api/api.test.js && node node_modules/.cache/reprolab-api/documentTitle.test.js && node node_modules/.cache/reprolab-api/artifactValue.test.js && node node_modules/.cache/reprolab-api/writingStorage.test.js",
     "test:timeline": "tsc lib/agentTimeline.ts lib/agentTimeline.test.ts --target es2020 --module commonjs --moduleResolution node --outDir node_modules/.cache/reprolab-timeline --skipLibCheck --esModuleInterop --types node && node node_modules/.cache/reprolab-timeline/agentTimeline.test.js"
   },
   "dependencies": {

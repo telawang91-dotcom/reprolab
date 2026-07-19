@@ -4,7 +4,7 @@ import pytest
 
 from app.core.config import settings
 from app.services.sandbox.kernel import CapturedOutput, ExecResult, execute_code, kernel_registry
-from app.services.sandbox.runner import _enforce_artifact_budget
+from app.services.sandbox.runner import _discard_untrusted_artifacts, _enforce_artifact_budget
 
 
 @pytest.fixture(autouse=True)
@@ -138,6 +138,18 @@ def test_text_and_dataframe_artifacts_are_normalized():
     assert result.artifacts[1].value["data"] == [["Adelie", 1]]
 
 
+def test_period_index_table_artifact_is_serialized_without_recursion():
+    result = execute_code(
+        "import pandas as pd\n"
+        "frame = pd.DataFrame({'value': [1.2, 2.4]}, index=pd.period_range('2024Q1', periods=2, freq='Q'))\n"
+        "emit_artifact('table', frame, title='quarterly')",
+        timeout=15,
+    )
+    assert result.status == "success"
+    assert result.artifacts[0].value["index"] == ["2024Q1", "2024Q2"]
+    assert result.artifacts[0].value["data"] == [[1.2], [2.4]]
+
+
 def test_artifact_budget_rejects_noisy_runs_before_persistence():
     execution = ExecResult(
         status="success",
@@ -148,3 +160,15 @@ def test_artifact_budget_rejects_noisy_runs_before_persistence():
     assert limited.status == "error"
     assert limited.artifacts == []
     assert "produced 5, maximum 4" in limited.stdout
+
+
+def test_failed_execution_discards_values_emitted_before_exception():
+    execution = ExecResult(
+        status="error",
+        stdout="ValueError: stopped",
+        artifacts=[CapturedOutput(kind="number", mime_type="application/json", value=42)],
+    )
+    trusted = _discard_untrusted_artifacts(execution)
+    assert trusted.status == "error"
+    assert trusted.stdout == execution.stdout
+    assert trusted.artifacts == []

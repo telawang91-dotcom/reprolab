@@ -53,7 +53,12 @@ def artifact_library(artifact_id: uuid.UUID, project_id: uuid.UUID, db: Session 
 def update_artifact_library(
     artifact_id: uuid.UUID, request: ArtifactLibraryUpdate, db: Session = Depends(get_db)
 ) -> ArtifactLibraryState:
-    return guarded(lambda: workbench.set_artifact_library_state(db, request.project_id, artifact_id, request.saved))
+    try:
+        return workbench.set_artifact_library_state(db, request.project_id, artifact_id, request.saved)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/runs/{run_id}/report", response_model=RunReport)

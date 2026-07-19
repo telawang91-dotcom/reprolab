@@ -64,6 +64,22 @@ def _enforce_artifact_budget(execution: ExecResult, max_artifacts: int | None) -
     return ExecResult(status="error", stdout=stdout, artifacts=[], timed_out=execution.timed_out)
 
 
+def _discard_untrusted_artifacts(execution: ExecResult) -> ExecResult:
+    """A failed cell may have displayed values before raising.
+
+    Those values are useful debugging output but are not trustworthy analysis
+    results, so they must never enter the provenance ledger or result library.
+    """
+    if execution.status == "success" or not execution.artifacts:
+        return execution
+    return ExecResult(
+        status=execution.status,
+        stdout=execution.stdout,
+        artifacts=[],
+        timed_out=execution.timed_out,
+    )
+
+
 def run_code(
     db: Session,
     project_id: uuid.UUID,
@@ -92,6 +108,7 @@ def run_code(
     else:
         execution = execute_code(code, seed, timeout, conversation_id, dataset_paths)
     execution = _enforce_artifact_budget(execution, max_artifacts)
+    execution = _discard_untrusted_artifacts(execution)
     captured = [_capture_artifact(item) for item in execution.artifacts]
     artifacts = [item[0] for item in captured]
     output_hashes = [item[1] for item in captured]

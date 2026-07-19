@@ -134,12 +134,16 @@ def test_replay_restores_failed_turn_as_partial_report():
             },
         ),
     ]
+    partial_artifact = SimpleNamespace(
+        id=uuid.uuid4(), kind="number", title="不应展示", value_json=42, content_hash=None,
+    )
     replay = replay_conversation(
-        FakeSession(conversation, run, [messages, []]),
+        FakeSession(conversation, run, [messages, [partial_artifact]]),
         project_id,
         conversation_id,
     )
     assert not any(item.event == "error" for item in replay.events)
+    assert not any(item.event == "artifact" for item in replay.events)
     answer = next(
         item for item in replay.events
         if item.event == "message" and not item.data.get("user")

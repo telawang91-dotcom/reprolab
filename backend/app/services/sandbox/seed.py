@@ -137,7 +137,28 @@ def _reprolab_artifact_value(kind, value):
         if isinstance(value, _reprolab_pd.Series):
             value = value.to_frame()
         if isinstance(value, _reprolab_pd.DataFrame):
-            return _reprolab_json.loads(value.to_json(orient="split", force_ascii=False))
+            # Pandas cannot JSON-encode PeriodIndex/MultiIndex values reliably
+            # (some versions recurse until OverflowError).  Artifacts are an
+            # interchange format, so normalize exotic axis/cell values before
+            # serializing while preserving the visible table structure.
+            frame = value.copy()
+            def _axis_value(item):
+                if isinstance(item, tuple):
+                    return tuple(str(part) if isinstance(part, _reprolab_pd.Period) else part for part in item)
+                return str(item) if isinstance(item, _reprolab_pd.Period) else item
+            frame.index = [_axis_value(item) for item in frame.index]
+            frame.columns = [_axis_value(item) for item in frame.columns]
+            for column in frame.columns:
+                series = frame[column]
+                if isinstance(series.dtype, _reprolab_pd.PeriodDtype):
+                    frame[column] = series.astype(str)
+                elif series.dtype == "object":
+                    frame[column] = series.map(
+                        lambda item: str(item) if isinstance(item, _reprolab_pd.Period) else item
+                    )
+            return _reprolab_json.loads(frame.to_json(
+                orient="split", force_ascii=False, date_format="iso", default_handler=str
+            ))
     if hasattr(value, "item") and callable(value.item):
         try:
             return value.item()

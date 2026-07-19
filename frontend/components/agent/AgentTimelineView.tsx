@@ -72,11 +72,16 @@ export function AgentTimelineView({
   const answeredQuestions = new Set(conclusions.map((item) => item.question).filter(Boolean));
   const unansweredQuestion = timeline.questions.findLast((item) => !answeredQuestions.has(item));
   const processTimeline = running ? liveTimeline : timeline;
+  const processFailures = processTimeline.steps.reduce((sum, step) => sum + step.attempts.filter((attempt) => attempt.status === "error").length, 0);
+  const processComplete = processTimeline.steps.length > 0 && processTimeline.steps.every((step) => step.status === "success");
+  const processStatus = processFailures
+    ? processComplete ? `已完成自动修复 · ${processFailures} 次` : `分析未完成 · ${processFailures} 次未通过`
+    : "全部运行成功";
   const context = liveTimeline.contexts.at(-1) ?? timeline.contexts.at(-1);
   const process = <section className="space-y-4" aria-label="分析过程">
     <PlanTracker steps={processTimeline.steps} />
     <AnimatePresence initial={false}>
-      {processTimeline.steps.map((step, index) => <StepBlock key={step.id} step={step} index={index} onArtifact={onArtifact} />)}
+      {processTimeline.steps.map((step, index) => <StepBlock key={step.id} step={step} index={index} running={running} defaultOpen={processTimeline.steps.length === 1 || step.attempts.some((attempt) => attempt.status === "error")} onArtifact={onArtifact} />)}
     </AnimatePresence>
   </section>;
 
@@ -94,7 +99,7 @@ export function AgentTimelineView({
       {running && process}
       {!running && conclusions.length === 0 && process}
       {!running && conclusions.length > 0 && processTimeline.steps.length > 0 && <details className="group rounded-appleLg border bg-surface/70">
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-muted">查看分析过程与技术详情</summary>
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-muted">查看分析过程与技术详情 <span className="ml-2 font-normal text-subtle">{processStatus}</span></summary>
         <div className="border-t p-4">{process}</div>
       </details>}
     </div>

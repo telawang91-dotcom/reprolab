@@ -61,8 +61,12 @@ def project_review(db: Session, project_id: uuid.UUID) -> ReviewResponse:
     datasets = count(Dataset, Dataset.project_id == project_id)
     successful = count(Run, Run.project_id == project_id, Run.status == "success")
     failed = count(Run, Run.project_id == project_id, Run.status == "error")
-    artifacts = count(Artifact, Artifact.project_id == project_id)
-    saved_artifacts = count(Artifact, Artifact.project_id == project_id, Artifact.saved_at.is_not(None))
+    artifacts = db.scalar(select(func.count()).select_from(Artifact).join(
+        Run, Artifact.run_id == Run.id
+    ).where(Artifact.project_id == project_id, Run.status == "success")) or 0
+    saved_artifacts = db.scalar(select(func.count()).select_from(Artifact).join(
+        Run, Artifact.run_id == Run.id
+    ).where(Artifact.project_id == project_id, Run.status == "success", Artifact.saved_at.is_not(None))) or 0
     verified = count(Claim, Claim.project_id == project_id, Claim.status == "verified")
     flagged = count(Claim, Claim.project_id == project_id, Claim.status == "flagged")
     risks = ([] if flagged == 0 else [f"有 {flagged} 条结论未通过可信校验。"]) + ([] if failed == 0 else [f"有 {failed} 次分析运行失败，需要复核。"])
@@ -77,11 +81,16 @@ def project_review(db: Session, project_id: uuid.UUID) -> ReviewResponse:
 
 def project_artifacts(db: Session, project_id: uuid.UUID, limit: int = 50, view: str = "saved") -> ArtifactListResponse:
     _project(db, project_id)
-    total_count = db.scalar(select(func.count()).select_from(Artifact).where(Artifact.project_id == project_id)) or 0
-    saved_count = db.scalar(select(func.count()).select_from(Artifact).where(
-        Artifact.project_id == project_id, Artifact.saved_at.is_not(None)
+    trusted_scope = (Artifact.project_id == project_id, Run.status == "success")
+    total_count = db.scalar(select(func.count()).select_from(Artifact).join(
+        Run, Artifact.run_id == Run.id
+    ).where(*trusted_scope)) or 0
+    saved_count = db.scalar(select(func.count()).select_from(Artifact).join(
+        Run, Artifact.run_id == Run.id
+    ).where(
+        *trusted_scope, Artifact.saved_at.is_not(None)
     )) or 0
-    statement = select(Artifact).where(Artifact.project_id == project_id)
+    statement = select(Artifact).join(Run, Artifact.run_id == Run.id).where(*trusted_scope)
     if view == "saved":
         statement = statement.where(Artifact.saved_at.is_not(None))
     elif view == "candidates":
@@ -123,6 +132,9 @@ def set_artifact_library_state(
     db: Session, project_id: uuid.UUID, artifact_id: uuid.UUID, saved: bool
 ) -> ArtifactLibraryState:
     artifact = project_artifact(db, project_id, artifact_id)
+    run = db.get(Run, artifact.run_id) if artifact.run_id else None
+    if saved and (run is None or run.status != "success"):
+        raise ValueError("只有成功运行生成的可信产物可以保存到成果库")
     artifact.saved_at = datetime.now(timezone.utc) if saved else None
     db.commit()
     db.refresh(artifact)
@@ -142,7 +154,9 @@ def project_quality_report(db: Session, project_id: uuid.UUID) -> ProjectQuality
     datasets = count(Dataset, Dataset.project_id == project_id)
     successful = count(Run, Run.project_id == project_id, Run.status == "success")
     failed = count(Run, Run.project_id == project_id, Run.status == "error")
-    artifacts = list(db.scalars(select(Artifact).where(Artifact.project_id == project_id)))
+    artifacts = list(db.scalars(select(Artifact).join(
+        Run, Artifact.run_id == Run.id
+    ).where(Artifact.project_id == project_id, Run.status == "success")))
     complete = 0
     for artifact in artifacts:
         run = db.get(Run, artifact.run_id) if artifact.run_id else None
@@ -198,7 +212,9 @@ def run_report(db: Session, project_id: uuid.UUID, run_id: uuid.UUID) -> RunRepo
     run = project_run(db, project_id, run_id)
     datasets = list(db.scalars(select(Dataset).where(Dataset.project_id == project_id, Dataset.storage_hash.in_(run.input_hashes)))) if run.input_hashes else []
     environment = db.get(EnvSnapshot, run.env_snapshot_id) if run.env_snapshot_id else None
-    artifacts = list(db.scalars(select(Artifact).where(Artifact.project_id == project_id, Artifact.run_id == run.id).order_by(Artifact.created_at)))
+    artifacts = list(db.scalars(select(Artifact).where(
+        Artifact.project_id == project_id, Artifact.run_id == run.id
+    ).order_by(Artifact.created_at))) if run.status == "success" else []
     return RunReport(run_id=run.id, status=run.status, created_at=run.created_at, code_hash=run.code_hash, input_hash=run.input_hash, seed=run.seed, datasets=[{"id": str(item.id), "name": item.name, "storage_hash": item.storage_hash, "schema": item.schema_json} for item in datasets], environment={"python_version": environment.python_version if environment else None, "env_hash": environment.env_hash if environment else None, "packages": environment.packages if environment else []}, artifacts=[ReportArtifact(id=item.id, kind=item.kind, title=item.title, value=item.value_json) for item in artifacts], reproduction_note="此运行已固定输入哈希、随机种子与环境快照；请从溯源页执行重跑以验证一致性。")
 
 
