@@ -1,6 +1,5 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { Suspense } from "react";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
@@ -10,8 +9,6 @@ import { DocumentManager } from "@/components/workspace/DocumentManager";
 import { ProjectScopeProvider } from "@/components/workspace/ProjectScope";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  if (pathname.startsWith("/demo")) return <div className="min-h-screen bg-canvas">{children}</div>;
   return (
     <ProjectScopeProvider>
       <WorkspaceScopeProvider>

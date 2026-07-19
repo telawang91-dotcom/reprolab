@@ -207,7 +207,7 @@ def project_quality_report(db: Session, project_id: uuid.UUID) -> ProjectQuality
     if datasets and not successful: next_actions.append("进入分析页选择数据并运行一个未预设问题。")
     if successful and not verified: next_actions.append("从成果箱进入写作，运行检查并修复后保存结论。")
     if artifacts and complete == len(artifacts) and not replayed_families: next_actions.append("从任一产物打开溯源页并执行一次复现。")
-    if not blockers: next_actions.append("演示闭环已就绪，可导出复现报告或进入只读审阅。")
+    if not blockers: next_actions.append("研究闭环已就绪，可导出复现报告或进入只读审阅。")
     return ProjectQualityReport(
         project_id=project_id,
         generated_at=datetime.now(timezone.utc),

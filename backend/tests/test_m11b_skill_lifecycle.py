@@ -1,5 +1,6 @@
 from copy import deepcopy
 from types import SimpleNamespace
+import uuid
 
 import pytest
 
@@ -54,6 +55,30 @@ def test_role_mapping_uses_adapter_and_renders_safe_column_literals():
     assert "'species'" in code and "'body_mass_g'" in code
 
 
+def test_role_mapping_prefers_declared_columns_without_model_guessing():
+    skill = Skill(
+        name="季度趋势",
+        template="station={{station}}\npollutant={{pollutant}}",
+        intent="多站点污染物趋势",
+        input_roles={
+            "station": {"required": True},
+            "pollutant": {"required": True, "preferred_columns": ["PM2.5", "PM10"]},
+        },
+    )
+    dataset = Dataset(
+        name="air.csv",
+        storage_hash="c" * 64,
+        schema_json={"columns": [{"name": "station"}, {"name": "PM2.5"}, {"name": "PM10"}]},
+    )
+    adapter = FakeAdapter("should not be called")
+
+    mapping, reason, tokens = map_roles(skill, [dataset], adapter)
+
+    assert mapping == {"station": "station", "pollutant": "PM2.5"}
+    assert "确定性映射" in reason
+    assert tokens == 0 and adapter.requests == []
+
+
 def test_unreliable_or_nonexistent_mapping_is_rejected():
     skill = Skill(
         name="x", template="x={{value}}", intent="x",
@@ -86,3 +111,21 @@ def test_skill_hub_exposes_versioned_catalog_item():
     assert len(items) >= 3 and all(item.version >= 1 for item in items)
     assert all(item.intent and item.author and item.package_hash for item in items)
     assert all(item.tools and item.outputs and item.workflow for item in items)
+
+
+def test_skill_hub_recommends_air_quality_workflows_for_matching_project_schema():
+    class FakeSession:
+        def scalars(self, _statement):
+            return [{"columns": [
+                {"name": "station", "dtype": "object"},
+                {"name": "PM2.5", "dtype": "float64"},
+                {"name": "year", "dtype": "int64"},
+                {"name": "month", "dtype": "int64"},
+                {"name": "TEMP", "dtype": "float64"},
+            ]}]
+
+    items = list_hub(FakeSession(), uuid.uuid4())
+
+    assert items[0].recommended is True
+    assert items[0].discipline == "environment"
+    assert any(item.id == "environment-station-quarterly-trend" and item.recommended for item in items)

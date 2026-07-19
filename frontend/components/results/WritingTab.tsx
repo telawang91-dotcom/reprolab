@@ -13,6 +13,7 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnchoredMarkdown } from "@/components/anchor/AnchoredMarkdown";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { activeProjectId, api, type ArtifactSummary, type VerifyResult } from "@/lib/api";
@@ -26,8 +27,10 @@ function artifactLabel(kind: ArtifactSummary["kind"]) {
 }
 
 export function WritingTab() {
+  const router = useRouter();
   const [text, setText] = useState(writingTemplate);
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
+  const [allArtifacts, setAllArtifacts] = useState<ArtifactSummary[]>([]);
   const [verification, setVerification] = useState<VerifyResult>();
   const [checking, setChecking] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -35,6 +38,7 @@ export function WritingTab() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const [drafting, setDrafting] = useState(false);
   const keyRef = useRef("");
   const projectRef = useRef("");
 
@@ -45,7 +49,9 @@ export function WritingTab() {
       const state = readWritingState(projectId);
       keyRef.current = state.keys.draft;
       setText(state.draft);
-      setArtifacts((await api.artifacts("saved", 100)).items);
+      const [saved, all] = await Promise.all([api.artifacts("saved", 100), api.artifacts("all", 100)]);
+      setArtifacts(saved.items);
+      setAllArtifacts(all.items);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "报告加载失败");
     } finally {
@@ -56,7 +62,10 @@ export function WritingTab() {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (keyRef.current) localStorage.setItem(keyRef.current, text); }, [text]);
 
-  const anchors = useMemo(() => Array.from(text.matchAll(anchorPattern), (match) => match[1].toLowerCase()), [text]);
+  const anchors = useMemo(
+    () => Array.from(new Set(Array.from(text.matchAll(anchorPattern), (match) => match[1].toLowerCase()))),
+    [text],
+  );
   const hasArtifact = anchors.some((item) => item.startsWith("art_"));
   const failedChecks = verification?.items.filter((item) => item.verdict === "fail") || [];
 
@@ -103,6 +112,35 @@ export function WritingTab() {
     }
   }
 
+  async function generateDraft() {
+    if (drafting) return;
+    setDrafting(true);
+    setError("");
+    try {
+      const draft = await api.generateWritingDraft();
+      updateText(draft.text);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "自动生成报告失败");
+    } finally {
+      setDrafting(false);
+    }
+  }
+
+  function openAnchor(anchor: string) {
+    const match = anchor.match(/art_([0-9a-fA-F]{4})/i);
+    if (!match) {
+      setError("当前锚点不是分析产物，来源文档请从资料页打开。");
+      return;
+    }
+    const code = match[1].toLowerCase();
+    const matches = allArtifacts.filter((item) => item.id.toLowerCase().startsWith(code));
+    if (matches.length !== 1) {
+      setError(matches.length ? "锚点短码不唯一，请重新插入该成果。" : "找不到该产物，可能已从当前项目移除。");
+      return;
+    }
+    router.push(`/lineage/${matches[0].id}`);
+  }
+
   function resetDraft() {
     updateText(writingTemplate);
     setResetOpen(false);
@@ -114,8 +152,8 @@ export function WritingTab() {
     <div className="space-y-4">
       <section className="rounded-appleLg border bg-surface p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-2xl"><div className="flex items-center gap-2"><FileText size={18} className="text-brand" /><h2 className="text-lg font-semibold">项目研究报告</h2></div><p className="mt-2 text-sm leading-6 text-muted">报告与当前研究文件夹独立保存。只有你主动插入的成果进入正文；分析过程和临时指标不会自动堆积。</p></div>
-          <button onClick={() => setResetOpen(true)} className="btn-secondary h-9 px-3 text-xs"><RotateCcw size={13} />重新套用模板</button>
+          <div className="max-w-2xl"><div className="flex items-center gap-2"><FileText size={18} className="text-brand" /><h2 className="text-lg font-semibold">项目研究报告</h2></div><p className="mt-2 text-sm leading-6 text-muted">先保存值得引用的成果，再自动生成报告草稿。模型只读取成果库中的可信证据；分析过程和临时指标不会自动堆积。</p></div>
+          <div className="flex flex-wrap gap-2"><button onClick={() => void generateDraft()} disabled={drafting || !artifacts.length} className="btn-primary h-9 px-3 text-xs"><WandSparkles size={13} />{drafting ? "正在生成…" : "根据成果生成报告"}</button><button onClick={() => setResetOpen(true)} className="btn-secondary h-9 px-3 text-xs"><RotateCcw size={13} />重新套用模板</button></div>
         </div>
         <div className="mt-5 border-t pt-4">
           <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold">可引用成果</h3><p className="mt-1 text-xs text-muted">来自成果库，插入后自动生成可校验锚点。</p></div><span className="text-xs text-subtle">已插入 {anchors.filter((item) => item.startsWith("art_")).length} 项</span></div>
@@ -135,7 +173,7 @@ export function WritingTab() {
 
       <div className="grid min-h-[640px] overflow-hidden rounded-appleLg border bg-surface xl:grid-cols-2">
         <section className="flex min-h-[480px] flex-col border-b xl:border-b-0 xl:border-r"><div className="flex h-12 items-center border-b px-5 text-xs font-semibold text-muted"><span>报告正文</span><span className="ml-auto">{text.length} 字符 · 自动保存</span></div><textarea value={text} onChange={(event) => updateText(event.target.value)} className="min-h-0 flex-1 resize-none bg-transparent p-6 text-[15px] leading-7 outline-none" spellCheck={false} aria-label="报告正文" /></section>
-        <section className="overflow-y-auto bg-canvas p-5 sm:p-6"><div className="min-h-full rounded-apple border bg-surface p-6"><div className="mb-6 flex items-center gap-2 border-b pb-4 font-semibold"><ShieldCheck size={16} className="text-brand" />报告预览</div><AnchoredMarkdown text={text} />{failedChecks.length > 0 && <div className="mt-8 border-t pt-5"><h3 className="text-sm font-semibold">校验建议</h3><div className="mt-3 space-y-2">{failedChecks.map((item, index) => <div key={`${item.check}-${index}`} className="rounded-apple bg-status-warn/[.08] p-3"><div className="flex items-center gap-2 text-sm font-semibold text-status-warn"><AlertTriangle size={14} />{checkLabels[item.check]}</div><p className="mt-1 text-sm leading-6 text-muted">{item.reason}</p>{item.locate && <p className="mt-1 truncate text-xs text-subtle">位置：{item.locate}</p>}</div>)}</div></div>}</div></section>
+        <section className="overflow-y-auto bg-canvas p-5 sm:p-6"><div className="min-h-full rounded-apple border bg-surface p-6"><div className="mb-6 flex items-center gap-2 border-b pb-4 font-semibold"><ShieldCheck size={16} className="text-brand" />报告预览 <span className="ml-auto text-xs font-normal text-muted">点击蓝色锚点查看完整溯源</span></div><AnchoredMarkdown text={text} onAnchor={openAnchor} />{failedChecks.length > 0 && <div className="mt-8 border-t pt-5"><h3 className="text-sm font-semibold">校验建议</h3><div className="mt-3 space-y-2">{failedChecks.map((item, index) => <div key={`${item.check}-${index}`} className="rounded-apple bg-status-warn/[.08] p-3"><div className="flex items-center gap-2 text-sm font-semibold text-status-warn"><AlertTriangle size={14} />{checkLabels[item.check]}</div><p className="mt-1 text-sm leading-6 text-muted">{item.reason}</p>{item.locate && <p className="mt-1 truncate text-xs text-subtle">位置：{item.locate}</p>}</div>)}</div></div>}</div></section>
       </div>
     </div>
     <ConfirmDialog open={resetOpen} title="重新套用报告模板？" description="当前草稿会被标准报告结构替换。已保存成果不会删除，你可以稍后重新插入。" confirmLabel="重新开始" onCancel={() => setResetOpen(false)} onConfirm={resetDraft} />

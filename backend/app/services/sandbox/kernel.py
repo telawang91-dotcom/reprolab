@@ -68,6 +68,14 @@ def _new_handle() -> KernelHandle:
 
 def _as_artifacts(data: dict[str, Any]) -> list[CapturedOutput]:
     artifacts: list[CapturedOutput] = []
+    if "application/vnd.reprolab.figure+json" in data and "image/png" in data:
+        payload = data["application/vnd.reprolab.figure+json"] or {}
+        return [CapturedOutput(
+            "figure",
+            "image/png",
+            data=base64.b64decode(data["image/png"]),
+            title=payload.get("title") or "分析图表",
+        )]
     if "application/vnd.reprolab.artifact+json" in data:
         payload = data["application/vnd.reprolab.artifact+json"]
         return [

@@ -53,6 +53,15 @@ def test_clean_kernel_captures_numeric_and_figure_outputs():
     assert any(item.kind == "figure" and item.data for item in figure.artifacts)
 
 
+def test_figure_capture_uses_the_chart_title_instead_of_figure_number():
+    figure = execute_code(
+        "import matplotlib.pyplot as plt\nplt.plot([1, 2], [3, 4])\nplt.title('季度趋势')\nplt.show()",
+        timeout=20,
+    )
+    captured = next(item for item in figure.artifacts if item.kind == "figure")
+    assert captured.title == "季度趋势"
+
+
 def test_dataset_paths_are_real_execution_inputs(tmp_path):
     dataset = tmp_path / "input.txt"
     dataset.write_text("original", encoding="utf-8")

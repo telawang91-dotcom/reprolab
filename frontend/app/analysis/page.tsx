@@ -8,6 +8,7 @@ import { AgentTimelineView } from "@/components/agent/AgentTimelineView";
 import { ArtifactPanel } from "@/components/agent/ArtifactPanel";
 import { DataPanel } from "@/components/agent/DataPanel";
 import { LiveStatus } from "@/components/agent/LiveStatus";
+import { QuickLineage } from "@/components/agent/QuickLineage";
 import { useAnalysisSession } from "@/components/agent/useAnalysisSession";
 import { Sheet } from "@/components/ui/Sheet";
 import { useWorkspaceScope } from "@/components/workspace/WorkspaceScope";
@@ -77,7 +78,7 @@ function AnalysisWorkspace() {
         {session.skillResult && <div className={`mx-4 mt-4 rounded-apple border px-4 py-3 text-sm md:mx-6 ${session.skillResult.fallback ? "bg-status-warn/[.08] text-status-warn" : "bg-status-ok/[.08] text-status-ok"}`}>{session.skillResult.fallback ? `字段映射不确定，已安全回退动态分析：${session.skillResult.reason}` : `技能复用完成，估算节省 ${session.skillResult.saved.toLocaleString()} token。${session.skillResult.reason}`}</div>}
         <div ref={scrollRef} onScroll={updateFollowState} data-analysis-scroll className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-5 [scrollbar-gutter:stable] md:px-6">
           <div className="mx-auto max-w-4xl">
-            {session.activeCollection ? <AgentTimelineView timeline={session.timeline} liveTimeline={session.liveTimeline} running={session.running} hasDatasets={session.datasets.length > 0} hasSelection examples={examples} onExample={session.setMessage} onAnchor={session.anchorClick} onArtifact={(artifact) => { session.setActiveArtifact(artifact); setArtifactOpen(true); }} workspaceMode /> : <NoScope hasCollections={scope.collections.length > 0} unfiledCount={scope.unfiledCount} onOrganize={() => scope.openManager({ selectUnfiled: true })} />}
+            {session.activeCollection ? <AgentTimelineView timeline={session.timeline} liveTimeline={session.liveTimeline} running={session.running} hasDatasets={session.datasets.length > 0} hasSelection examples={examples} onExample={session.setMessage} onAnchor={(anchor) => { if (session.anchorClick(anchor)) setArtifactOpen(true); }} onArtifact={(artifact) => { session.setActiveArtifact(artifact); setArtifactOpen(true); }} workspaceMode /> : <NoScope hasCollections={scope.collections.length > 0} unfiledCount={scope.unfiledCount} onOrganize={() => scope.openManager({ selectUnfiled: true })} />}
             {session.running && <div className="mt-4"><LiveStatus running step={activeStep?.title} /></div>}
             {session.error && <div role="alert" className="mt-4 flex items-start gap-2 rounded-apple border border-status-err/25 bg-status-err/[.08] p-3 text-sm text-status-err"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span className="min-w-0 flex-1">{session.error}</span>{session.message.trim() && !session.running && <button onClick={requestAnalysis} className="inline-flex shrink-0 items-center gap-1 font-semibold"><RotateCcw size={13} />重新发送</button>}<button onClick={() => session.setError("")} className="shrink-0" aria-label="关闭错误"><X size={14} /></button></div>}
           </div>
@@ -93,7 +94,7 @@ function AnalysisWorkspace() {
 
       <Sheet open={dataOpen} onOpenChange={setDataOpen} title={`当前文件夹 · ${session.activeCollection?.name || ""}`} side="right"><div className="mx-auto max-w-xl"><p className="mb-5 text-sm leading-6 text-muted">默认使用文件夹内全部资料。只有需要缩小数据范围或指定复用能力时才需要在这里调整。</p>{session.activeCollection && <DataPanel datasets={session.datasets} selected={session.selected} onToggle={session.toggleDataset} skill={session.skill} onSelectSkill={session.setSkill} onApplySkill={session.applySkill} refreshKey={session.skillRefresh} />}</div></Sheet>
       <Sheet open={artifactOpen} onOpenChange={setArtifactOpen} title="产物详情" side="right"><ArtifactPanel artifact={session.activeArtifact || session.artifacts.at(-1)} total={session.artifacts.length} onLineage={session.showLineage} onSave={session.saveAsSkill} /></Sheet>
-      <Sheet open={!!session.lineage} onOpenChange={(open) => { if (!open) session.setLineage(undefined); }} title="完整可信链" side="right"><div className="space-y-2">{session.lineage?.nodes.map((node) => <div key={node.id} className="rounded-apple border p-3"><span className="text-[10px] uppercase text-brand">{node.type}</span><div className="mt-1 truncate text-sm font-semibold">{node.label}</div></div>)}</div></Sheet>
+      <Sheet open={!!session.lineage} onOpenChange={(open) => { if (!open) session.setLineage(undefined); }} title="可信来源" side="right"><QuickLineage lineage={session.lineage}/></Sheet>
     </div>
   );
 }
@@ -114,6 +115,14 @@ function datasetAwareExamples(datasets: DocumentDetail[]): string[] {
   const numeric = unique.filter((item) => /int|float|double|decimal|number/i.test(item.dtype));
   const categorical = unique.find((item) => !numeric.some((candidate) => candidate.name === item.name));
   const prompts: string[] = [];
+  const names = new Set(unique.map((item) => item.name.toLowerCase()));
+  if (["station", "pm2.5", "year", "month"].every((name) => names.has(name))) {
+    return [
+      "比较三个站点的 PM2.5 数据完整性、均值与中位数，并绘制季度变化趋势",
+      "分析 PM2.5 与风速 WSPM 的关系，报告稳健相关结果并说明非因果边界",
+      "检查各站点污染物的缺失值、重复记录和异常值，生成数据质量报告",
+    ];
+  }
   if (categorical && numeric[0]) prompts.push(`比较“${categorical.name}”各组的“${numeric[0].name}”差异，报告效应量并绘图`);
   if (numeric.length >= 2) prompts.push(`分析“${numeric[0].name}”与“${numeric[1].name}”的关系，检查异常值并报告置信区间`);
   prompts.push("检查所选数据的缺失值、重复记录和异常值，生成数据质量报告");

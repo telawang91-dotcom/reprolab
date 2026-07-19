@@ -304,10 +304,11 @@ plaintext
 
 ```
 POST /conclusions          # 验证过的结论带溯源回写知识库
+POST /conclusions/draft    # 基于用户已保存的高价值成果按需生成带锚点报告草稿
   body: { project_id, claim_text, anchors: [], status: "verified" }
   -> { document_id }        # 变成可被 M2 检索的条目
 
-# 写作面板内容存前端 + 复用 /verify、/search；文档持久化可复用 documents(type=note)
+# 写作面板内容存前端 + 复用 /verify、/search；报告只在用户主动触发时生成，候选过程产物不得自动进入正文
 ```
 
 ### M9 记忆
@@ -382,7 +383,7 @@ POST /skills/{id}/apply          # 字段映射 → 沙箱执行 → 新血缘�
 
 GET  /skills/{id}/export         # 版本化、带 sha256 的 JSON 技能包
 POST /skills/import              # body: { project_id, package }
-GET  /skills/hub
+GET  /skills/hub?project_id={project_id} # 可按当前数据结构返回相关性推荐，核心分析仍保持学科无关
   -> [{ id, name, intent, discipline, version, author, input_roles,
         tools, outputs, workflow, estimated_from_scratch_tokens, package_hash }]
 POST /skills/hub/{hub_id}/import # body: { project_id }

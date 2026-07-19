@@ -64,6 +64,22 @@ def map_roles(
     roles = skill.input_roles or {}
     if not roles:
         return {}, "技能无需字段映射", 0
+    available = _available_columns(datasets)
+    by_normalized = {column.casefold(): column for column in available}
+    deterministic: dict[str, str] = {}
+    for role, spec in roles.items():
+        preferred = spec.get("preferred_columns") or []
+        candidates = [role, *preferred] if isinstance(preferred, list) else [role]
+        selected = next(
+            (by_normalized[str(candidate).casefold()] for candidate in candidates
+             if str(candidate).casefold() in by_normalized),
+            None,
+        )
+        if selected is not None:
+            deterministic[role] = selected
+    required = {name for name, spec in roles.items() if spec.get("required", True)}
+    if required.issubset(deterministic):
+        return deterministic, "根据字段名与技能首选字段完成确定性映射", 0
     schemas = [
         {"index": index, "name": item.name, "schema": item.schema_json or {}}
         for index, item in enumerate(datasets)
@@ -95,8 +111,6 @@ def map_roles(
             "model returned an invalid field mapping", response.usage.get("total_tokens", 0)
         )
     mapping = {str(role): str(column) for role, column in raw_mapping.items() if column}
-    available = _available_columns(datasets)
-    required = {name for name, spec in roles.items() if spec.get("required", True)}
     if confidence < 0.6 or not required.issubset(mapping) or any(column not in available for column in mapping.values()):
         raise RoleMappingError(
             str(payload.get("reason") or "字段角色无法可靠映射"),

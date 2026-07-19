@@ -28,3 +28,12 @@ class ConclusionCreate(BaseModel):
 class ConclusionOut(BaseModel):
     document_id: uuid.UUID
 
+
+class WritingDraftCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project_id: uuid.UUID
+
+
+class WritingDraftOut(BaseModel):
+    text: str
+    anchors: list[str]

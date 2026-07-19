@@ -287,7 +287,7 @@ export function SkillPanel({ selected, onSelect, onApply, refreshKey = 0 }: Prop
                     {visibleHub.map((item, index) => (
                       <button key={item.id} type="button" onClick={() => setFocusedHub(item.id)} className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${index ? "border-t" : ""} ${focused?.id === item.id ? "bg-brand/[.06]" : "hover:bg-ink/[.03]"}`}>
                         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-appleSm bg-brand/10 text-brand"><FileCode2 size={16} /></span>
-                        <span className="min-w-0 flex-1"><strong className="line-clamp-2 text-sm leading-5">{item.name}</strong><span className="mt-0.5 block text-xs text-muted">{item.outputs.length} 类可信输出 · v{item.version}</span></span>
+                        <span className="min-w-0 flex-1"><strong className="line-clamp-2 text-sm leading-5">{item.name}</strong><span className={`mt-0.5 block text-xs ${item.recommended ? "text-brand" : "text-muted"}`}>{item.recommended ? "适合当前数据" : `${item.outputs.length} 类可信输出 · v${item.version}`}</span></span>
                         {installed(item) ? <Check size={14} className="shrink-0 text-status-ok" aria-label="已导入" /> : <ChevronRight size={15} className="shrink-0 text-subtle" />}
                       </button>
                     ))}
@@ -296,7 +296,7 @@ export function SkillPanel({ selected, onSelect, onApply, refreshKey = 0 }: Prop
                   {focused && (
                     <section className="rounded-appleLg border bg-surface p-5 sm:p-6">
                       <div className="flex flex-wrap items-start gap-3">
-                        <div className="min-w-0 flex-1"><span className="eyebrow text-brand">跨领域能力 · v{focused.version}</span><h3 className="mt-1 text-xl font-semibold tracking-tight">{focused.name}</h3><p className="mt-2 text-sm leading-6 text-muted">{focused.intent}</p></div>
+                        <div className="min-w-0 flex-1"><span className="eyebrow text-brand">{focused.recommended ? "当前项目推荐" : "可选研究能力"} · v{focused.version}</span><h3 className="mt-1 text-xl font-semibold tracking-tight">{focused.name}</h3><p className="mt-2 text-sm leading-6 text-muted">{focused.intent}</p>{focused.recommendation_reason && <p className="mt-3 rounded-appleSm bg-brand/[.06] px-3 py-2 text-xs leading-5 text-brand">{focused.recommendation_reason}</p>}</div>
                         <span className="text-xs text-subtle">{focused.author}</span>
                       </div>
                       <div className="mt-6 grid gap-5 sm:grid-cols-2"><HubDetail title="适用输入" items={focused.input_roles.length ? focused.input_roles.map((role) => `${role.description} · ${role.dtype || "任意类型"}`) : ["自动检查当前数据结构，无需预先指定字段"]} /><HubDetail title="可信输出" items={focused.outputs} /><HubDetail title="调用工具" items={focused.tools} /><HubDetail title="执行流程" items={focused.workflow} /></div>

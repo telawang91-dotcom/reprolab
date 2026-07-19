@@ -484,6 +484,8 @@ def _generate_code(
                 "重要结果必须调用 emit_artifact(kind, value, title, tol)；"
                 "每个步骤只登记 1-2 个对用户决策最有帮助的产物；每一次 emit_artifact 调用和每一次 plt.show 都计入上限。"
                 "相关指标必须合并成一个 table；如需绘图，另保留最多一张 figure。不要把表中已有数字重复登记为 number。"
+                "图表必须服务于一个明确结论：使用简洁白底、单一蓝色主色与克制的辅助色；标题直接说明比较对象，"
+                "补全坐标轴和单位，图例无边框；避免默认彩虹色、3D、饼图、过密标签和无意义的 figure 编号。"
                 "禁止在 for/apply/map 等数据驱动循环中调用 emit_artifact，禁止为每个分组、字段或中间步骤逐项登记产物。"
                 "不要把分析报告重复登记为 text 或 conclusion；系统会在全部计算成功后根据可信产物生成面向用户的最终报告。"
                 "kind 仅可为 number、coefficient、table、figure、text、conclusion；"

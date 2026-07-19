@@ -63,8 +63,11 @@ def post_skill_import(request: SkillPackageImport, db: Session = Depends(get_db)
 
 
 @router.get("/hub", response_model=list[SkillHubItem])
-def get_skill_hub() -> list[SkillHubItem]:
-    return list_hub()
+def get_skill_hub(
+    project_id: uuid.UUID | None = None,
+    db: Session = Depends(get_db),
+) -> list[SkillHubItem]:
+    return list_hub(db, project_id)
 
 
 @router.post("/hub/{hub_id}/import", response_model=SkillRead, status_code=status.HTTP_201_CREATED)

@@ -40,6 +40,6 @@ export function GettingStarted({ documentCount, collectionCount }: GettingStarte
         <ChevronRight size={15} className="text-subtle transition group-hover:translate-x-0.5 group-hover:text-brand"/>
       </Link>)}
     </div>
-    <div className="relative mt-4 flex items-center gap-2 text-xs text-muted"><span className="h-1.5 w-28 overflow-hidden rounded-full bg-ink/[.07]"><span className="block h-full bg-brand transition-all" style={{ width: `${(completed / steps.length) * 100}%` }}/></span>{completed}/{steps.length} 已完成 <Link href="/demo" className="ml-2 inline-flex items-center gap-1 text-brand"><PlayCircle size={13}/>先看示例</Link></div>
+    <div className="relative mt-4 flex items-center gap-2 text-xs text-muted"><span className="h-1.5 w-28 overflow-hidden rounded-full bg-ink/[.07]"><span className="block h-full bg-brand transition-all" style={{ width: `${(completed / steps.length) * 100}%` }}/></span>{completed}/{steps.length} 已完成 <Link href="/guide" className="ml-2 inline-flex items-center gap-1 text-brand"><PlayCircle size={13}/>查看指南</Link></div>
   </section>;
 }

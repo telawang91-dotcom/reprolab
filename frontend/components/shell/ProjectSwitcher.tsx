@@ -3,7 +3,7 @@
 import { Check, ChevronDown, FolderKanban, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { DEMO_PROJECT_ID, type ProjectItem } from "@/lib/api";
+import { type ProjectItem } from "@/lib/api";
 import { useProjectScope } from "@/components/workspace/ProjectScope";
 
 export function ProjectSwitcher() {
@@ -22,7 +22,6 @@ export function ProjectSwitcher() {
     <button onClick={() => setOpen((value) => !value)} disabled={project.loading} aria-expanded={open} aria-label={`切换研究项目：${project.active?.name || (project.loading ? "加载中" : "未选择")}`} className="flex h-11 max-w-[38vw] items-center gap-2 rounded-full border border-line/[.10] bg-surface/70 px-3 text-xs text-ink hover:bg-elevated disabled:cursor-wait sm:h-9 sm:max-w-56">
       <FolderKanban size={14} className="shrink-0 text-brand" />
       <span className={`truncate ${project.loading ? "h-3 w-20 animate-pulse rounded-full bg-ink/10 text-transparent" : ""}`}>{project.loading ? "正在加载" : project.active?.name || "选择研究项目"}</span>
-      {project.active?.id === DEMO_PROJECT_ID && <span className="rounded-full bg-status-warn/12 px-2 py-0.5 text-[10px] text-status-warn">演示</span>}
       <ChevronDown size={13} className={`shrink-0 transition ${open ? "rotate-180" : ""}`} />
     </button>
     {open && <>

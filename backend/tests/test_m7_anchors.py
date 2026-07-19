@@ -21,3 +21,10 @@ def test_chinese_text_can_touch_a_bound_number_without_hiding_it():
     numbers = extract_numbers("样本量为4 ⟦art_abcd⟧，均值为3.0 ⟦art_1234⟧。")
     assert [item.value for item in numbers] == [4.0, 3.0]
     assert [item.anchor.raw for item in numbers if item.anchor] == ["⟦art_abcd⟧", "⟦art_1234⟧"]
+
+
+def test_sentence_level_anchor_binds_all_numbers_and_ignores_ordered_list_marker():
+    numbers = extract_numbers("1. **发现**：样本量 34,139，均值 85.02，中位数 60.0 ⟦art_abcd⟧。")
+
+    assert [item.value for item in numbers] == [34139.0, 85.02, 60.0]
+    assert all(item.anchor and item.anchor.code == "abcd" for item in numbers)

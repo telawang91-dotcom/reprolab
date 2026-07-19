@@ -9,6 +9,7 @@ import type { LineageEdge, LineageNode as SourceNode } from "./types";
 
 const nodeTypes = { lineageNode: LineageNode };
 const nodeColors: Record<string, string> = { dataset: "#4F46E5", run: "#2563EB", artifact: "#059669", claim: "#D97706", document: "#64748B" };
+const relationLabels: Record<string, string> = { reads: "读取", produces: "生成", supports: "支持", cites: "引用" };
 
 export function layoutGraph(sourceNodes: SourceNode[], sourceEdges: LineageEdge[]): { nodes: Node<LineageNodeData>[]; edges: Edge[] } {
   const graph = new dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
@@ -17,7 +18,7 @@ export function layoutGraph(sourceNodes: SourceNode[], sourceEdges: LineageEdge[
   sourceEdges.forEach((edge) => graph.setEdge(edge.from, edge.to)); dagre.layout(graph);
   return {
     nodes: sourceNodes.map((node) => { const point = graph.node(node.id); return { id: node.id, type: "lineageNode", position: { x: point.x - 95, y: point.y - 44 }, data: { label: node.label, type: node.type, meta: node.meta } }; }),
-    edges: sourceEdges.map((edge, index) => ({ id: `edge-${index}-${edge.from}-${edge.to}`, source: edge.from, target: edge.to, type: "smoothstep", label: edge.relation, labelStyle: { fontSize: 10, fill: "#64748B" }, style: { stroke: "#94A3B8", strokeWidth: 1.5 } }))
+    edges: sourceEdges.map((edge, index) => ({ id: `edge-${index}-${edge.from}-${edge.to}`, source: edge.from, target: edge.to, type: "smoothstep", label: relationLabels[edge.relation] ?? edge.relation, labelStyle: { fontSize: 10, fill: "#64748B" }, style: { stroke: "#94A3B8", strokeWidth: 1.5 } }))
   };
 }
 
@@ -35,7 +36,7 @@ function GraphInner({ sourceNodes, sourceEdges }: { sourceNodes: SourceNode[]; s
   useEffect(() => { setNodes(initial.nodes); setEdges(initial.edges); }, [initial, setEdges, setNodes]);
   const reset = useCallback(() => { timers.current.forEach(clearTimeout); timers.current = []; setNodes((items) => items.map((node) => ({ ...node, data: { ...node.data, active: false, dimmed: false } }))); setEdges((items) => items.map((edge) => ({ ...edge, animated: false, style: { ...edge.style, stroke: "#94A3B8", strokeWidth: 1.5 } }))); }, [setEdges, setNodes]);
   const highlight = useCallback((node: SourceNode) => { reset(); const sequence = upstreamSequence(node.id, sourceEdges); const chain = new Set(sequence.nodes); setNodes((items) => items.map((item) => ({ ...item, data: { ...item.data, dimmed: !chain.has(item.id) } }))); sequence.nodes.forEach((id, index) => timers.current.push(window.setTimeout(() => setNodes((items) => items.map((item) => item.id === id ? { ...item, data: { ...item.data, active: true } } : item)), index * 120))); sequence.edges.forEach((id, index) => timers.current.push(window.setTimeout(() => setEdges((items) => items.map((edge) => edge.id === id ? { ...edge, animated: true, style: { ...edge.style, stroke: "#2563EB", strokeWidth: 2.5 } } : edge)), (index + 1) * 120))); }, [reset, setEdges, setNodes, sourceEdges]);
-  const onNodeClick: NodeMouseHandler = useCallback((_, flowNode) => { const node = sourceNodes.find((item) => item.id === flowNode.id); if (!node) return; setSelected(node); if (node.type === "claim") highlight(node); }, [highlight, sourceNodes]);
+  const onNodeClick: NodeMouseHandler = useCallback((_, flowNode) => { const node = sourceNodes.find((item) => item.id === flowNode.id); if (!node) return; setSelected(node); highlight(node); }, [highlight, sourceNodes]);
   return <div className="relative h-full w-full"><ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onNodeClick={onNodeClick} onPaneClick={() => { setSelected(undefined); reset(); }} fitView minZoom={0.2} maxZoom={2}><Background color="#CBD5E1" gap={24} size={1}/><MiniMap pannable zoomable nodeColor={(node) => nodeColors[String(node.data.type)] ?? "#94A3B8"}/><Controls showInteractive={false}/></ReactFlow>{selected && <NodeDetailPanel node={selected} onClose={() => setSelected(undefined)}/>}</div>;
 }
 

@@ -143,7 +143,8 @@ export function useAnalysisSession(collectionId?: string, replayId?: string, opt
   };
   const anchorClick = (anchor: string) => {
     const artifact = artifacts.find((item) => item.anchor?.toLowerCase() === anchor.toLowerCase());
-    if (artifact) { setActiveArtifact(artifact); void showLineage(artifact.artifact_id); }
+    if (artifact) setActiveArtifact(artifact);
+    return artifact;
   };
   const saveAsSkill = async (artifact: TimelineArtifact, name: string, intent: string, discipline: string) => {
     try {

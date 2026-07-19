@@ -1,6 +1,5 @@
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000/api/v1";
-export const DEMO_PROJECT_ID = "00000000-0000-0000-0000-000000000101";
 const ACTIVE_PROJECT_KEY = "reprolab-active-project";
 const ACTIVITY_KEY = "reprolab-activities";
 export type ActivityItem = {
@@ -280,6 +279,8 @@ export type SkillHubItem = {
   workflow: string[];
   estimated_from_scratch_tokens: number;
   package_hash: string;
+  recommended: boolean;
+  recommendation_reason: string | null;
 };
 export type SkillApplyResult = {
   skill_id: string;
@@ -493,7 +494,6 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, description: description || null }),
     }),
-  prepareDemo: () => request<ProjectItem>("/projects/demo", { method: "POST", timeoutMs: 120_000 }),
   updateProject: (
     id: string,
     payload: { name?: string; description?: string | null },
@@ -681,6 +681,12 @@ export const api = {
         status: "verified",
       }),
     }),
+  generateWritingDraft: () =>
+    request<{ text: string; anchors: string[] }>("/conclusions/draft", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_id: activeProjectId() }),
+    }),
   memories: (layer?: string, query?: string) =>
     request<MemoryItem[]>(
       `/memories?project_id=${activeProjectId()}${layer ? `&layer=${layer}` : ""}${query ? `&q=${encodeURIComponent(query)}` : ""}&k=20`,
@@ -762,7 +768,7 @@ export const api = {
         package: skillPackage,
       }),
     }),
-  skillHub: () => request<SkillHubItem[]>("/skills/hub"),
+  skillHub: () => request<SkillHubItem[]>(`/skills/hub?project_id=${activeProjectId()}`),
   importHubSkill: (hubId: string) =>
     request<SkillItem>(`/skills/hub/${hubId}/import`, {
       method: "POST",

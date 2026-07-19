@@ -197,6 +197,74 @@ try:
 except (NameError, ImportError):
     pass
 try:
+    import matplotlib as _reprolab_mpl
+    from cycler import cycler as _reprolab_cycler
+    _reprolab_mpl.rcParams.update({
+        "figure.figsize": (9.6, 5.4),
+        "figure.dpi": 140,
+        "figure.facecolor": "white",
+        "savefig.facecolor": "white",
+        "savefig.bbox": "tight",
+        "axes.facecolor": "white",
+        "axes.edgecolor": "#d2d2d7",
+        "axes.labelcolor": "#3a3a3c",
+        "axes.titlecolor": "#1d1d1f",
+        "axes.titlelocation": "left",
+        "axes.titlesize": 15,
+        "axes.titleweight": 600,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.grid": True,
+        "axes.grid.axis": "y",
+        "axes.axisbelow": True,
+        "grid.color": "#e5e5e7",
+        "grid.linewidth": 0.8,
+        "grid.alpha": 0.75,
+        "font.family": ["Noto Sans CJK JP", "DejaVu Sans", "sans-serif"],
+        "font.size": 10.5,
+        "xtick.color": "#6e6e73",
+        "ytick.color": "#6e6e73",
+        "legend.frameon": False,
+        "legend.fontsize": 9.5,
+        "lines.linewidth": 2.2,
+        "lines.markersize": 5,
+        "axes.prop_cycle": _reprolab_cycler(color=["#0066cc", "#5e5ce6", "#00a2c7", "#6e6e73", "#34c759", "#ff9f0a"]),
+    })
+    import base64 as _reprolab_base64, io as _reprolab_io
+    import matplotlib.pyplot as _reprolab_plt
+    # The inline backend enables interactive drawing.  Disable it so pyplot
+    # commands do not trigger our capture hook and close a figure before the
+    # user has finished adding titles, labels, or annotations.
+    _reprolab_plt.ioff()
+    class _ReproLabFigure:
+        def __init__(self, figure):
+            self.figure = figure
+        def _repr_mimebundle_(self, include=None, exclude=None):
+            stream = _reprolab_io.BytesIO()
+            self.figure.savefig(stream, format="png", dpi=_reprolab_mpl.rcParams["figure.dpi"], bbox_inches="tight")
+            title = next(
+                (
+                    axis.get_title(loc=location).strip()
+                    for axis in self.figure.axes
+                    for location in ("left", "center", "right")
+                    if axis.get_title(loc=location).strip()
+                ),
+                "分析图表",
+            )
+            return {
+                "application/vnd.reprolab.figure+json": {"title": title},
+                "image/png": _reprolab_base64.b64encode(stream.getvalue()).decode("ascii"),
+                "text/plain": title,
+            }
+    def _reprolab_show(*args, **kwargs):
+        figures = [_reprolab_plt.figure(number) for number in _reprolab_plt.get_fignums()]
+        for figure in figures:
+            _reprolab_display(_ReproLabFigure(figure))
+            _reprolab_plt.close(figure)
+    _reprolab_plt.show = _reprolab_show
+except ImportError:
+    pass
+try:
     import torch as _reprolab_torch
     _reprolab_torch.manual_seed(SEED)
 except ImportError:

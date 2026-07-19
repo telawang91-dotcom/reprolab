@@ -2,10 +2,10 @@ import uuid
 from collections import deque
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.knowledge import Artifact, Dataset, Document, Edge, EnvSnapshot, Run
+from app.models.knowledge import Artifact, Claim, Dataset, Document, Edge, EnvSnapshot, Run
 from app.schemas.lineage import LineageEdge, LineageNode, LineageResponse
 from app.schemas.runs import ArtifactCapture
 
@@ -111,6 +111,14 @@ def _node(db: Session, node_type: str, node_id: uuid.UUID) -> LineageNode | None
             label=item.title or item.kind,
             meta={"kind": item.kind, "content_hash": item.content_hash, "tol": item.tol, "value_json": item.value_json},
         )
+    if node_type == "claim":
+        item = db.get(Claim, node_id)
+        return None if item is None else LineageNode(
+            id=item.id,
+            type="claim",
+            label=item.text.splitlines()[0][:120] or "可信结论",
+            meta={"status": item.status, "text": item.text, "created_at": item.created_at},
+        )
     if node_type == "document":
         item = db.get(Document, node_id)
         return None if item is None else LineageNode(
@@ -125,26 +133,41 @@ def _node(db: Session, node_type: str, node_id: uuid.UUID) -> LineageNode | None
 def get_lineage(db: Session, artifact_id: uuid.UUID) -> LineageResponse | None:
     if db.get(Artifact, artifact_id) is None:
         return None
-    queue_: deque[tuple[str, uuid.UUID]] = deque([("artifact", artifact_id)])
-    visited: set[tuple[str, uuid.UUID]] = set()
+    root = ("artifact", artifact_id)
+    visited: set[tuple[str, uuid.UUID]] = {root}
     edge_map: dict[uuid.UUID, Edge] = {}
-    while queue_:
-        node_type, node_id = queue_.popleft()
-        if (node_type, node_id) in visited:
-            continue
-        visited.add((node_type, node_id))
-        adjacent = db.scalars(
-            select(Edge).where(
-                or_(
-                    (Edge.from_type == node_type) & (Edge.from_id == node_id),
-                    (Edge.to_type == node_type) & (Edge.to_id == node_id),
-                )
-            )
-        )
-        for edge in adjacent:
-            edge_map[edge.id] = edge
-            queue_.append((edge.from_type, edge.from_id))
-            queue_.append((edge.to_type, edge.to_id))
+
+    def walk(direction: str) -> None:
+        queue_: deque[tuple[str, uuid.UUID]] = deque([root])
+        expanded: set[tuple[str, uuid.UUID]] = set()
+        while queue_:
+            node_type, node_id = queue_.popleft()
+            if (node_type, node_id) in expanded:
+                continue
+            expanded.add((node_type, node_id))
+            if direction == "upstream":
+                adjacent = db.scalars(select(Edge).where(
+                    Edge.to_type == node_type,
+                    Edge.to_id == node_id,
+                ))
+                next_node = lambda edge: (edge.from_type, edge.from_id)
+            else:
+                adjacent = db.scalars(select(Edge).where(
+                    Edge.from_type == node_type,
+                    Edge.from_id == node_id,
+                ))
+                next_node = lambda edge: (edge.to_type, edge.to_id)
+            for edge in adjacent:
+                edge_map[edge.id] = edge
+                target = next_node(edge)
+                visited.add(target)
+                queue_.append(target)
+
+    # Show only the selected result's own evidence chain and the conclusions it
+    # supports. Traversing both directions at every node would cross the shared
+    # dataset and pull every unrelated run in the project into this view.
+    walk("upstream")
+    walk("downstream")
     nodes = [node for item in sorted(visited, key=lambda value: (value[0], str(value[1]))) if (node := _node(db, *item))]
     edges = [
         LineageEdge(from_=edge.from_id, to=edge.to_id, relation=edge.relation)

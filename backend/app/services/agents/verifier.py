@@ -90,6 +90,18 @@ def _has_complete_lineage(db: Session, artifact: Artifact, run: Run) -> bool:
     return produced is not None and read is not None
 
 
+def _numeric_values(value: Any) -> list[float]:
+    if isinstance(value, bool):
+        return []
+    if isinstance(value, (int, float)):
+        return [float(value)]
+    if isinstance(value, list):
+        return [number for item in value for number in _numeric_values(item)]
+    if isinstance(value, dict):
+        return [number for item in value.values() for number in _numeric_values(item)]
+    return []
+
+
 def check_numbers(db: Session, project_id: uuid.UUID, text: str) -> list[VerifyItem]:
     artifacts = list(db.scalars(select(Artifact).where(Artifact.project_id == project_id)))
     items: list[VerifyItem] = []
@@ -104,7 +116,7 @@ def check_numbers(db: Session, project_id: uuid.UUID, text: str) -> list[VerifyI
             items.append(_item("number", number.anchor.raw, False, reason, location))
             continue
         artifact = matches[0]
-        if artifact.kind not in {"number", "coefficient"}:
+        if artifact.kind not in {"number", "coefficient", "table"}:
             items.append(_item("number", number.anchor.raw, False, f"数字不能绑定 {artifact.kind} 类型产物", location))
             continue
         run = db.get(Run, artifact.run_id) if artifact.run_id else None
@@ -115,14 +127,17 @@ def check_numbers(db: Session, project_id: uuid.UUID, text: str) -> list[VerifyI
             items.append(_item("number", number.anchor.raw, False, "产物缺少 Dataset→Run→Artifact 完整血缘", location))
             continue
         stored = artifact_value(artifact)
-        if not isinstance(stored, (int, float)):
+        candidates = _numeric_values(stored)
+        if not candidates:
             items.append(_item("number", number.anchor.raw, False, "产物未存储可核查的标量值", location))
             continue
         tolerance = artifact.tol if artifact.tol is not None else 1e-6
-        within = abs(number.value - float(stored)) <= tolerance * max(1.0, abs(float(stored)))
+        matched = next((value for value in candidates if abs(number.value - value) <= tolerance * max(1.0, abs(value))), None)
+        within = matched is not None
+        reference = matched if matched is not None else min(candidates, key=lambda value: abs(number.value - value))
         items.append(_item(
             "number", number.anchor.raw, within,
-            f"正文数字 {number.value:g} 与产物值 {float(stored):g}" + (" 在容差内一致" if within else f" 不符（tol={tolerance:g}）"),
+            f"正文数字 {number.value:g} 与产物值 {reference:g}" + (" 在容差内一致" if within else f" 不符（tol={tolerance:g}）"),
             location,
         ))
     return items

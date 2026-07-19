@@ -135,10 +135,11 @@ test("SkillHub 展示真实契约并防止重复导入", async ({ page }) => {
   } }));
   await page.route("**/api/v1/conversations?*", (route) => route.fulfill({ json: [] }));
   await page.route("**/api/v1/skills?*", (route) => route.fulfill({ json: imported ? [importedSkill] : [] }));
-  await page.route("**/api/v1/skills/hub", (route) => route.fulfill({ json: [{
+  await page.route("**/api/v1/skills/hub?*", (route) => route.fulfill({ json: [{
     id: "community-data-quality", name: "数据质量体检", intent: "在分析前检查缺失值和重复记录", discipline: "general", version: 1,
     author: "ReproLab Community", input_roles: [], tools: ["pandas", "emit_artifact"], outputs: ["质量概览表", "重复行数"],
     workflow: ["读取原始数据", "统计缺失和重复", "登记可信产物"], estimated_from_scratch_tokens: 1200, package_hash: packageHash,
+    recommended: true, recommendation_reason: "适合当前数据",
   }] }));
   await page.route("**/api/v1/skills/hub/community-data-quality/import", (route) => { imported = true; return route.fulfill({ status: 201, json: importedSkill }); });
   await page.goto("/analysis");
