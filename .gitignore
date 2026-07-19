@@ -18,6 +18,8 @@ backend/storage/*
 backend/.runtime/
 frontend/node_modules/
 frontend/.next/
+frontend/test-results/
+frontend/playwright-report/
 *.log
 *.tsbuildinfo
 .DS_Store
