@@ -93,7 +93,7 @@ try {
                 try {
                     $ready = $false
                     for ($attempt = 0; $attempt -lt 60; $attempt++) {
-                        try { Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:3100/demo" -TimeoutSec 2 | Out-Null; $ready = $true; break } catch { Start-Sleep -Seconds 2 }
+                        try { Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:3100/guide" -TimeoutSec 2 | Out-Null; $ready = $true; break } catch { Start-Sleep -Seconds 2 }
                     }
                     if (-not $ready) { throw "Next.js E2E server did not become ready" }
                     $previousBaseUrl = $env:PLAYWRIGHT_BASE_URL
