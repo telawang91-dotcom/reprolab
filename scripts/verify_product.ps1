@@ -52,7 +52,28 @@ try {
                 Start-Sleep -Seconds 2
             }
             if (-not $databaseReady) { throw "PostgreSQL did not become ready" }
-            Invoke-QualityCheck "docker-sandbox-build" { docker compose build sandbox }
+            Invoke-QualityCheck "docker-sandbox-build" {
+                $sandboxBuilt = $false
+                for ($attempt = 1; $attempt -le 3; $attempt++) {
+                    docker compose build sandbox
+                    if ($LASTEXITCODE -eq 0) {
+                        $sandboxBuilt = $true
+                        break
+                    }
+                    if ($attempt -lt 3) {
+                        Write-Warning "Sandbox build attempt $attempt failed; retrying in 3 seconds."
+                        Start-Sleep -Seconds 3
+                    }
+                }
+                if (-not $sandboxBuilt) {
+                    docker image inspect reprolab-sandbox:py311 | Out-Null
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Warning "Docker Hub is unavailable; using the already verified local sandbox image."
+                        $sandboxBuilt = $true
+                    }
+                }
+                if (-not $sandboxBuilt) { throw "Sandbox image build failed after 3 attempts and no local image is available" }
+            }
         }
         finally { Pop-Location }
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -8,6 +9,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from app.core.config import settings
 from app.core.db import SessionLocal
 from app.schemas.agent import AgentInvokeRequest, AgentInvokeResponse, AgentJobAccepted, AgentJobRead, AgentJobStatus
 from app.services.agents.headless import invoke_agent
@@ -34,6 +36,7 @@ _lock = threading.Lock()
 _jobs: dict[uuid.UUID, JobRecord] = {}
 _idempotency: dict[tuple[str, str], uuid.UUID] = {}
 _MAX_JOBS = 1000
+_job_slots = asyncio.Semaphore(settings.agent_max_concurrent_jobs)
 
 
 def _hash_request(request: AgentInvokeRequest) -> str:
@@ -120,41 +123,44 @@ def cancel_job(source: str, job_id: uuid.UUID) -> AgentJobRead:
 
 
 async def run_job(job_id: uuid.UUID) -> None:
-    with _lock:
-        record = _jobs.get(job_id)
-        if record is None or record.status == "cancelled":
-            return
-        record.status = "running"
-        record.started_at = datetime.now(timezone.utc)
-        request = record.request
-    try:
-        with SessionLocal() as db:
-            result = await invoke_agent(db, request)
+    async with _job_slots:
         with _lock:
-            record = _jobs[job_id]
-            record.finished_at = datetime.now(timezone.utc)
-            if record.status == "cancelling":
-                record.status = "cancelled"
-                record.result = None
-            else:
-                record.status = "succeeded"
-                record.result = result
-    except (LookupError, ValueError, PermissionError) as exc:
-        with _lock:
-            record = _jobs[job_id]
-            record.status = "cancelled" if record.status == "cancelling" else "failed"
-            record.error = None if record.status == "cancelled" else str(exc)
-            record.finished_at = datetime.now(timezone.utc)
-    except Exception:
-        logger.exception("agent background job failed job_id=%s", job_id)
-        with _lock:
-            record = _jobs[job_id]
-            record.status = "cancelled" if record.status == "cancelling" else "failed"
-            record.error = None if record.status == "cancelled" else "agent job failed; inspect server logs using the request id"
-            record.finished_at = datetime.now(timezone.utc)
+            record = _jobs.get(job_id)
+            if record is None or record.status == "cancelled":
+                return
+            record.status = "running"
+            record.started_at = datetime.now(timezone.utc)
+            request = record.request
+        try:
+            with SessionLocal() as db:
+                result = await invoke_agent(db, request)
+            with _lock:
+                record = _jobs[job_id]
+                record.finished_at = datetime.now(timezone.utc)
+                if record.status == "cancelling":
+                    record.status = "cancelled"
+                    record.result = None
+                else:
+                    record.status = "succeeded"
+                    record.result = result
+        except (LookupError, ValueError, PermissionError) as exc:
+            with _lock:
+                record = _jobs[job_id]
+                record.status = "cancelled" if record.status == "cancelling" else "failed"
+                record.error = None if record.status == "cancelled" else str(exc)
+                record.finished_at = datetime.now(timezone.utc)
+        except Exception:
+            logger.exception("agent background job failed job_id=%s", job_id)
+            with _lock:
+                record = _jobs[job_id]
+                record.status = "cancelled" if record.status == "cancelling" else "failed"
+                record.error = None if record.status == "cancelled" else "agent job failed; inspect server logs using the request id"
+                record.finished_at = datetime.now(timezone.utc)
 
 
 def reset_for_tests() -> None:
+    global _job_slots
     with _lock:
         _jobs.clear()
         _idempotency.clear()
+    _job_slots = asyncio.Semaphore(settings.agent_max_concurrent_jobs)

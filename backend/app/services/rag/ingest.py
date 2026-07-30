@@ -29,6 +29,17 @@ class IngestResult:
     message: str | None = None
 
 
+@dataclass(slots=True)
+class ReindexResult:
+    document_id: uuid.UUID
+    chunks_count: int
+    message: str
+
+
+class SemanticIndexUnavailable(RuntimeError):
+    """Raised when existing text cannot currently be embedded."""
+
+
 def infer_type(filename: str) -> str:
     lowered = filename.lower()
     if lowered.endswith(".pdf"):
@@ -271,6 +282,39 @@ def document_detail(db: Session, document_id: uuid.UUID) -> tuple[Document, int,
         )
     )
     return document, count, dataset
+
+
+def reindex_document(
+    db: Session,
+    document_id: uuid.UUID,
+    project_id: uuid.UUID,
+) -> ReindexResult:
+    document = db.get(Document, document_id)
+    if document is None or document.project_id != project_id:
+        raise LookupError("document not found")
+    chunks = list(db.scalars(
+        select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.position, Chunk.id)
+    ))
+    if not chunks:
+        raise ValueError("document has no text chunks to reindex")
+    try:
+        vectors = embedder.encode([chunk.content for chunk in chunks])
+    except Exception as exc:
+        raise SemanticIndexUnavailable(
+            "semantic embedding model is unavailable; restore the model configuration and retry"
+        ) from exc
+    if len(vectors) != len(chunks):
+        raise SemanticIndexUnavailable("embedding model returned an incomplete vector batch")
+    for chunk, vector in zip(chunks, vectors, strict=True):
+        chunk.embedding = vector
+    metadata = dict(document.extra_metadata or {})
+    metadata["parse_status"] = "indexed"
+    metadata["message"] = f"语义索引已重建，共更新 {len(chunks)} 个文本切块。"
+    metadata["embedding_dimensions"] = len(vectors[0]) if vectors else 0
+    document.extra_metadata = metadata
+    db.commit()
+    db.refresh(document)
+    return ReindexResult(document.id, len(chunks), metadata["message"])
 
 
 def delete_document(db: Session, document_id: uuid.UUID) -> bool:

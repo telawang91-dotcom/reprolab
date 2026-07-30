@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: reprolab
       POSTGRES_PASSWORD: reprolab
     ports:
-      - "5432:5432"
+      - "${REPROLAB_DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -15,22 +15,52 @@ services:
       timeout: 5s
       retries: 20
 
-  sandbox:
-    profiles: ["sandbox"]
-    image: reprolab-sandbox:py311
+  app:
+    image: reprolab:latest
     build:
       context: .
-      dockerfile: docker/sandbox.Dockerfile
-    network_mode: none
-    mem_limit: 512m
-    cpus: 1.0
-    read_only: true
-    tmpfs:
-      - /tmp:size=64m
+      dockerfile: docker/app.Dockerfile
+      args:
+        NODE_BASE: ${REPROLAB_NODE_BASE:-node:20-bookworm-slim}
+        PYTHON_BASE: ${REPROLAB_PYTHON_BASE:-python:3.11-slim-bookworm}
+        INSTALL_OS_PACKAGES: ${REPROLAB_INSTALL_OS_PACKAGES:-1}
+        INSTALL_PYTHON_DEPS: ${REPROLAB_INSTALL_PYTHON_DEPS:-1}
+        INSTALL_FRONTEND_DEPS: ${REPROLAB_INSTALL_FRONTEND_DEPS:-1}
+    environment:
+      DATABASE_URL: postgresql+psycopg://reprolab:reprolab@postgres:5432/reprolab
+      STORAGE_DIR: /data/storage
+      SANDBOX_BACKEND: host
+      EMBEDDING_PRELOAD: "false"
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-v4-flash}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com/v1}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      HUNYUAN_BASE_URL: ${HUNYUAN_BASE_URL:-https://api.hunyuan.cloud.tencent.com/v1}
+      HUNYUAN_API_KEY: ${HUNYUAN_API_KEY:-}
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
+      AGENT_API_TOKEN: ${AGENT_API_TOKEN:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    ports:
+      - "${REPROLAB_PORT:-3000}:3000"
+      - "${REPROLAB_API_PORT:-8000}:8000"
     volumes:
-      - ./backend/storage:/data:ro
-    security_opt:
-      - no-new-privileges:true
+      - reprolab_storage:/data/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 6
 
 volumes:
   postgres_data:
+  reprolab_storage:

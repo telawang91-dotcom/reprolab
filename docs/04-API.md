@@ -29,7 +29,7 @@ POST /projects/demo              # 创建/复用隔离演示项目、研究文�
 
 前端保存当前项目 ID 并将它作为所有既有项目作用域接口的 `project_id`。归档项目可被列表和只读查看，但任何上传、分析、写作回写、记忆或建议写入必须返回 409；不得物理删除项目及其血缘。
 
-`POST /projects/demo` 只操作固定的演示项目；它会创建/修复固定的演示研究文件夹，并将 Palmer Penguins 数据集与明确标识的演示说明放入该范围，以便同时验证结构化数据和证据检索。它不得向当前真实项目写入资料、记忆、建议或产物。
+`POST /projects/demo` 只操作固定的演示项目；它会创建/修复并重新激活固定的演示研究文件夹，并将 Palmer Penguins 数据集与明确标识的演示说明放入该范围，以便同时验证结构化数据和证据检索。重新激活不会删除已有运行、产物或溯源账本。它不得向当前真实项目写入资料、记忆、建议或产物。
 
 ### 研究交付与审阅（P1）
 
@@ -82,6 +82,11 @@ GET  /documents            # 列表/筛选
   -> [ { id, type, filename, title, year, created_at } ]
 
 GET  /documents/{id}       # 详情 + 预览元数据
+POST /documents/{id}/reindex
+  body: { project_id }
+  -> { document_id, chunks_count, parse_status: "indexed", message }
+  # 仅重建既有文本切块的 1024 维语义向量；不重写原文件、切块内容或内容哈希。
+  # 文档无文本切块返回 409；向量模型暂不可用返回 503，可安全重试。
 DELETE /documents/{id}
 PATCH /documents/{id}      # body: { project_id, title?, collection_id? }；支持重命名或移动/取消归档
 PATCH /documents/organize  # body: { project_id, document_ids: [], collection_id? }；批量移动资料
@@ -262,10 +267,15 @@ plaintext
 ```
 POST /runs/{id}/attribute-drift   # 漂移根因归因：定位是哪些列/行/参数导致结果变化
   body: { dataset_overrides: {old_hash:new_hash}, target_artifact_id?,
-          granularity?: "column"|"rowgroup", top_k?=5 }
+          granularity?: "column"|"rowgroup", key_columns?: string[], top_k?=5 }
   -> { target_artifact_id, baseline, drifted,
        attributions: [ { dimension, contribution: 0..1, direction: "up"|"down", detail } ] }
 ```
+
+`key_columns` 用于新旧表存在增删行或顺序变化时按稳定业务主键对齐。
+主键列必须同时存在、非空且在各自数据集中唯一；未提供主键时仅接受行数相同的
+位置对齐。列粒度归因会把增删行作为 `__row_membership__` 独立维度，
+避免将样本组成变化错误归到某个测量列。
 
 ### M7 校验（对抗式三查）
 

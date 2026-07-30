@@ -1,0 +1,127 @@
+{
+  "documents": [
+    {
+      "filename": "albatross-flight.md",
+      "type": "paper",
+      "content": "# Albatross flight energetics\n\nDynamic soaring allows albatrosses to extract energy from wind gradients. Wing loading influences glide efficiency, while GPS tracks reveal repeated crosswind arcs. Stronger near-surface wind can reduce flapping effort. Researchers estimate travel cost from heart-rate and accelerometer measurements. Long-distance routes are therefore linked to wind structure, wing morphology, and energy expenditure."
+    },
+    {
+      "filename": "mangrove-carbon.md",
+      "type": "paper",
+      "content": "# Mangrove salinity and blue carbon\n\nMangrove sediment stores substantial blue carbon. Salinity gradients alter seedling growth, pore-water chemistry, and microbial decomposition. Field plots compare low-, medium-, and high-salinity zones. Soil organic carbon is measured by depth, and tidal inundation affects carbon burial. The study connects salt stress, sediment processes, biomass allocation, and coastal carbon sequestration."
+    },
+    {
+      "filename": "perovskite-stability.md",
+      "type": "paper",
+      "content": "# Perovskite solar-cell stability\n\nMoisture and thermal cycling accelerate degradation in perovskite solar cells. Encapsulation slows water ingress, while ion migration contributes to current-voltage hysteresis. Researchers monitor power-conversion efficiency during damp-heat ageing. Interface passivation can reduce non-radiative recombination. Operational stability therefore depends on humidity barriers, temperature, interfaces, and mobile ions."
+    },
+    {
+      "filename": "microbiome-diet.md",
+      "type": "paper",
+      "content": "# Diet intervention and gut microbiome\n\nA high-fibre dietary intervention can increase microbial diversity and short-chain fatty-acid production. Longitudinal stool samples are analysed with amplicon sequencing. Antibiotic exposure is treated as an important confounder. Mixed-effects models separate within-person change from baseline differences. The evidence links dietary fibre, community composition, butyrate production, and repeated measurements."
+    },
+    {
+      "filename": "seismic-inversion.md",
+      "type": "paper",
+      "content": "# Seismic velocity inversion\n\nTravel-time tomography estimates subsurface seismic velocity from source-receiver observations. Regularization stabilizes the inverse problem, and checkerboard tests assess spatial resolution. Low-velocity anomalies may indicate fractured or fluid-rich zones. Uncertainty depends on ray coverage and picking error. The workflow connects arrival times, velocity models, resolution tests, and geological interpretation."
+    },
+    {
+      "filename": "battery-electrolyte.md",
+      "type": "paper",
+      "content": "# Lithium battery electrolyte safety\n\nFluorinated electrolyte additives can promote a stable solid-electrolyte interphase in lithium-metal batteries. Coulombic efficiency is measured across repeated plating and stripping cycles. Dendrite growth raises short-circuit risk, while high salt concentration changes solvent coordination. Cryogenic microscopy reveals interphase morphology. Battery safety depends on electrolyte formulation, interphase chemistry, and cycling stability."
+    }
+  ],
+  "nli_cases": [
+    {
+      "name": "albatross-supported",
+      "source_filename": "albatross-flight.md",
+      "claim": "Dynamic soaring allows albatrosses to extract energy from wind gradients.",
+      "expected_label": "entailment"
+    },
+    {
+      "name": "albatross-contradicted",
+      "source_filename": "albatross-flight.md",
+      "claim": "Stronger near-surface wind necessarily increases albatross flapping effort.",
+      "expected_label": "contradiction"
+    },
+    {
+      "name": "mangrove-supported",
+      "source_filename": "mangrove-carbon.md",
+      "claim": "Salinity gradients alter mangrove seedling growth.",
+      "expected_label": "entailment"
+    },
+    {
+      "name": "mangrove-neutral",
+      "source_filename": "mangrove-carbon.md",
+      "claim": "Mangrove salinity determines lithium-metal battery dendrite morphology.",
+      "expected_label": "neutral"
+    },
+    {
+      "name": "perovskite-supported",
+      "source_filename": "perovskite-stability.md",
+      "claim": "Encapsulation slows water ingress in perovskite solar cells.",
+      "expected_label": "entailment"
+    },
+    {
+      "name": "perovskite-contradicted",
+      "source_filename": "perovskite-stability.md",
+      "claim": "Encapsulation accelerates water ingress in perovskite solar cells.",
+      "expected_label": "contradiction"
+    },
+    {
+      "name": "microbiome-supported",
+      "source_filename": "microbiome-diet.md",
+      "claim": "Antibiotic exposure is an important confounder in the dietary intervention.",
+      "expected_label": "entailment"
+    },
+    {
+      "name": "seismic-neutral",
+      "source_filename": "seismic-inversion.md",
+      "claim": "Travel-time tomography measures short-chain fatty-acid production.",
+      "expected_label": "neutral"
+    },
+    {
+      "name": "battery-supported",
+      "source_filename": "battery-electrolyte.md",
+      "claim": "Dendrite growth raises short-circuit risk in lithium-metal batteries.",
+      "expected_label": "entailment"
+    }
+  ],
+  "queries": [
+    {"name": "albatross-1", "query": "dynamic soaring wind gradient", "expected_filename": "albatross-flight.md"},
+    {"name": "albatross-2", "query": "信天翁如何利用风切变降低拍翼能耗", "expected_filename": "albatross-flight.md"},
+    {"name": "albatross-3", "query": "GPS crosswind arcs seabird", "expected_filename": "albatross-flight.md"},
+    {"name": "albatross-4", "query": "wing loading and glide efficiency", "expected_filename": "albatross-flight.md"},
+    {"name": "albatross-5", "query": "heart rate estimate travel energetic cost", "expected_filename": "albatross-flight.md"},
+
+    {"name": "mangrove-1", "query": "mangrove blue carbon sediment", "expected_filename": "mangrove-carbon.md"},
+    {"name": "mangrove-2", "query": "盐度梯度如何影响红树林幼苗", "expected_filename": "mangrove-carbon.md"},
+    {"name": "mangrove-3", "query": "tidal inundation carbon burial", "expected_filename": "mangrove-carbon.md"},
+    {"name": "mangrove-4", "query": "pore-water chemistry microbial decomposition", "expected_filename": "mangrove-carbon.md"},
+    {"name": "mangrove-5", "query": "coastal soil organic carbon depth", "expected_filename": "mangrove-carbon.md"},
+
+    {"name": "perovskite-1", "query": "perovskite damp heat ageing", "expected_filename": "perovskite-stability.md"},
+    {"name": "perovskite-2", "query": "钙钛矿电池湿度封装稳定性", "expected_filename": "perovskite-stability.md"},
+    {"name": "perovskite-3", "query": "ion migration current voltage hysteresis", "expected_filename": "perovskite-stability.md"},
+    {"name": "perovskite-4", "query": "interface passivation non-radiative recombination", "expected_filename": "perovskite-stability.md"},
+    {"name": "perovskite-5", "query": "thermal cycling solar cell degradation", "expected_filename": "perovskite-stability.md"},
+
+    {"name": "microbiome-1", "query": "high fibre microbial diversity", "expected_filename": "microbiome-diet.md"},
+    {"name": "microbiome-2", "query": "膳食干预与肠道短链脂肪酸", "expected_filename": "microbiome-diet.md"},
+    {"name": "microbiome-3", "query": "antibiotic exposure confounder microbiome", "expected_filename": "microbiome-diet.md"},
+    {"name": "microbiome-4", "query": "longitudinal stool amplicon sequencing", "expected_filename": "microbiome-diet.md"},
+    {"name": "microbiome-5", "query": "mixed effects within-person change", "expected_filename": "microbiome-diet.md"},
+
+    {"name": "seismic-1", "query": "travel time tomography velocity", "expected_filename": "seismic-inversion.md"},
+    {"name": "seismic-2", "query": "地震反演中的棋盘格分辨率测试", "expected_filename": "seismic-inversion.md"},
+    {"name": "seismic-3", "query": "low velocity fractured fluid rich zone", "expected_filename": "seismic-inversion.md"},
+    {"name": "seismic-4", "query": "ray coverage picking error uncertainty", "expected_filename": "seismic-inversion.md"},
+    {"name": "seismic-5", "query": "regularization stabilizes inverse problem", "expected_filename": "seismic-inversion.md"},
+
+    {"name": "battery-1", "query": "fluorinated electrolyte additive interphase", "expected_filename": "battery-electrolyte.md"},
+    {"name": "battery-2", "query": "锂金属电池枝晶短路风险", "expected_filename": "battery-electrolyte.md"},
+    {"name": "battery-3", "query": "coulombic efficiency plating stripping cycles", "expected_filename": "battery-electrolyte.md"},
+    {"name": "battery-4", "query": "high salt solvent coordination", "expected_filename": "battery-electrolyte.md"},
+    {"name": "battery-5", "query": "cryogenic microscopy interphase morphology", "expected_filename": "battery-electrolyte.md"}
+  ]
+}

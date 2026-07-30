@@ -57,6 +57,7 @@ def attribute_run_drift(
             request.target_artifact_id,
             request.granularity,
             request.top_k,
+            request.key_columns,
         )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

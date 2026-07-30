@@ -5,6 +5,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
+REPO_DIR = BACKEND_DIR.parent
+
+
+def resolve_model_reference(value: str) -> str:
+    """Resolve repository-local model paths without changing Hugging Face ids."""
+    candidate = Path(value).expanduser()
+    if candidate.is_absolute():
+        return str(candidate)
+    repository_candidate = REPO_DIR / candidate
+    if repository_candidate.exists():
+        return str(repository_candidate.resolve())
+    return value
 
 
 class Settings(BaseSettings):
@@ -37,6 +49,7 @@ class Settings(BaseSettings):
     agent_max_steps: int = Field(default=10, ge=1, le=30)
     agent_api_token: str = ""
     agent_rate_limit_per_minute: int = Field(default=30, ge=1, le=1000)
+    agent_max_concurrent_jobs: int = Field(default=2, ge=1, le=32)
     llm_temperature: float = Field(default=0.2, ge=0, le=2)
     llm_max_tokens: int = Field(default=4096, ge=64, le=32768)
     siliconflow_enable_thinking: bool = False
@@ -57,6 +70,14 @@ class Settings(BaseSettings):
             "executor": self.executor_model,
             "critic": self.critic_model,
         }
+
+    @property
+    def resolved_embedding_model(self) -> str:
+        return resolve_model_reference(self.embedding_model)
+
+    @property
+    def resolved_reranker_model(self) -> str:
+        return resolve_model_reference(self.reranker_model)
 
 
 settings = Settings()

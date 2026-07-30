@@ -48,9 +48,10 @@ def compare_artifacts(old: Artifact, new: Artifact | None) -> Comparison:
             within, difference = False, "numeric artifact has non-numeric value"
         else:
             within, difference = _number(float(old_value), float(new_value), tolerance)
-    elif old.kind == "figure" and old_value is None and new_value is None:
-        # No structured plot fingerprint was emitted. Never compare PNG bytes.
-        within, difference = True, None
+    elif old.kind == "figure" and (old_value is None or new_value is None):
+        # PNG bytes are deliberately ignored, but absence of a structured
+        # fingerprint must never be promoted to a successful reproduction.
+        within, difference = False, "structured figure data missing"
     else:
         within, difference = _nested(old_value, new_value, tolerance)
     return Comparison(
@@ -61,4 +62,3 @@ def compare_artifacts(old: Artifact, new: Artifact | None) -> Comparison:
         within_tol=within,
         diff=difference,
     )
-

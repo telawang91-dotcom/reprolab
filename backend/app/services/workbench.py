@@ -151,6 +151,12 @@ def project_quality_report(db: Session, project_id: uuid.UUID) -> ProjectQuality
         .join(Chunk, Chunk.document_id == Document.id)
         .where(Document.project_id == project_id)
     ) or 0
+    semantic_documents = db.scalar(
+        select(func.count(func.distinct(Document.id)))
+        .select_from(Document)
+        .join(Chunk, Chunk.document_id == Document.id)
+        .where(Document.project_id == project_id, Chunk.embedding.is_not(None))
+    ) or 0
     datasets = count(Dataset, Dataset.project_id == project_id)
     successful = count(Run, Run.project_id == project_id, Run.status == "success")
     failed = count(Run, Run.project_id == project_id, Run.status == "error")
@@ -189,6 +195,7 @@ def project_quality_report(db: Session, project_id: uuid.UUID) -> ProjectQuality
     metrics = [
         QualityMetric(key="datasets", title="可分析数据集", value=datasets, state="ready" if datasets else "block", evidence="项目内真实 Dataset 数量"),
         QualityMetric(key="searchable_documents", title="可检索证据文档", value=searchable_documents, total=documents, ratio=searchable_documents / documents if documents else None, state="ready" if searchable_documents else "warn", evidence="至少含一个文本切块的项目文档"),
+        QualityMetric(key="semantic_coverage", title="语义索引覆盖率", value=semantic_documents, total=searchable_documents, ratio=semantic_documents / searchable_documents if searchable_documents else None, state="ready" if searchable_documents and semantic_documents == searchable_documents else ("warn" if not searchable_documents else "block"), evidence="至少含一个 1024 维向量切块的可检索文档"),
         QualityMetric(key="run_success", title="分析运行成功率", value=successful, total=run_total, ratio=run_ratio, state="ready" if successful and failed == 0 else ("warn" if successful else "block"), evidence="项目内成功/全部运行"),
         QualityMetric(key="provenance", title="完整血缘覆盖率", value=complete, total=len(artifacts), ratio=provenance_ratio, state="ready" if artifacts and complete == len(artifacts) else "block", evidence="成功 Run、reads 与 produces 边均完整的 Artifact"),
         QualityMetric(key="reproduction", title="一键复现验证", value=replayed_families, total=1, ratio=min(replayed_families, 1), state="ready" if replayed_families else "block", evidence="相同代码、输入、环境与随机种子的成功重放运行族"),
@@ -196,6 +203,8 @@ def project_quality_report(db: Session, project_id: uuid.UUID) -> ProjectQuality
     ]
     blockers = []
     if not datasets: blockers.append("还没有真实可分析数据集。")
+    if searchable_documents and semantic_documents < searchable_documents:
+        blockers.append(f"仍有 {searchable_documents - semantic_documents} 份可检索文档缺少语义向量，请在资料详情中重建索引。")
     if not successful: blockers.append("还没有成功的动态分析运行。")
     if not artifacts: blockers.append("还没有可展示的分析产物。")
     elif complete != len(artifacts): blockers.append(f"有 {len(artifacts) - complete} 个产物缺少完整 Dataset → Run → Artifact 血缘。")

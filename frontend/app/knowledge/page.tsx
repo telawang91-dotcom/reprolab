@@ -15,6 +15,7 @@ import {
   FolderPlus,
   LocateFixed,
   MessageSquarePlus,
+  RefreshCw,
   ShieldCheck,
   Trash2,
   UploadCloud,
@@ -56,6 +57,8 @@ export default function KnowledgePage() {
   const [preview, setPreview] = useState<DocumentDetail | null>(null);
   const [focusedHit, setFocusedHit] = useState<SearchHit | null>(null);
   const [copied, setCopied] = useState(false);
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexError, setReindexError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -210,6 +213,7 @@ export default function KnowledgePage() {
 
   async function openDocument(id: string, hit: SearchHit | null = null) {
     try {
+      setReindexError("");
       setFocusedHit(hit);
       setPreview(await api.document(id));
     } catch (reason) {
@@ -234,6 +238,21 @@ export default function KnowledgePage() {
     await navigator.clipboard.writeText(preview.storage_hash);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
+  }
+
+  async function reindexDocument() {
+    if (!preview || reindexing) return;
+    setReindexing(true);
+    setReindexError("");
+    try {
+      await api.reindexDocument(preview.id);
+      setPreview(await api.document(preview.id));
+      await Promise.all([loadDocuments(), scope.refresh(collection)]);
+    } catch (reason) {
+      setReindexError(reason instanceof Error ? reason.message : "语义索引重建失败");
+    } finally {
+      setReindexing(false);
+    }
   }
 
   return (
@@ -301,8 +320,8 @@ export default function KnowledgePage() {
         <div className="mx-auto max-w-xl"><p className="text-sm leading-6 text-muted">同一主题或文件夹的资料共享一个独立问答范围。</p><label className="mt-5 block text-xs font-semibold text-muted">名称</label><input autoFocus value={newName} onChange={(event) => setNewName(event.target.value)} className="input mt-2 w-full" placeholder="例如：XPS 表征资料" maxLength={200} /><label className="mt-4 block text-xs font-semibold text-muted">描述（可选）</label><textarea value={newDescription} onChange={(event) => setNewDescription(event.target.value)} className="input mt-2 min-h-24 w-full resize-none py-3" placeholder="这个空间用于研究什么？" maxLength={1000} /><div className="mt-6 flex justify-end gap-2"><button onClick={() => setCreateOpen(false)} className="btn-secondary">取消</button><button disabled={!newName.trim() || savingCollection} onClick={() => void createCollection()} className="btn-primary">{savingCollection ? "创建中…" : "创建空间"}</button></div></div>
       </Sheet>
 
-      <Sheet open={Boolean(preview)} onOpenChange={(open) => { if (!open) { setPreview(null); setFocusedHit(null); } }} title={preview ? displayDocumentTitle(preview) : "资料详情"}>
-        {preview && <DocumentPreview preview={preview} focusedHit={focusedHit} copied={copied} onCopy={copyHash} onDelete={(id) => { setDeleteError(""); setPendingDelete({ kind: "document", id, name: displayDocumentTitle(preview) }); }} />}
+      <Sheet open={Boolean(preview)} onOpenChange={(open) => { if (!open) { setPreview(null); setFocusedHit(null); setReindexError(""); } }} title={preview ? displayDocumentTitle(preview) : "资料详情"}>
+        {preview && <DocumentPreview preview={preview} focusedHit={focusedHit} copied={copied} reindexing={reindexing} reindexError={reindexError} onCopy={copyHash} onReindex={reindexDocument} onDelete={(id) => { setDeleteError(""); setPendingDelete({ kind: "document", id, name: displayDocumentTitle(preview) }); }} />}
       </Sheet>
       <ConfirmDialog open={!!pendingDelete} title={pendingDelete?.kind === "collection" ? "删除研究文件夹" : "永久删除资料"} description={pendingDelete?.kind === "collection" ? `“${pendingDelete.name}”中的资料会保留并移到未归档，不会删除原文件。` : `将删除“${pendingDelete?.name || ""}”、文本切块和关联数据记录。此操作无法撤销；既有运行与产物账本仍保留审计信息。`} confirmLabel={pendingDelete?.kind === "collection" ? "删除文件夹" : "删除资料"} busy={deleting} error={deleteError} onCancel={() => setPendingDelete(undefined)} onConfirm={() => pendingDelete?.kind === "collection" ? removeCollection() : pendingDelete ? removeDocument(pendingDelete.id) : undefined}/>
     </main>
@@ -341,9 +360,9 @@ function DocumentList({ documents, onOpen }: { documents: DocumentItem[]; onOpen
   return <div className="max-h-[420px] divide-y overflow-y-auto">{documents.map((document) => { const Icon = icons[document.type]; const status = documentParseStatus(document); const repaired = documentWasRepaired(document); return <button key={document.id} onClick={() => onOpen(document.id)} className="flex min-h-[68px] w-full items-center gap-3 px-5 py-3 text-left hover:bg-ink/[.035]"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-appleSm bg-ink/[.05] text-muted"><Icon size={16} /></span><span className="min-w-0 flex-1"><strong className="block truncate text-sm">{displayDocumentTitle(document)}</strong><span className="mt-1 block truncate text-xs text-muted">{document.filename}</span></span>{status && <span className={`hidden rounded-full px-2 py-1 text-[11px] sm:block ${status === "needs_attention" || repaired ? "bg-status-warn/10 text-status-warn" : status === "stored" ? "bg-ink/[.05] text-muted" : "bg-status-ok/10 text-status-ok"}`}>{repaired ? "数据表已无损规整" : parseStatusLabel(status)}</span>}<span className="hidden text-xs text-subtle md:block">{typeNames[document.type]}</span></button>; })}</div>;
 }
 
-function DocumentPreview({ preview, focusedHit, copied, onCopy, onDelete }: { preview: DocumentDetail; focusedHit: SearchHit | null; copied: boolean; onCopy: () => Promise<void>; onDelete: (id: string) => void }) {
+function DocumentPreview({ preview, focusedHit, copied, reindexing, reindexError, onCopy, onReindex, onDelete }: { preview: DocumentDetail; focusedHit: SearchHit | null; copied: boolean; reindexing: boolean; reindexError: string; onCopy: () => Promise<void>; onReindex: () => Promise<void>; onDelete: (id: string) => void }) {
   const status = documentParseStatus(preview);
   const repaired = documentWasRepaired(preview);
   const message = typeof preview.metadata?.message === "string" ? preview.metadata.message : undefined;
-  return <div>{focusedHit && <section className="rounded-apple border-l-2 border-brand bg-brand/[.06] px-4 py-3"><div className="flex items-center gap-2 text-xs font-semibold text-brand"><LocateFixed size={13} />检索命中</div><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{focusedHit.content}</p></section>}{status && <section className={`rounded-apple px-4 py-3 text-sm ${focusedHit ? "mt-4" : ""} ${status === "needs_attention" || repaired ? "bg-status-warn/[.08] text-status-warn" : status === "stored" ? "bg-ink/[.04] text-muted" : "bg-status-ok/[.08] text-status-ok"}`}><strong>{repaired ? "数据表已无损规整" : parseStatusLabel(status)}</strong>{message && <p className="mt-1 text-xs leading-5 opacity-90">{message}</p>}</section>}<dl className="mt-6 grid grid-cols-2 gap-5 text-sm"><div><dt className="text-xs text-muted">类型</dt><dd className="mt-1">{typeNames[preview.type]}</dd></div><div><dt className="text-xs text-muted">年份</dt><dd className="mt-1">{preview.year ?? "—"}</dd></div><div><dt className="text-xs text-muted">文本切块</dt><dd className="mt-1">{preview.chunks_count}</dd></div><div><dt className="text-xs text-muted">DOI</dt><dd className="mt-1 truncate">{preview.doi ?? "—"}</dd></div><div className="col-span-2"><dt className="text-xs text-muted">SHA-256 内容指纹</dt><dd className="mt-1 break-all font-mono text-[11px] text-muted">{preview.storage_hash}</dd></div></dl>{preview.schema_json && <div className="mt-6"><h3 className="text-sm font-semibold">数据结构 · {preview.schema_json.row_count} 行</h3><div className="mt-2 divide-y border-y">{preview.schema_json.columns?.map((column) => <div key={column.name} className="flex justify-between py-2 text-xs"><span className="font-mono">{column.name}</span><span className="text-muted">{column.dtype}</span></div>)}</div></div>}{preview.dataset_id && preview.schema_json && <DatasetInspector datasetId={preview.dataset_id} schema={preview.schema_json}/>}<div className="mt-8 flex gap-2 border-t pt-4"><button onClick={() => void onDelete(preview.id)} className="btn-secondary text-status-err"><Trash2 size={14} />删除</button><button onClick={() => void onCopy()} className="btn-secondary ml-auto">{copied ? <Check size={14} /> : <Clipboard size={14} />}{copied ? "已复制" : "复制指纹"}</button></div></div>;
+  return <div>{focusedHit && <section className="rounded-apple border-l-2 border-brand bg-brand/[.06] px-4 py-3"><div className="flex items-center gap-2 text-xs font-semibold text-brand"><LocateFixed size={13} />检索命中</div><p className="mt-2 whitespace-pre-wrap text-sm leading-6">{focusedHit.content}</p></section>}{status && <section className={`rounded-apple px-4 py-3 text-sm ${focusedHit ? "mt-4" : ""} ${status === "needs_attention" || repaired ? "bg-status-warn/[.08] text-status-warn" : status === "stored" ? "bg-ink/[.04] text-muted" : "bg-status-ok/[.08] text-status-ok"}`}><strong>{repaired ? "数据表已无损规整" : parseStatusLabel(status)}</strong>{message && <p className="mt-1 text-xs leading-5 opacity-90">{message}</p>}</section>}{reindexError && <div role="alert" className="status-error mt-4">{reindexError}</div>}<dl className="mt-6 grid grid-cols-2 gap-5 text-sm"><div><dt className="text-xs text-muted">类型</dt><dd className="mt-1">{typeNames[preview.type]}</dd></div><div><dt className="text-xs text-muted">年份</dt><dd className="mt-1">{preview.year ?? "—"}</dd></div><div><dt className="text-xs text-muted">文本切块</dt><dd className="mt-1">{preview.chunks_count}</dd></div><div><dt className="text-xs text-muted">DOI</dt><dd className="mt-1 truncate">{preview.doi ?? "—"}</dd></div><div className="col-span-2"><dt className="text-xs text-muted">SHA-256 内容指纹</dt><dd className="mt-1 break-all font-mono text-[11px] text-muted">{preview.storage_hash}</dd></div></dl>{preview.schema_json && <div className="mt-6"><h3 className="text-sm font-semibold">数据结构 · {preview.schema_json.row_count} 行</h3><div className="mt-2 divide-y border-y">{preview.schema_json.columns?.map((column) => <div key={column.name} className="flex justify-between py-2 text-xs"><span className="font-mono">{column.name}</span><span className="text-muted">{column.dtype}</span></div>)}</div></div>}{preview.dataset_id && preview.schema_json && <DatasetInspector datasetId={preview.dataset_id} schema={preview.schema_json}/>}<div className="mt-8 flex flex-wrap gap-2 border-t pt-4"><button onClick={() => void onDelete(preview.id)} className="btn-secondary text-status-err"><Trash2 size={14} />删除</button>{preview.chunks_count > 0 && <button onClick={() => void onReindex()} disabled={reindexing} className="btn-secondary ml-auto"><RefreshCw size={14} className={reindexing ? "animate-spin" : ""} />{reindexing ? "正在重建…" : "重建语义索引"}</button>}<button onClick={() => void onCopy()} className={`btn-secondary ${preview.chunks_count > 0 ? "" : "ml-auto"}`}>{copied ? <Check size={14} /> : <Clipboard size={14} />}{copied ? "已复制" : "复制指纹"}</button></div></div>;
 }

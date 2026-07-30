@@ -115,7 +115,7 @@ def rrf(rank_lists: Iterable[Sequence[Candidate]], k_const: int = RRF_K) -> list
 def get_reranker():
     from sentence_transformers import CrossEncoder
 
-    return CrossEncoder(settings.reranker_model, max_length=512)
+    return CrossEncoder(settings.resolved_reranker_model, max_length=512)
 
 
 def rerank(query: str, candidates: Sequence[Candidate], limit: int) -> list[Candidate]:

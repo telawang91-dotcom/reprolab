@@ -94,6 +94,19 @@ app.include_router(conversations_router, prefix=settings.api_prefix)
 app.include_router(datasets_router, prefix=settings.api_prefix)
 
 
+@app.get("/", include_in_schema=False)
+def service_info() -> dict[str, str]:
+    """Give direct API consumers a stable discovery document."""
+    return {
+        "service": settings.app_name,
+        "status": "ok",
+        "api_prefix": settings.api_prefix,
+        "health": "/health",
+        "openapi": "/openapi.json",
+        "docs": "/docs",
+    }
+
+
 @app.exception_handler(HTTPException)
 async def http_exception(_: Request, exc: HTTPException) -> JSONResponse:
     message = exc.detail if isinstance(exc.detail, str) else "request failed"

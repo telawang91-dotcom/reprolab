@@ -32,50 +32,156 @@ def _frame(storage_hash: str) -> pd.DataFrame:
         raise ValueError("drift attribution currently requires CSV tabular datasets") from exc
 
 
-def _column_ablations(index: int, old: pd.DataFrame, new: pd.DataFrame, name: str) -> list[Ablation]:
-    if len(old) != len(new):
-        raise ValueError("column attribution requires old and new datasets to have equal row counts")
+def _keyed(
+    old: pd.DataFrame,
+    new: pd.DataFrame,
+    key_columns: list[str],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    missing = [
+        column
+        for column in key_columns
+        if column not in old.columns or column not in new.columns
+    ]
+    if missing:
+        raise ValueError("key columns are missing from old or new data: " + ", ".join(missing))
+    if old[key_columns].isna().any(axis=None) or new[key_columns].isna().any(axis=None):
+        raise ValueError("key columns cannot contain null values")
+    if old.duplicated(key_columns).any() or new.duplicated(key_columns).any():
+        raise ValueError("key columns must uniquely identify rows in both datasets")
+    return (
+        old.set_index(key_columns, drop=False),
+        new.set_index(key_columns, drop=False),
+    )
+
+
+def _membership_ablation(
+    index: int,
+    old_indexed: pd.DataFrame,
+    new_indexed: pd.DataFrame,
+    name: str,
+    key_columns: list[str],
+) -> Ablation | None:
+    old_keys, new_keys = set(old_indexed.index), set(new_indexed.index)
+    if old_keys == new_keys:
+        return None
+    rows = [
+        new_indexed.loc[[key]] if key in new_keys else old_indexed.loc[[key]]
+        for key in old_indexed.index
+    ]
+    hybrid = pd.concat(rows, axis=0).reset_index(drop=True)
+    return Ablation(
+        dataset_index=index,
+        dimension=f"{name}:__row_membership__",
+        frame=hybrid,
+        detail=(
+            f"按主键 {', '.join(key_columns)} 回滚样本组成；"
+            f"新数据新增 {len(new_keys - old_keys)} 行、删除 {len(old_keys - new_keys)} 行"
+        ),
+    )
+
+
+def _column_ablations(
+    index: int,
+    old: pd.DataFrame,
+    new: pd.DataFrame,
+    name: str,
+    key_columns: list[str] | None = None,
+) -> list[Ablation]:
+    keys = list(key_columns or [])
+    if not keys and len(old) != len(new):
+        raise ValueError(
+            "column attribution requires equal row counts unless key_columns are provided"
+        )
+    if keys:
+        old_indexed, new_indexed = _keyed(old, new, keys)
+        common_index = new_indexed.index.intersection(old_indexed.index, sort=False)
+    else:
+        old_indexed = old.reset_index(drop=True)
+        new_indexed = new.reset_index(drop=True)
+        common_index = new_indexed.index
     common = [column for column in old.columns if column in new.columns]
     results: list[Ablation] = []
     for column in common:
-        left, right = old[column].reset_index(drop=True), new[column].reset_index(drop=True)
+        if column in keys:
+            continue
+        left = old_indexed.loc[common_index, column]
+        right = new_indexed.loc[common_index, column]
         changed = ~(left.eq(right) | (left.isna() & right.isna()))
         if not bool(changed.any()):
             continue
-        hybrid = new.copy().reset_index(drop=True)
-        hybrid[column] = left
+        hybrid = new_indexed.copy()
+        hybrid.loc[common_index, column] = left.to_numpy()
         results.append(Ablation(
             dataset_index=index,
             dimension=f"{name}:{column}",
-            frame=hybrid,
-            detail=f"回滚列 {column}；{int(changed.sum())}/{len(new)} 行发生变化",
+            frame=hybrid.reset_index(drop=True),
+            detail=(
+                f"回滚列 {column}；{int(changed.sum())}/{len(common_index)} 个对齐行发生变化"
+                + (f"；主键 {', '.join(keys)}" if keys else "")
+            ),
         ))
+    if keys:
+        membership = _membership_ablation(
+            index, old_indexed, new_indexed, name, keys
+        )
+        if membership is not None:
+            results.append(membership)
     return results
 
 
-def _rowgroup_ablations(index: int, old: pd.DataFrame, new: pd.DataFrame, name: str) -> list[Ablation]:
-    if len(old) != len(new) or list(old.columns) != list(new.columns):
-        raise ValueError("rowgroup attribution requires aligned old and new datasets")
+def _rowgroup_ablations(
+    index: int,
+    old: pd.DataFrame,
+    new: pd.DataFrame,
+    name: str,
+    key_columns: list[str] | None = None,
+) -> list[Ablation]:
+    keys = list(key_columns or [])
+    if not keys and (len(old) != len(new) or list(old.columns) != list(new.columns)):
+        raise ValueError(
+            "rowgroup attribution requires aligned datasets unless key_columns are provided"
+        )
+    if keys:
+        old_indexed, new_indexed = _keyed(old, new, keys)
+        common_index = new_indexed.index.intersection(old_indexed.index, sort=False)
+    else:
+        old_indexed = old.reset_index(drop=True)
+        new_indexed = new.reset_index(drop=True)
+        common_index = new_indexed.index
     results: list[Ablation] = []
     for column in new.columns:
+        if column in keys:
+            continue
         groups = list(new[column].dropna().unique())
         if len(groups) < 2 or len(groups) > 20:
             continue
         for group in groups:
-            mask = new[column].eq(group).reset_index(drop=True)
-            if not bool(mask.any()):
+            group_index = new_indexed.index[new_indexed[column].eq(group)]
+            aligned_group = group_index.intersection(common_index, sort=False)
+            if not len(aligned_group):
                 continue
-            hybrid = new.copy().reset_index(drop=True)
-            old_aligned = old.reset_index(drop=True)
-            hybrid.loc[mask, :] = old_aligned.loc[mask, :]
-            if hybrid.equals(new.reset_index(drop=True)):
+            hybrid = new_indexed.copy()
+            replace_columns = [item for item in new.columns if item not in keys]
+            hybrid.loc[aligned_group, replace_columns] = old_indexed.loc[
+                aligned_group, replace_columns
+            ].to_numpy()
+            if hybrid.equals(new_indexed):
                 continue
             results.append(Ablation(
                 dataset_index=index,
                 dimension=f"{name}:{column}={group}",
-                frame=hybrid,
-                detail=f"回滚分组 {column}={group}；覆盖 {int(mask.sum())} 行",
+                frame=hybrid.reset_index(drop=True),
+                detail=(
+                    f"回滚分组 {column}={group}；覆盖 {len(aligned_group)} 个对齐行"
+                    + (f"；主键 {', '.join(keys)}" if keys else "")
+                ),
             ))
+    if keys:
+        membership = _membership_ablation(
+            index, old_indexed, new_indexed, name, keys
+        )
+        if membership is not None:
+            results.append(membership)
     return results
 
 
@@ -114,6 +220,7 @@ def attribute_drift(
     target_artifact_id: uuid.UUID | None = None,
     granularity: Literal["column", "rowgroup"] = "column",
     top_k: int = 5,
+    key_columns: list[str] | None = None,
 ) -> AttributeResponse:
     original = db.get(Run, run_id)
     if original is None:
@@ -143,7 +250,7 @@ def attribute_drift(
         ))
         name = dataset.name if dataset else f"dataset-{index + 1}"
         factory = _column_ablations if granularity == "column" else _rowgroup_ablations
-        candidates.extend(factory(index, old_frame, new_frame, name))
+        candidates.extend(factory(index, old_frame, new_frame, name, key_columns))
 
     original_artifacts = artifacts_of(db, original.id)
     target_index = next(

@@ -113,6 +113,16 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - name: Install backend dependencies
         run: pip install -r backend/requirements.txt
+      - name: Validate evaluation tooling
+        run: python scripts/evaluate_product.py --help
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend and browser dependencies
+        working-directory: frontend
+        run: npm ci && npx playwright install --with-deps chromium
       - name: Start PostgreSQL and sandbox
         run: docker compose up -d postgres && docker compose build sandbox
       - name: Wait for PostgreSQL
@@ -133,9 +143,42 @@ jobs:
           RUN_INTEGRATION: "1"
           EMBEDDING_PRELOAD: "false"
         run: python -m pytest tests/integration/test_p0_e2e.py tests/integration/test_m12_projects_e2e.py -q
+      - name: Build frontend for full-stack acceptance
+        working-directory: frontend
+        run: npm run build
+      - name: Start complete application
+        run: |
+          cd backend
+          EMBEDDING_PRELOAD=false SANDBOX_BACKEND=docker python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/reprolab-api.log 2>&1 &
+          echo $! > /tmp/reprolab-api.pid
+          cd ../frontend
+          npm run start -- -H 127.0.0.1 -p 3100 > /tmp/reprolab-next.log 2>&1 &
+          echo $! > /tmp/reprolab-next.pid
+          for attempt in {1..60}; do
+            curl -fsS http://127.0.0.1:8000/health >/dev/null \
+              && curl -fsS http://127.0.0.1:3100/demo >/dev/null \
+              && exit 0
+            sleep 2
+          done
+          exit 1
+      - name: Run trusted full-stack browser acceptance
+        working-directory: frontend
+        env:
+          RUN_FULLSTACK_E2E: "1"
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3100
+          FULLSTACK_API_BASE: http://127.0.0.1:8000/api/v1
+        run: npm run test:fullstack
       - name: Collect container logs on failure
         if: failure()
-        run: docker compose logs
+        run: |
+          docker compose logs
+          test -f /tmp/reprolab-api.log && cat /tmp/reprolab-api.log || true
+          test -f /tmp/reprolab-next.log && cat /tmp/reprolab-next.log || true
+      - name: Stop application processes
+        if: always()
+        run: |
+          test -f /tmp/reprolab-api.pid && kill "$(cat /tmp/reprolab-api.pid)" || true
+          test -f /tmp/reprolab-next.pid && kill "$(cat /tmp/reprolab-next.pid)" || true
       - name: Stop containers
         if: always()
         run: docker compose down -v

@@ -232,6 +232,130 @@ try:
     })
     import base64 as _reprolab_base64, io as _reprolab_io
     import matplotlib.pyplot as _reprolab_plt
+    def _reprolab_scalar(value):
+        if hasattr(value, "item") and callable(value.item):
+            try:
+                value = value.item()
+            except (TypeError, ValueError):
+                pass
+        if isinstance(value, float) and not _reprolab_np.isfinite(value):
+            return str(value)
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        if hasattr(value, "isoformat") and callable(value.isoformat):
+            try:
+                return value.isoformat()
+            except (TypeError, ValueError):
+                pass
+        return str(value)
+    def _reprolab_array_fingerprint(values, max_values=4096):
+        array = _reprolab_np.asarray(values)
+        flat = array.reshape(-1)
+        if flat.size <= max_values:
+            normalized = [_reprolab_scalar(value) for value in flat]
+            if array.ndim <= 1:
+                return normalized
+            return {
+                "shape": list(array.shape),
+                "values": normalized,
+            }
+        sample_indices = _reprolab_np.linspace(
+            0, flat.size - 1, num=min(256, flat.size), dtype=int
+        )
+        result = {
+            "shape": list(array.shape),
+            "sample": [_reprolab_scalar(flat[index]) for index in sample_indices],
+        }
+        try:
+            numeric = flat.astype(float)
+            finite = numeric[_reprolab_np.isfinite(numeric)]
+            if finite.size:
+                result["summary"] = {
+                    "finite_count": int(finite.size),
+                    "min": float(finite.min()),
+                    "max": float(finite.max()),
+                    "mean": float(finite.mean()),
+                    "std": float(finite.std()),
+                    "quantiles": [
+                        float(value)
+                        for value in _reprolab_np.quantile(
+                            finite, [0.0, 0.25, 0.5, 0.75, 1.0]
+                        )
+                    ],
+                }
+        except (TypeError, ValueError):
+            pass
+        return result
+    def _reprolab_figure_fingerprint(figure):
+        axes = []
+        for axis in figure.axes:
+            axis_title = next(
+                (
+                    axis.get_title(loc=location)
+                    for location in ("left", "center", "right")
+                    if axis.get_title(loc=location)
+                ),
+                "",
+            )
+            lines = [
+                {
+                    "label": line.get_label(),
+                    "x": _reprolab_array_fingerprint(line.get_xdata()),
+                    "y": _reprolab_array_fingerprint(line.get_ydata()),
+                }
+                for line in axis.lines
+            ]
+            collections = []
+            for collection in axis.collections:
+                item = {"label": collection.get_label()}
+                offsets = getattr(collection, "get_offsets", lambda: None)()
+                if offsets is not None and _reprolab_np.asarray(offsets).size:
+                    item["offsets"] = _reprolab_array_fingerprint(offsets)
+                values = getattr(collection, "get_array", lambda: None)()
+                if values is not None and _reprolab_np.asarray(values).size:
+                    item["values"] = _reprolab_array_fingerprint(values)
+                if len(item) > 1:
+                    collections.append(item)
+            patches = []
+            for patch in axis.patches:
+                geometry = {}
+                for name in ("get_x", "get_y", "get_width", "get_height"):
+                    method = getattr(patch, name, None)
+                    if callable(method):
+                        geometry[name[4:]] = _reprolab_scalar(method())
+                if geometry:
+                    geometry["label"] = patch.get_label()
+                    patches.append(geometry)
+            images = [
+                _reprolab_array_fingerprint(image.get_array())
+                for image in axis.images
+            ]
+            legend_labels = axis.get_legend_handles_labels()[1]
+            axes.append({
+                "title": axis_title,
+                "xlabel": axis.get_xlabel(),
+                "ylabel": axis.get_ylabel(),
+                "xscale": axis.get_xscale(),
+                "yscale": axis.get_yscale(),
+                "xlim": [_reprolab_scalar(value) for value in axis.get_xlim()],
+                "ylim": [_reprolab_scalar(value) for value in axis.get_ylim()],
+                "legend": list(legend_labels),
+                "lines": lines,
+                "collections": collections,
+                "patches": patches,
+                "images": images,
+                "texts": [
+                    {
+                        "text": text.get_text(),
+                        "position": [
+                            _reprolab_scalar(value) for value in text.get_position()
+                        ],
+                    }
+                    for text in axis.texts
+                    if text.get_text()
+                ],
+            })
+        return {"version": 1, "axes": axes}
     # The inline backend enables interactive drawing.  Disable it so pyplot
     # commands do not trigger our capture hook and close a figure before the
     # user has finished adding titles, labels, or annotations.
@@ -252,7 +376,10 @@ try:
                 "分析图表",
             )
             return {
-                "application/vnd.reprolab.figure+json": {"title": title},
+                "application/vnd.reprolab.figure+json": {
+                    "title": title,
+                    "figure_data": _reprolab_figure_fingerprint(self.figure),
+                },
                 "image/png": _reprolab_base64.b64encode(stream.getvalue()).decode("ascii"),
                 "text/plain": title,
             }

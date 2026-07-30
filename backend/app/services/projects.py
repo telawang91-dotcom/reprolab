@@ -34,6 +34,10 @@ def prepare_demo_project(db: Session) -> Project:
         )
         db.add(project)
         db.flush()
+    else:
+        # Preparing the deterministic demo again must make it usable without
+        # deleting its immutable runs or provenance ledger.
+        project.archived_at = None
     collection = db.get(Collection, DEMO_COLLECTION_ID)
     if collection is None:
         collection = Collection(

@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,6 +25,12 @@ def test_demo_project_opens_with_an_analysis_ready_collection():
             assert prepared.status_code == 200, prepared.text
             assert prepared.json()["id"] == str(demo_project_id)
 
+            archived = client.post(f"/api/v1/projects/{demo_project_id}/archive")
+            assert archived.status_code == 200 and archived.json()["archived_at"]
+            restored = client.post("/api/v1/projects/demo")
+            assert restored.status_code == 200
+            assert restored.json()["archived_at"] is None
+
             collections = client.get(
                 "/api/v1/collections", params={"project_id": str(demo_project_id)}
             )
@@ -44,10 +51,11 @@ def test_demo_project_opens_with_an_analysis_ready_collection():
             assert all(item["collection_id"] == str(demo_collection_id) for item in documents.json())
     finally:
         with SessionLocal() as db:
-            db.query(Dataset).filter(Dataset.project_id == demo_project_id).delete()
-            db.query(Document).filter(Document.project_id == demo_project_id).delete()
-            db.query(Collection).filter(Collection.project_id == demo_project_id).delete()
-            db.query(Project).filter(Project.id == demo_project_id).delete()
+            # Preserve immutable demo runs and provenance; hide the deterministic
+            # workspace until the next idempotent /projects/demo preparation.
+            project = db.get(Project, demo_project_id)
+            if project is not None:
+                project.archived_at = datetime.now(timezone.utc)
             db.commit()
 
 

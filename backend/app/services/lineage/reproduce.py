@@ -6,7 +6,7 @@ from app.models.knowledge import Artifact, EnvSnapshot, Run
 from app.schemas.lineage import ReproduceResponse
 from app.services.lineage.compare import compare_artifacts
 from app.services.lineage.ledger import artifacts_of, resolve_inputs
-from app.services.sandbox.env import EnvironmentInfo, capture_environment
+from app.services.sandbox.env import EnvironmentInfo, capture_execution_environment
 from app.services.sandbox.runner import run_code
 
 
@@ -51,7 +51,7 @@ def reproduce(db: Session, run_id: uuid.UUID, dataset_overrides: dict[str, str] 
     if snapshot is None:
         raise ValueError("run has no environment snapshot")
     expected_environment = EnvironmentInfo(snapshot.python_version, snapshot.packages, snapshot.env_hash)
-    if capture_environment().env_hash != expected_environment.env_hash:
+    if capture_execution_environment().env_hash != expected_environment.env_hash:
         raise RuntimeError("current sandbox environment differs from original run")
     resolved_hashes = resolve_inputs(db, original, dataset_overrides or {})
     replay = run_code(

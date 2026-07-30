@@ -30,10 +30,12 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
     setLoading(true);
     setError("");
     try {
-      const items = await api.projects(true);
+      // The global switcher is for active workspaces. Archived projects remain
+      // available from the dedicated project-management page.
+      const items = await api.projects(false);
       const stored = selectedProjectId();
       const chosen = items.find((item) => item.id === stored)
-        ?? items.find((item) => !item.archived_at);
+        ?? items[0];
       if (!chosen && stored) clearActiveProjectId();
       if (chosen && chosen.id !== stored) setActiveProjectId(chosen.id);
       setProjects(items);

@@ -158,6 +158,26 @@ def test_m1_real_ingest_contract(client: TestClient, project_id: uuid.UUID):
         chunks = list(db.scalars(select(Chunk).where(Chunk.document_id == uuid.UUID(pdf["id"]))))
         assert len(chunks) == pdf["chunks_count"]
         assert all(chunk.embedding is not None and len(chunk.embedding) == 1024 for chunk in chunks)
+        for chunk in chunks:
+            chunk.embedding = None
+        document = db.get(Document, uuid.UUID(pdf["id"]))
+        document.extra_metadata = {
+            **(document.extra_metadata or {}),
+            "parse_status": "needs_attention",
+            "message": "semantic vectors unavailable",
+        }
+        db.commit()
+    rebuilt = client.post(f"/api/v1/documents/{pdf['id']}/reindex", json={
+        "project_id": str(project_id),
+    })
+    assert rebuilt.status_code == 200, rebuilt.text
+    assert rebuilt.json()["chunks_count"] == pdf["chunks_count"]
+    assert rebuilt.json()["parse_status"] == "indexed"
+    with SessionLocal() as db:
+        chunks = list(db.scalars(select(Chunk).where(Chunk.document_id == uuid.UUID(pdf["id"]))))
+        assert all(chunk.embedding is not None and len(chunk.embedding) == 1024 for chunk in chunks)
+        document = db.get(Document, uuid.UUID(pdf["id"]))
+        assert document.extra_metadata["parse_status"] == "indexed"
 
     frame = pd.DataFrame({"group": ["A", "B"] * 5, "value": range(10), "valid": [True] * 10})
     csv_raw = frame.to_csv(index=False).encode()
@@ -168,6 +188,10 @@ def test_m1_real_ingest_contract(client: TestClient, project_id: uuid.UUID):
     assert len(csv_detail["schema_json"]["columns"]) == 3
     assert csv_detail["storage_hash"] == hashlib.sha256(csv_raw).hexdigest()
     assert (settings.storage_dir / csv_detail["storage_hash"]).is_file()
+    no_text_reindex = client.post(f"/api/v1/documents/{csv['id']}/reindex", json={
+        "project_id": str(project_id),
+    })
+    assert no_text_reindex.status_code == 409
     duplicate = upload(client, project_id, "measurements-copy.csv", csv_raw)
     assert duplicate["storage_hash"] == csv_detail["storage_hash"]
     assert duplicate["duplicate"] is True
@@ -320,6 +344,8 @@ def test_m4_m5_real_ledger_match_and_drift(client: TestClient, project_id: uuid.
     assert quality.status_code == 200
     provenance = next(item for item in quality.json()["metrics"] if item["key"] == "provenance")
     assert provenance["value"] >= 1 and provenance["ratio"] == 1
+    semantic = next(item for item in quality.json()["metrics"] if item["key"] == "semantic_coverage")
+    assert semantic["value"] == semantic["total"] and semantic["ratio"] == 1
     comparison = client.get(f"/api/v1/runs/{run['run_id']}/compare", params={
         "project_id": str(project_id), "other_run_id": run["run_id"],
     })

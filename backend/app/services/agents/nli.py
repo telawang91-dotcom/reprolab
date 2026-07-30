@@ -19,6 +19,7 @@ class _JudgePayload(BaseModel):
     label: Literal["entailment", "neutral", "contradiction"]
     support_score: float = Field(ge=0, le=1)
     reason: str = Field(min_length=1, max_length=1_000)
+    evidence_index: int = Field(default=1, ge=1, le=3)
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +28,56 @@ class NLIResult:
     support_score: float
     evidence_span: str
     reason: str
+
+
+def calibrate_support_threshold(
+    samples: list[tuple[bool, NLIResult]],
+) -> dict[str, float | int]:
+    """Select a conservative entailment threshold from labelled judge outputs."""
+    if not samples:
+        raise ValueError("NLI calibration requires labelled samples")
+    candidates = sorted({
+        0.0,
+        1.0,
+        *(result.support_score for _, result in samples),
+        *(min(1.0, result.support_score + 1e-9) for _, result in samples),
+    })
+    ranked = []
+    for threshold in candidates:
+        predicted = [
+            result.label == "entailment" and result.support_score >= threshold
+            for _, result in samples
+        ]
+        expected = [item[0] for item in samples]
+        true_positive = sum(left and right for left, right in zip(expected, predicted, strict=True))
+        false_positive = sum(not left and right for left, right in zip(expected, predicted, strict=True))
+        false_negative = sum(left and not right for left, right in zip(expected, predicted, strict=True))
+        true_negative = len(samples) - true_positive - false_positive - false_negative
+        precision = true_positive / (true_positive + false_positive) if true_positive + false_positive else 0.0
+        recall = true_positive / (true_positive + false_negative) if true_positive + false_negative else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        accuracy = (true_positive + true_negative) / len(samples)
+        ranked.append((
+            f1,
+            precision,
+            accuracy,
+            threshold,
+            {
+                "threshold": threshold,
+                "samples": len(samples),
+                "true_positive": true_positive,
+                "false_positive": false_positive,
+                "false_negative": false_negative,
+                "true_negative": true_negative,
+                "precision": precision,
+                "recall": recall,
+                "f1": f1,
+                "accuracy": accuracy,
+            },
+        ))
+    # In a trust gate, prefer higher precision and then the stricter threshold
+    # when multiple cutoffs have the same F1.
+    return max(ranked, key=lambda item: item[:4])[-1]
 
 
 def _json_object(text: str) -> dict:
@@ -74,16 +125,28 @@ def judge_support(
             {
                 "role": "system",
                 "content": (
+                    "Use entailment only when the premise directly supports the hypothesis. "
+                    "Use contradiction only when the premise explicitly states an incompatible fact. "
+                    "Use neutral when the premise is unrelated, silent, or merely lacks support; "
+                    "absence of evidence is not contradiction. "
+                    "If a premise says that A measures or affects X while the hypothesis says "
+                    "that A measures or affects Y, classify it as neutral unless the premise "
+                    "explicitly excludes Y or X and Y are logically mutually exclusive. "
+                    "By contrast, opposite directions for the same relationship and variables "
+                    "(for example increase versus reduce) are contradiction. "
                     "你是自然语言推理分类器。仅依据前提判断假设，禁止引入外部知识。"
                     "只返回JSON：label为entailment/neutral/contradiction；"
-                    "support_score表示前提对假设的支持强度(0到1)；reason简述依据。"
+                    "support_score表示前提对假设的支持强度(0到1)；"
+                    "evidence_index指出最关键的前提编号；reason简述依据。"
                 ),
             },
             {"role": "user", "content": f"前提：\n{premise}\n\n假设：\n{claim_text}"},
-        ]
+        ],
+        "temperature": 0,
     })
     payload = _JudgePayload.model_validate(_json_object(response.content))
-    return NLIResult(payload.label, payload.support_score, _span(chunks[0]), payload.reason)
+    evidence = chunks[min(payload.evidence_index, len(chunks)) - 1]
+    return NLIResult(payload.label, payload.support_score, _span(evidence), payload.reason)
 
 
 def passes_threshold(result: NLIResult, threshold: float | None = None) -> bool:

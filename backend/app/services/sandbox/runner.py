@@ -9,7 +9,11 @@ from app.models.knowledge import Dataset, Run
 from app.core.config import settings
 from app.schemas.runs import ArtifactCapture, RunResponse
 from app.services.rag.storage import path_of, save_bytes
-from app.services.sandbox.env import EnvironmentInfo, capture_environment, get_or_create_snapshot
+from app.services.sandbox.env import (
+    EnvironmentInfo,
+    capture_execution_environment,
+    get_or_create_snapshot,
+)
 from app.services.lineage.hashing import merged_input_hash, trusted_code_hash
 from app.services.sandbox.kernel import CapturedOutput, ExecResult, execute_code
 
@@ -37,6 +41,7 @@ def _capture_artifact(output: CapturedOutput) -> tuple[ArtifactCapture, str]:
         return ArtifactCapture(
             kind=output.kind,
             mime_type=output.mime_type,
+            value=output.value,
             storage_hash=storage_hash,
             title=output.title,
             tol=output.tol,
@@ -145,7 +150,7 @@ def run_code(
         path_of(item)
     dataset_paths = _execution_paths(input_hashes)
     input_hash = merged_input_hash(input_hashes)
-    environment = capture_environment()
+    environment = capture_execution_environment()
     snapshot = get_or_create_snapshot(db, environment)
     code_hash = trusted_code_hash(code, lang, input_hash, environment.env_hash)
     if conversation_id is None:
@@ -203,8 +208,8 @@ def sandbox_run(
     environment: EnvironmentInfo | None = None,
     timeout: float = 30,
 ) -> ExecResult:
-    expected = environment or capture_environment()
-    current = capture_environment()
+    expected = environment or capture_execution_environment()
+    current = capture_execution_environment()
     if expected.env_hash != current.env_hash:
         raise RuntimeError("requested environment snapshot is not available in this sandbox")
     # input_hashes are part of caller-side trust validation; datasets are mounted by the Docker backend.

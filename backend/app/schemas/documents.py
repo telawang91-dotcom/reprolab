@@ -69,6 +69,18 @@ class DocumentOrganizeResponse(BaseModel):
     collection_id: uuid.UUID | None = None
 
 
+class DocumentReindexRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    project_id: uuid.UUID
+
+
+class DocumentReindexResponse(BaseModel):
+    document_id: uuid.UUID
+    chunks_count: int
+    parse_status: Literal["indexed"] = "indexed"
+    message: str
+
+
 class BatchItem(BaseModel):
     filename: str
     status: Literal["queued", "processing", "success", "error"]

@@ -50,7 +50,11 @@ def test_clean_kernel_captures_numeric_and_figure_outputs():
         timeout=20,
     )
     assert figure.status == "success"
-    assert any(item.kind == "figure" and item.data for item in figure.artifacts)
+    captured = next(item for item in figure.artifacts if item.kind == "figure")
+    assert captured.data
+    assert captured.value["version"] == 1
+    assert captured.value["axes"][0]["lines"][0]["x"] == [1, 2]
+    assert captured.value["axes"][0]["lines"][0]["y"] == [3, 4]
 
 
 def test_figure_capture_uses_the_chart_title_instead_of_figure_number():
@@ -60,6 +64,7 @@ def test_figure_capture_uses_the_chart_title_instead_of_figure_number():
     )
     captured = next(item for item in figure.artifacts if item.kind == "figure")
     assert captured.title == "季度趋势"
+    assert captured.value["axes"][0]["title"] == "季度趋势"
 
 
 def test_dataset_paths_are_real_execution_inputs(tmp_path):

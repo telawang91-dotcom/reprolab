@@ -55,6 +55,23 @@ async function run() {
   assert.match(requestedUrl, /\/conversations\/conversation-1\?project_id=/);
   assert.equal(requestedMethod, "DELETE");
 
+  let requestedBody = "";
+  globalThis.fetch = (async (input, init) => {
+    requestedUrl = String(input);
+    requestedMethod = init?.method ?? "GET";
+    requestedBody = String(init?.body ?? "");
+    return new Response(JSON.stringify({
+      document_id: "document-1",
+      chunks_count: 2,
+      parse_status: "indexed",
+      message: "rebuilt",
+    }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  await api.reindexDocument("document-1");
+  assert.match(requestedUrl, /\/documents\/document-1\/reindex$/);
+  assert.equal(requestedMethod, "POST");
+  assert.equal(JSON.parse(requestedBody).project_id, "00000000-0000-0000-0000-000000000001");
+
   globalThis.fetch = (async (input) => {
     requestedUrl = String(input);
     return new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } });

@@ -4,6 +4,8 @@
 .agents/
 .codex/
 .runtime/
+.backups/
+dist/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -15,6 +17,7 @@ htmlcov/
 .env.local
 backend/storage/*
 !backend/storage/.gitkeep
+backend/restore-storage/
 backend/.runtime/
 frontend/node_modules/
 frontend/.next/

@@ -12,6 +12,8 @@ from app.schemas.documents import (
     DocumentListItem,
     DocumentOrganizeRequest,
     DocumentOrganizeResponse,
+    DocumentReindexRequest,
+    DocumentReindexResponse,
     DocumentUpdate,
     DocumentUploadResponse,
 )
@@ -143,6 +145,28 @@ def get_document(document_id: uuid.UUID, project_id: uuid.UUID, db: Session = De
         dataset_id=dataset.id if dataset else None,
         schema_json=dataset.schema_json if dataset else None,
         collection_id=document.collection_id,
+    )
+
+
+@router.post("/{document_id}/reindex", response_model=DocumentReindexResponse)
+def reindex_document(
+    document_id: uuid.UUID,
+    request: DocumentReindexRequest,
+    db: Session = Depends(get_db),
+) -> DocumentReindexResponse:
+    try:
+        result = ingest_service.reindex_document(db, document_id, request.project_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ingest_service.SemanticIndexUnavailable as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return DocumentReindexResponse(
+        document_id=result.document_id,
+        chunks_count=result.chunks_count,
+        message=result.message,
     )
 
 

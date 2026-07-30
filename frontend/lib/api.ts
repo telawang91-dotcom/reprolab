@@ -1,5 +1,5 @@
 export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000/api/v1";
+  process.env.NEXT_PUBLIC_API_BASE ?? "/api/v1";
 const ACTIVE_PROJECT_KEY = "reprolab-active-project";
 const ACTIVITY_KEY = "reprolab-activities";
 export type ActivityItem = {
@@ -494,6 +494,11 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, description: description || null }),
     }),
+  prepareDemoProject: () =>
+    request<ProjectItem>("/projects/demo", {
+      method: "POST",
+      timeoutMs: 300_000,
+    }),
   updateProject: (
     id: string,
     payload: { name?: string; description?: string | null },
@@ -527,6 +532,16 @@ export const api = {
     request(`/documents/${id}?project_id=${activeProjectId()}`, {
       method: "DELETE",
     }),
+  reindexDocument: (id: string) =>
+    request<{ document_id: string; chunks_count: number; parse_status: "indexed"; message: string }>(
+      `/documents/${id}/reindex`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: activeProjectId() }),
+        timeoutMs: 300_000,
+      },
+    ),
   updateDocument: (id: string, payload: { title?: string | null; collection_id?: string | null }) =>
     request<DocumentItem>(`/documents/${id}`, {
       method: "PATCH",
@@ -640,6 +655,7 @@ export const api = {
     runId: string,
     datasetOverrides: Record<string, string>,
     targetArtifactId?: string,
+    keyColumns: string[] = [],
   ) =>
     request<AttributionResult>(`/runs/${runId}/attribute-drift`, {
       method: "POST",
@@ -648,6 +664,7 @@ export const api = {
         dataset_overrides: datasetOverrides,
         target_artifact_id: targetArtifactId,
         granularity: "column",
+        key_columns: keyColumns,
         top_k: 5,
       }),
     }),

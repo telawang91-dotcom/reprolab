@@ -73,6 +73,7 @@ def _as_artifacts(data: dict[str, Any]) -> list[CapturedOutput]:
         return [CapturedOutput(
             "figure",
             "image/png",
+            value=payload.get("figure_data"),
             data=base64.b64decode(data["image/png"]),
             title=payload.get("title") or "分析图表",
         )]

@@ -16,7 +16,7 @@ def get_model():
         if _model is None:
             from sentence_transformers import SentenceTransformer
 
-            _model = SentenceTransformer(settings.embedding_model)
+            _model = SentenceTransformer(settings.resolved_embedding_model)
     return _model
 
 

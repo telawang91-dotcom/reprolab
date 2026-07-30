@@ -48,3 +48,44 @@ def test_background_job_success_and_cooperative_cancel(monkeypatch):
     asyncio.run(jobs.run_job(accepted.job_id))
     completed = jobs.get_job("owner", accepted.job_id)
     assert completed.status == "succeeded" and completed.result.result == "done"
+
+
+def test_background_jobs_respect_the_configured_concurrency_limit(monkeypatch):
+    jobs.reset_for_tests()
+
+    class FakeSession:
+        def __enter__(self): return self
+        def __exit__(self, *_): return None
+
+    active = 0
+    maximum = 0
+
+    async def fake_invoke(_db, _request):
+        nonlocal active, maximum
+        from app.schemas.agent import AgentInvokeResponse
+        from app.schemas.verify import VerifyResponse
+        active += 1
+        maximum = max(maximum, active)
+        await asyncio.sleep(0.02)
+        active -= 1
+        return AgentInvokeResponse(
+            result="done",
+            artifacts=[],
+            lineage={},
+            verify_report=VerifyResponse(verdict="pass", items=[]),
+        )
+
+    monkeypatch.setattr(jobs, "SessionLocal", FakeSession)
+    monkeypatch.setattr(jobs, "invoke_agent", fake_invoke)
+    jobs._job_slots = asyncio.Semaphore(1)
+    first, _ = jobs.create_job("owner", request(), None)
+    second, _ = jobs.create_job("owner", request(), None)
+
+    async def run_both():
+        await asyncio.gather(jobs.run_job(first.job_id), jobs.run_job(second.job_id))
+
+    asyncio.run(run_both())
+
+    assert maximum == 1
+    assert jobs.get_job("owner", first.job_id).status == "succeeded"
+    assert jobs.get_job("owner", second.job_id).status == "succeeded"

@@ -20,7 +20,10 @@ const documents = [
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(({ id }) => localStorage.setItem("reprolab-active-project", id), { id: projectId });
   await page.route("**/api/v1/settings/runtime", (route) => route.fulfill({ json: runtime }));
-  await page.route("**/api/v1/projects?*", (route) => route.fulfill({ json: [project] }));
+  await page.route("**/api/v1/projects?*", (route) => {
+    expect(new URL(route.request().url()).searchParams.get("include_archived")).toBe("false");
+    return route.fulfill({ json: [project] });
+  });
 });
 
 test("已有未归档资料时直接续接为研究范围", async ({ page }) => {
@@ -62,6 +65,80 @@ test("异构数据详情提供真实字段目录与声明式查询", async ({ pa
   await page.getByRole("button", { name: "查询" }).click();
   await expect(page.getByText("1 行匹配")).toBeVisible();
   await expect(page.getByText("4.5")).toBeVisible();
+});
+
+test("向量模型恢复后可在资料详情重建语义索引", async ({ page }) => {
+  const collection = { id: collectionId, project_id: projectId, name: "证据资料", description: null, document_count: 1, created_at: "2026-07-15T00:00:00Z" };
+  const listed = [{ ...documents[1], collection_id: collectionId, metadata: { parse_status: "needs_attention", message: "语义向量暂未生成" } }];
+  let rebuilt = false;
+  let reindexRequests = 0;
+  await page.route("**/api/v1/collections?*", (route) => route.fulfill({ json: [collection] }));
+  await page.route("**/api/v1/documents?*", (route) => route.fulfill({ json: rebuilt ? [{ ...listed[0], metadata: { parse_status: "indexed", message: "语义索引已重建，共更新 2 个文本切块。" } }] : listed }));
+  await page.route("**/api/v1/documents/d2?*", (route) => route.fulfill({ json: {
+    ...listed[0],
+    project_id: projectId,
+    storage_hash: "c".repeat(64),
+    authors: null,
+    doi: null,
+    source_url: null,
+    metadata: rebuilt
+      ? { parse_status: "indexed", message: "语义索引已重建，共更新 2 个文本切块。" }
+      : { parse_status: "needs_attention", message: "语义向量暂未生成" },
+    chunks_count: 2,
+    dataset_id: null,
+    schema_json: null,
+  } }));
+  await page.route("**/api/v1/documents/d2/reindex", (route) => {
+    rebuilt = true;
+    reindexRequests += 1;
+    return route.fulfill({ json: {
+      document_id: "d2",
+      chunks_count: 2,
+      parse_status: "indexed",
+      message: "语义索引已重建，共更新 2 个文本切块。",
+    } });
+  });
+
+  await page.goto("/knowledge");
+  await page.getByRole("button", { name: /methods\.pdf/ }).click();
+  await expect(page.getByText("语义向量暂未生成")).toBeVisible();
+  await page.getByRole("button", { name: "重建语义索引" }).click();
+  await expect(page.getByText("语义索引已重建，共更新 2 个文本切块。")).toBeVisible();
+  expect(reindexRequests).toBe(1);
+});
+
+test("审阅入口展示真实项目质量门而不是失效标签", async ({ page }) => {
+  await page.route("**/api/v1/collections?*", (route) => route.fulfill({ json: [] }));
+  await page.route("**/api/v1/documents?*", (route) => route.fulfill({ json: [] }));
+  await page.route(`**/api/v1/projects/${projectId}/timeline`, (route) => route.fulfill({ json: {
+    events: [{ kind: "run", title: "均值分析", detail: "运行成功并生成 1 个产物", created_at: "2026-07-16T09:00:00Z", href: "/report/run-1", trusted: true }],
+  } }));
+  await page.route(`**/api/v1/projects/${projectId}/review`, (route) => route.fulfill({ json: {
+    project_id: projectId,
+    project_name: "真实研究",
+    counts: { documents: 2, datasets: 1, successful_runs: 1, failed_runs: 0, artifacts: 1, saved_artifacts: 1, verified_claims: 1, flagged_claims: 0 },
+    risks: [],
+    next_actions: ["导出复现报告"],
+  } }));
+  await page.route(`**/api/v1/projects/${projectId}/quality-report`, (route) => route.fulfill({ json: {
+    project_id: projectId,
+    generated_at: "2026-07-16T10:00:00Z",
+    ready_for_demo: true,
+    metrics: [
+      { key: "datasets", title: "可分析数据集", value: 1, total: null, ratio: null, state: "ready", evidence: "项目内真实 Dataset 数量" },
+      { key: "semantic_coverage", title: "语义索引覆盖率", value: 2, total: 2, ratio: 1, state: "ready", evidence: "已有向量的证据文档" },
+      { key: "provenance", title: "完整血缘覆盖率", value: 1, total: 1, ratio: 1, state: "ready", evidence: "Dataset → Run → Artifact" },
+    ],
+    blockers: [],
+    next_actions: ["导出复现报告"],
+  } }));
+
+  await page.goto("/review");
+  await expect(page.getByRole("heading", { name: "可信研究闭环已就绪" })).toBeVisible({ timeout: 15_000 });
+  await expect(page).toHaveURL(/\/results\?tab=records$/, { timeout: 15_000 });
+  await expect(page.getByText("语义索引覆盖率")).toBeVisible();
+  await expect(page.getByText("100%")).toHaveCount(2);
+  await expect(page.getByRole("link", { name: "均值分析" })).toHaveAttribute("href", "/report/run-1");
 });
 
 test("Agent 断流后恢复研究问题并提供重试", async ({ page }) => {

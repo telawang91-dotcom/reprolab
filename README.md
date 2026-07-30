@@ -261,7 +261,7 @@ Set-Location ..
 ### 3. 构建分析沙箱
 
 ```powershell
-docker compose build sandbox
+docker build -f docker\sandbox.Dockerfile -t reprolab-sandbox:py311 .
 ```
 
 ### 4. 启动应用
@@ -285,6 +285,23 @@ npm.cmd --prefix frontend run dev
 首次使用也可以打开 `/demo`：页面会先展示核心能力与真实运行状态，再创建或复用隔离的 Palmer Penguins 演示项目和研究文件夹，不会污染真实研究空间。
 
 ![首次使用引导](docs/images/getting-started.png)
+
+### Docker 一键部署与直接 API
+
+无需本机安装 Python 或 Node.js：
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build --detach
+docker compose ps
+```
+
+容器健康后，工作台位于 [http://localhost:3000](http://localhost:3000)，
+可直接调用的 FastAPI 位于 [http://localhost:8000](http://localhost:8000)，
+交互文档位于 [http://localhost:8000/docs](http://localhost:8000/docs)。
+无法稳定访问 Docker Hub 的接收方应使用包含应用与 pgvector 的离线镜像包；
+构建、校验、导入和 `--no-build` 启动步骤见
+[Docker 镜像交付](docs/10-DOCKER-DELIVERY.md)。
 
 ## 模型配置
 
@@ -335,6 +352,35 @@ Set-Location backend
 ..\.venv\Scripts\python.exe -m alembic upgrade head
 Set-Location ..
 .\.venv\Scripts\python.exe -m pytest backend\tests\integration -q -s
+```
+
+运行隔离量化评测（会创建并默认归档一个独立评测项目）：
+
+```powershell
+.\.venv\Scripts\python.exe .\scripts\evaluate_product.py
+```
+
+报告写入 `.runtime/product-evaluation.json`，包含 30 条标注检索的
+Recall@5、MRR、nDCG@5，以及复现一致率、漂移发现、数字校验准确率、
+修复轮次和端到端 p50/p95 时延。模型服务可用时增加 `--include-nli`，
+会运行 9 条支持、无关和矛盾引用样例，并给出三分类准确率与建议阈值。
+
+### 备份与恢复演练
+
+数据库与内容寻址存储必须作为同一个恢复点保存：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\backup_reprolab.ps1
+```
+
+备份包含 PostgreSQL 自定义格式 dump、`backend/storage` 内容和逐文件
+SHA-256 清单。恢复脚本先校验清单，并且只允许恢复到全新的
+`reprolab_restore_*` 数据库和独立存储目录，不覆盖当前项目：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\scripts\restore_reprolab.ps1 `
+  -BackupPath .\.backups\reprolab-YYYYMMDD-HHMMSS
 ```
 
 如果 `reprolab_test` 已存在，可以跳过 `createdb`。集成测试在数据库 URL 不含 `test` 时会主动拒绝运行，避免污染真实研究状态。
