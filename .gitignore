@@ -1,11 +1,19 @@
+# 本地开发环境与缓存
 .venv/
 .models/
 .downloads/
 .agents/
 .codex/
+
+# 运行与备份产物
 .runtime/
 .backups/
-dist/
+
+# 本地交付产物；只跟踪目录说明
+deliverables/*
+!deliverables/README.md
+
+# Python
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -13,17 +21,23 @@ __pycache__/
 **/.runtime/
 .coverage
 htmlcov/
-.env
-.env.local
+
+# 本地配置与存储
+.env*
+!.env.example
 backend/storage/*
 !backend/storage/.gitkeep
 backend/restore-storage/
 backend/.runtime/
+
+# 前端依赖与测试产物
 frontend/node_modules/
 frontend/.next/
 frontend/test-results/
 frontend/playwright-report/
 *.log
 *.tsbuildinfo
+
+# 系统文件
 .DS_Store
 Thumbs.db

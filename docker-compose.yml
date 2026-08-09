@@ -29,6 +29,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://reprolab:reprolab@postgres:5432/reprolab
       STORAGE_DIR: /data/storage
+      REPROLAB_RUNTIME_ENV_PATH: /data/config/runtime.env
       SANDBOX_BACKEND: host
       EMBEDDING_PRELOAD: "false"
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com/v1}
@@ -46,6 +47,7 @@ services:
       - "${REPROLAB_API_PORT:-8000}:8000"
     volumes:
       - reprolab_storage:/data/storage
+      - reprolab_config:/data/config
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,12 +57,32 @@ services:
         - CMD
         - python
         - -c
-        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)
+        - import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)); assert data == {'status':'ok','database':'online'}
       interval: 10s
       timeout: 5s
       start_period: 30s
       retries: 6
 
+  sandbox:
+    profiles: ["sandbox"]
+    image: reprolab-sandbox:py311
+    build:
+      context: .
+      dockerfile: docker/sandbox.Dockerfile
+      args:
+        PYTHON_BASE: ${REPROLAB_PYTHON_BASE:-python:3.11-slim-bookworm}
+    network_mode: none
+    mem_limit: 512m
+    cpus: 1.0
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    volumes:
+      - ./backend/storage:/data:ro
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   postgres_data:
   reprolab_storage:
+  reprolab_config:

@@ -45,6 +45,8 @@ GET /artifacts/{artifact_id}/library?project_id={id}
 PUT /artifacts/{artifact_id}/library
   body: { project_id, saved }
   -> { artifact_id, saved, saved_at? }
+GET /artifacts/{artifact_id}/content?project_id={id}
+  -> 原始产物文件（仅 content_hash 存在且属于当前项目时返回）
 GET /runs/{run_id}/report?project_id={id}
   -> { run, datasets, environment, artifacts, reproduction_note }
 GET /runs/{run_id}/bundle?project_id={id}
@@ -431,6 +433,14 @@ DELETE /agent/jobs/{job_id}
 ### 运行状态与可恢复错误（产品体验 P0）
 
 ```
+GET /settings/model
+  -> { provider, base_url, analysis_model, review_model, api_key_configured, api_key_hint? }
+PUT /settings/model
+  body: { provider: "deepseek"|"hunyuan"|"custom", base_url, analysis_model, review_model, api_key? }
+  -> 同 GET；响应绝不返回完整 API Key
+POST /settings/model/test
+  -> { ok, message, model, latency_ms }
+
 GET /settings/runtime
   -> {
        state: "ready" | "degraded",
@@ -485,3 +495,4 @@ GET /settings/metrics
 |     M11      |                    GET/POST /skills                    |
 |    M11b      | POST /skills/from-artifact, POST /skills/{id}/apply, GET /skills/{id}/export, POST /skills/import, GET/POST /skills/hub* |
 |  M-Platform  | POST /agent/invoke, POST/GET/DELETE /agent/jobs, GET /settings/metrics |
+| 产品设置与状态 | GET/PUT /settings/model, POST /settings/model/test, GET /settings/runtime |

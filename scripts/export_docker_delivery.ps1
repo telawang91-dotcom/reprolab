@@ -1,5 +1,5 @@
 param(
-    [string]$OutputDirectory = ".\dist",
+    [string]$OutputDirectory = ".\deliverables\docker\current",
     [switch]$SkipBuild
 )
 

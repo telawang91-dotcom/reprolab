@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowDown, Braces, Database, FileText, FlaskConical, Quote, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowDown, Braces, Database, FileText, FlaskConical, Quote, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import type { Lineage } from "@/lib/api";
 
 const nodeView: Record<string, { label: string; icon: typeof Database }> = {
@@ -16,8 +17,15 @@ const order = ["document", "dataset", "run", "artifact", "claim"];
 export function QuickLineage({ lineage }: { lineage?: Lineage }) {
   if (!lineage) return <div className="grid min-h-48 place-items-center text-sm text-muted">正在读取可信链…</div>;
   const nodes = [...lineage.nodes].sort((left, right) => order.indexOf(left.type) - order.indexOf(right.type));
+  const types = new Set(nodes.map((node) => node.type));
+  const complete = types.has("dataset") && types.has("run") && types.has("artifact");
+  const artifact = nodes.find((node) => node.type === "artifact");
+
   return <div className="space-y-5">
-    <div className="rounded-appleLg bg-brand/[.055] p-5"><div className="flex items-center gap-2 text-sm font-semibold text-brand"><ShieldCheck size={16}/>这项结果从哪里来</div><p className="mt-2 text-sm leading-6 text-muted">下面每个节点都来自项目账本。数据、代码或环境任一变化，运行指纹都会改变。</p></div>
+    <div className={`rounded-appleLg p-5 ${complete ? "bg-status-ok/[.07]" : "bg-status-warn/[.08]"}`}>
+      <div className={`flex items-center gap-2 text-sm font-semibold ${complete ? "text-status-ok" : "text-status-warn"}`}>{complete ? <ShieldCheck size={16}/> : <AlertTriangle size={16}/>} {complete ? "来源完整，可回到数据和运行" : "来源尚未完整，暂不要用于结论"}</div>
+      <p className="mt-2 text-sm leading-6 text-muted">数据、代码或环境任一变化，运行指纹都会改变；下方每个节点都来自项目账本。</p>
+    </div>
     <div className="mx-auto max-w-xl">
       {nodes.map((node, index) => {
         const view = nodeView[node.type] || nodeView.document;
@@ -29,6 +37,6 @@ export function QuickLineage({ lineage }: { lineage?: Lineage }) {
         </div>;
       })}
     </div>
-    <p className="text-center text-xs leading-5 text-muted">完整溯源页可查看节点详情、执行代码、环境快照，并一键复现结果。</p>
+    {artifact && <div className="text-center"><Link href={`/lineage/${artifact.id}`} className="btn-secondary inline-flex">打开完整溯源并复现</Link></div>}
   </div>;
 }

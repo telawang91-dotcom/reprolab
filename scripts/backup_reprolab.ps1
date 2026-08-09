@@ -33,12 +33,18 @@ try {
     docker compose cp "postgres:$containerDump" $dumpPath
     if ($LASTEXITCODE -ne 0) { throw "Could not copy the PostgreSQL dump." }
 
-    $storageSource = Join-Path $repoRoot "backend\storage"
     $storageTarget = Join-Path $target "storage"
     New-Item -ItemType Directory -Path $storageTarget | Out-Null
-    Get-ChildItem -LiteralPath $storageSource -File |
-        Where-Object { $_.Name -ne ".gitkeep" } |
-        Copy-Item -Destination $storageTarget
+    $appContainer = (docker compose ps -q --all app | Select-Object -First 1)
+    if ($appContainer) {
+        docker cp "${appContainer}:/data/storage/." $storageTarget
+        if ($LASTEXITCODE -ne 0) { throw "Could not copy content storage from the application volume." }
+    } else {
+        $storageSource = Join-Path $repoRoot "backend\storage"
+        Get-ChildItem -LiteralPath $storageSource -File |
+            Where-Object { $_.Name -ne ".gitkeep" } |
+            Copy-Item -Destination $storageTarget
+    }
 
     $targetUri = [Uri]($target.TrimEnd("\") + "\")
     $entries = Get-ChildItem -LiteralPath $target -File -Recurse |

@@ -1,7 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { ResearchFlow } from "@/components/workflow/ResearchFlow";
+import { api } from "@/lib/api";
 import { ArtifactsTab } from "./ArtifactsTab";
 import { RecordsTab } from "./RecordsTab";
 import { WritingTab } from "./WritingTab";
@@ -13,14 +16,32 @@ const tabs = [
   { value: "records" as const, label: "记录与质量" },
 ];
 
-export function ResultsHub({ initialTab }: { initialTab: ResultsTab }) {
+export function ResultsHub({ initialTab, artifactId }: { initialTab: ResultsTab; artifactId?: string }) {
   const router = useRouter();
+  const [completed, setCompleted] = useState<boolean[]>([]);
   const setTab = (tab: ResultsTab) => router.replace(`/results?tab=${tab}`, { scroll: false });
+
+  useEffect(() => {
+    let live = true;
+    api.review().then((review) => {
+      if (!live) return;
+      setCompleted([
+        review.counts.documents > 0 || review.counts.datasets > 0,
+        review.counts.successful_runs > 0,
+        review.counts.saved_artifacts > 0,
+        review.counts.verified_claims > 0,
+      ]);
+    }).catch(() => { if (live) setCompleted([]); });
+    return () => { live = false; };
+  }, []);
+
+  const stage = initialTab === "writing" ? 3 : 2;
   return (
     <div className="results-hub page-shell max-w-[1440px] space-y-7">
       <header className="flex flex-wrap items-end justify-between gap-5"><div><p className="eyebrow text-brand">Research outputs</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">研究成果</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-muted">这里只展示你主动保存的结果和报告草稿；Agent 的中间步骤留在对应对话的技术详情中。</p></div><SegmentedControl value={initialTab} segments={tabs} onChange={setTab} label="成果视图" /></header>
+      <ResearchFlow stage={stage} completed={completed} />
       {initialTab === "artifacts" && <ArtifactsTab />}
-      {initialTab === "writing" && <WritingTab />}
+      {initialTab === "writing" && <WritingTab initialArtifactId={artifactId} />}
       {initialTab === "records" && <RecordsTab />}
     </div>
   );

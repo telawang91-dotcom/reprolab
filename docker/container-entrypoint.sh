@@ -14,13 +14,11 @@ for attempt in $(seq 1 30); do
     sleep 2
 done
 
-setpriv --reuid=10001 --regid=10001 --init-groups \
-    python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 &
 api_pid=$!
 
 cd /app/frontend
-setpriv --reuid=10001 --regid=10001 --init-groups \
-    node ./node_modules/next/dist/bin/next start -H 0.0.0.0 -p 3000 &
+node ./node_modules/next/dist/bin/next start -H 0.0.0.0 -p 3000 &
 web_pid=$!
 
 shutdown() {

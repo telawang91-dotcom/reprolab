@@ -11,19 +11,20 @@ const steps = [
   { href: "/knowledge", label: "添加资料", icon: BookOpen },
   { href: "/analysis", label: "运行分析", icon: FlaskConical },
   { href: "/results", label: "检查成果", icon: PackageCheck },
-  { href: "/writing", label: "形成报告", icon: FileCheck2 },
+  { href: "/results?tab=writing", label: "形成报告", icon: FileCheck2 },
 ];
 
-export function ResearchFlow({ stage = 0 }: { stage?: number }) {
+export function ResearchFlow({ stage = 0, completed }: { stage?: number; completed?: readonly boolean[] }) {
   return (
     <nav aria-label="研究流程" className="flow-strip">
       {steps.map(({ href, label, icon: Icon }, index) => {
-        const complete = index < stage;
+        const complete = completed ? Boolean(completed[index]) : index < stage;
         const current = index === stage;
         return (
           <Link
             key={href}
             href={href}
+            aria-current={current ? "step" : undefined}
             className={`flow-step ${current ? "flow-step-current" : ""}`}
           >
             <span

@@ -3,7 +3,14 @@ import uuid
 import pytest
 
 from app.core.config import settings
-from app.services.sandbox.kernel import CapturedOutput, ExecResult, execute_code, kernel_registry
+from app.services.sandbox.kernel import (
+    CapturedOutput,
+    ExecResult,
+    KernelHandle,
+    _wait_for_idle,
+    execute_code,
+    kernel_registry,
+)
 from app.services.sandbox.runner import _discard_untrusted_artifacts, _enforce_artifact_budget
 
 
@@ -38,6 +45,38 @@ def test_timeout_interrupts_but_kernel_recovers():
         assert recovered.stdout == "alive"
     finally:
         kernel_registry.close_all()
+
+
+def test_interrupt_wait_ignores_stale_idle_notifications():
+    class FakeClient:
+        def __init__(self):
+            self.messages = iter(
+                [
+                    {
+                        "parent_header": {"msg_id": "stale"},
+                        "header": {"msg_type": "status"},
+                        "content": {"execution_state": "idle"},
+                    },
+                    {
+                        "parent_header": {"msg_id": "current"},
+                        "header": {"msg_type": "status"},
+                        "content": {"execution_state": "idle"},
+                    },
+                ]
+            )
+
+        def get_iopub_msg(self, timeout):
+            return next(self.messages)
+
+    class FakeManager:
+        restarted = False
+
+        def restart_kernel(self, now=True, newports=True):
+            self.restarted = True
+
+    manager = FakeManager()
+    _wait_for_idle(KernelHandle(manager=manager, client=FakeClient()), "current", timeout=1)
+    assert manager.restarted is False
 
 
 def test_clean_kernel_captures_numeric_and_figure_outputs():

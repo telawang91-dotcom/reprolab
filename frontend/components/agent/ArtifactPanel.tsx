@@ -9,13 +9,14 @@ import type { TimelineArtifact } from "@/lib/agentTimeline";
 import { activeProjectId, api } from "@/lib/api";
 import { agentSpring } from "@/lib/motion";
 import { addArtifactToWriting } from "@/lib/writingStorage";
+import { notifyFeedback } from "@/lib/feedback";
 import { ArtifactValue, artifactKindLabel } from "./ArtifactValue";
 import { ProvenanceStrip } from "./ProvenanceStrip";
 
 type SaveSkill = (artifact: TimelineArtifact, name: string, intent: string, discipline: string) => Promise<void>;
 
 export function ArtifactPanel({ artifact, total, onLineage, onSave }: { artifact?: TimelineArtifact; total: number; onLineage: (id: string) => void; onSave: SaveSkill }) {
-  const [trust, setTrust] = useState<"checking" | "complete" | "incomplete">("checking");
+  const [trust, setTrust] = useState<"checking" | "complete" | "incomplete" | "error">("checking");
   const [harvestOpen, setHarvestOpen] = useState(false);
   const [name, setName] = useState("");
   const [intent, setIntent] = useState("");
@@ -36,20 +37,33 @@ export function ArtifactPanel({ artifact, total, onLineage, onSave }: { artifact
     api.lineage(artifact.artifact_id).then((result) => {
       const types = new Set(result.nodes.map((node) => node.type));
       if (live) setTrust(types.has("dataset") && types.has("run") && types.has("artifact") ? "complete" : "incomplete");
-    }).catch(() => { if (live) setTrust("incomplete"); });
+    }).catch(() => { if (live) setTrust("error"); });
     api.artifactLibraryState(artifact.artifact_id).then((library) => {
       if (live) setLibraryState(library.saved ? "saved" : "candidate");
     }).catch(() => { if (live) setLibraryState("candidate"); });
     return () => { live = false; };
   }, [artifact]);
 
+  async function retryTrust() {
+    if (!artifact) return;
+    setTrust("checking");
+    try {
+      const result = await api.lineage(artifact.artifact_id);
+      const types = new Set(result.nodes.map((node) => node.type));
+      setTrust(types.has("dataset") && types.has("run") && types.has("artifact") ? "complete" : "incomplete");
+    } catch {
+      setTrust("error");
+    }
+  }
+
   async function saveToLibrary() {
-    if (!artifact || librarySaving || libraryState === "saved") return;
+    if (!artifact || trust !== "complete" || librarySaving || libraryState === "saved") return;
     setLibrarySaving(true);
     setLibraryError("");
     try {
       await api.setArtifactLibraryState(artifact.artifact_id, true);
       setLibraryState("saved");
+      notifyFeedback("成果已保存到成果库");
     } catch (reason) {
       setLibraryError(reason instanceof Error ? reason.message : "保存到成果库失败");
     } finally {
@@ -73,6 +87,7 @@ export function ArtifactPanel({ artifact, total, onLineage, onSave }: { artifact
     try {
       await onSave(artifact, name.trim(), intent.trim(), discipline);
       setHarvestOpen(false);
+      notifyFeedback("分析流程已保存为可复用工作流");
     } catch (reason) {
       setSaveError(reason instanceof Error ? reason.message : "技能沉淀失败");
     } finally {
@@ -90,10 +105,11 @@ export function ArtifactPanel({ artifact, total, onLineage, onSave }: { artifact
         <div className="border-t px-3 py-2 font-mono text-xs text-brand">{artifact.anchor}</div>
         <details className="border-t px-3 py-2 text-xs text-muted"><summary className="cursor-pointer">查看原始数据</summary><pre className="mt-2 max-h-48 overflow-auto rounded-apple bg-ink/[.035] p-3 font-mono text-[11px]">{JSON.stringify(artifact.value_json, null, 2)}</pre></details>
       </div>
-      <ProvenanceStrip state={trust}/>
-      <div className="grid grid-cols-2 gap-2"><button disabled={libraryState === "checking" || librarySaving || libraryState === "saved"} onClick={() => void saveToLibrary()} className={libraryState === "saved" ? "btn-secondary px-3" : "btn-primary px-3"}>{librarySaving ? <Loader2 size={14} className="animate-spin"/> : libraryState === "saved" ? <Check size={14}/> : <BookmarkPlus size={14}/>} {librarySaving ? "保存中…" : libraryState === "saved" ? "已保存" : "保存成果"}</button><Link href="/results?tab=writing" onClick={() => addArtifactToWriting(activeProjectId(), artifact)} className="btn-secondary px-3"><PenLine size={14}/>用于写作</Link></div>
+      <ProvenanceStrip state={trust} onRetry={() => void retryTrust()}/>
+      <div className="grid grid-cols-2 gap-2"><button disabled={trust !== "complete" || libraryState === "checking" || librarySaving || libraryState === "saved"} onClick={() => void saveToLibrary()} className={libraryState === "saved" ? "btn-secondary px-3" : "btn-primary px-3"}>{librarySaving ? <Loader2 size={14} className="animate-spin"/> : libraryState === "saved" ? <Check size={14}/> : <BookmarkPlus size={14}/>} {librarySaving ? "保存中…" : libraryState === "saved" ? "已保存" : "保存成果"}</button>{trust === "complete" ? <Link href={`/results?tab=writing&artifact=${artifact.artifact_id}`} onClick={() => { addArtifactToWriting(activeProjectId(), artifact); notifyFeedback("成果已加入报告"); }} className="btn-secondary px-3"><PenLine size={14}/>用于写作</Link> : <span role="link" aria-disabled="true" className="btn-secondary cursor-not-allowed px-3 opacity-50"><PenLine size={14}/>用于写作</span>}</div>
+      {trust !== "complete" && <p className="text-xs leading-5 text-status-warn">来源核对完成前，只能查看结果和溯源，不能进入成果库或报告。</p>}
       {libraryError && <div role="alert" className="text-xs leading-5 text-status-err">{libraryError}</div>}
-      <div className="grid grid-cols-2 gap-2"><Link href={`/lineage/${artifact.artifact_id}`} className="btn-secondary px-3"><ExternalLink size={14}/>完整溯源</Link><button onClick={openHarvest} className="btn-secondary px-3"><BookmarkPlus size={14}/>保存工作流</button></div>
+      <div className="grid grid-cols-2 gap-2"><Link href={`/lineage/${artifact.artifact_id}`} className="btn-secondary px-3"><ExternalLink size={14}/>完整溯源</Link><button disabled={trust !== "complete"} onClick={openHarvest} className="btn-secondary px-3"><BookmarkPlus size={14}/>保存工作流</button></div>
       <button onClick={() => void onLineage(artifact.artifact_id)} className="w-full text-center text-xs text-muted hover:text-brand">快速检查可信链</button>
     </motion.div>
 

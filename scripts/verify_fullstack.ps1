@@ -8,7 +8,8 @@ param(
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runtimeDir = Join-Path $repoRoot ".runtime"
-New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
+$logDir = Join-Path $runtimeDir "logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 
 $backendProcess = $null
 $frontendProcess = $null
@@ -27,16 +28,16 @@ try {
         -FilePath $Python `
         -ArgumentList @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000") `
         -WorkingDirectory (Join-Path $repoRoot "backend") `
-        -RedirectStandardOutput (Join-Path $runtimeDir "fullstack-api.out.log") `
-        -RedirectStandardError (Join-Path $runtimeDir "fullstack-api.err.log") `
+        -RedirectStandardOutput (Join-Path $logDir "fullstack-api.out.log") `
+        -RedirectStandardError (Join-Path $logDir "fullstack-api.err.log") `
         -WindowStyle Hidden `
         -PassThru
     $frontendProcess = Start-Process `
         -FilePath "node" `
         -ArgumentList @("./node_modules/next/dist/bin/next", "start", "-H", "127.0.0.1", "-p", "3100") `
         -WorkingDirectory (Join-Path $repoRoot "frontend") `
-        -RedirectStandardOutput (Join-Path $runtimeDir "fullstack-next.out.log") `
-        -RedirectStandardError (Join-Path $runtimeDir "fullstack-next.err.log") `
+        -RedirectStandardOutput (Join-Path $logDir "fullstack-next.out.log") `
+        -RedirectStandardError (Join-Path $logDir "fullstack-next.err.log") `
         -WindowStyle Hidden `
         -PassThru
 

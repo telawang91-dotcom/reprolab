@@ -2,7 +2,7 @@ import { ResultsHub, type ResultsTab } from "@/components/results/ResultsHub";
 
 const validTabs = new Set<ResultsTab>(["artifacts", "writing", "records"]);
 
-export default function ResultsPage({ searchParams }: { searchParams: { tab?: string } }) {
+export default function ResultsPage({ searchParams }: { searchParams: { tab?: string; artifact?: string } }) {
   const requested = searchParams.tab as ResultsTab | undefined;
-  return <ResultsHub initialTab={requested && validTabs.has(requested) ? requested : "artifacts"} />;
+  return <ResultsHub initialTab={requested && validTabs.has(requested) ? requested : "artifacts"} artifactId={searchParams.artifact} />;
 }

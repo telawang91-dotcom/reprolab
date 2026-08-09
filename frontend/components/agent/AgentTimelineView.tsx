@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Database, Sparkles } from "lucide-react";
+import { ArrowRight, BarChart3, Database, MessageSquareText, Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { AgentTimeline, TimelineArtifact } from "@/lib/agentTimeline";
 import { agentSpring } from "@/lib/motion";
@@ -20,6 +20,7 @@ type Props = {
   onExample: (text: string) => void;
   onAnchor: (anchor: string) => void;
   onArtifact: (artifact: TimelineArtifact) => void;
+  onContinue: () => void;
   workspaceMode?: boolean;
 };
 
@@ -37,6 +38,7 @@ export function AgentTimelineView({
   onExample,
   onAnchor,
   onArtifact,
+  onContinue,
   workspaceMode = false,
 }: Props) {
   const reduceMotion = useReducedMotion();
@@ -78,6 +80,8 @@ export function AgentTimelineView({
     ? processComplete ? `已完成自动修复 · ${processFailures} 次` : `分析未完成 · ${processFailures} 次未通过`
     : processComplete ? "全部运行成功" : "分析未完成";
   const context = liveTimeline.contexts.at(-1) ?? timeline.contexts.at(-1);
+  const completedArtifacts = timeline.steps.flatMap((step) => step.attempts.flatMap((attempt) => attempt.artifacts));
+  const latestArtifact = completedArtifacts.at(-1);
   const process = <section className="space-y-4" aria-label="分析过程">
     <PlanTracker steps={processTimeline.steps} />
     <AnimatePresence initial={false}>
@@ -102,6 +106,7 @@ export function AgentTimelineView({
         <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-muted">查看分析过程与技术详情 <span className="ml-2 font-normal text-subtle">{processStatus}</span></summary>
         <div className="border-t p-4">{process}</div>
       </details>}
+      {!running && conclusions.length > 0 && <section className="flex flex-wrap items-center gap-4 rounded-appleLg border border-brand/15 bg-brand/[.045] p-4"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand/10 text-brand">{latestArtifact ? <BarChart3 size={18}/> : <MessageSquareText size={18}/>}</span><div className="min-w-0 flex-1"><strong className="block text-sm">{latestArtifact ? `本轮生成 ${completedArtifacts.length} 项可检查成果` : "本轮回答已完成"}</strong><p className="mt-1 text-xs leading-5 text-muted">{latestArtifact ? "先确认关键图、表和数字，再决定是否保存到成果库。" : "继续追问时会沿用当前文件夹和本轮上下文。"}</p></div><button onClick={() => latestArtifact ? onArtifact(latestArtifact) : onContinue()} className="btn-primary h-9 px-4">{latestArtifact ? "检查本轮成果" : "继续追问"}<ArrowRight size={13}/></button></section>}
     </div>
   );
 }

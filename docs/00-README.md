@@ -35,7 +35,11 @@
 5. docs/03-DATA-MODEL.md/docs/04-API.md —— 契约参考，随用随查。
 6. docs/06-DESIGN.md —— UI 规范。
 7. docs/08-AGENT-DESIGN.md —— 智能体角色、编排、模型路由、错误恢复与扩展设计。
-8. tasks/ —— 逐模块施工。
+8. docs/09-AGENT-API.md —— 智能体远程调用、鉴权与事件协议。
+9. docs/10-DOCKER-DELIVERY.md —— Docker 构建、离线交付和恢复流程。
+10. docs/11-LOCAL-WORKSPACE.md —— 本地缓存、运行产物、交付包的目录边界。
+11. docs/12-RUNBOOK.md —— 启动、停止、状态检查和常见故障处理。
+12. tasks/ —— 逐模块施工。
 
 ### 🗂 目录结构（monorepo）
 
@@ -61,7 +65,11 @@ reprolab/
 │   ├── 05-PROVENANCE.md
 │   ├── 06-DESIGN.md
 │   ├── 07-SCORING.md          # 评审对齐（四维权重 → 机制/抓手；技术深度算法增强）
-│   └── 08-AGENT-DESIGN.md     # 智能体详细设计与当前实现边界
+│   ├── 08-AGENT-DESIGN.md     # 智能体详细设计与当前实现边界
+│   ├── 09-AGENT-API.md        # 智能体远程调用与事件协议
+│   ├── 10-DOCKER-DELIVERY.md  # Docker 构建、交付与恢复
+│   ├── 11-LOCAL-WORKSPACE.md  # 本地缓存、运行产物和交付目录约定
+│   └── 12-RUNBOOK.md          # 启动、停止、状态和故障处理
 ├── tasks/                     # 逐张任务卡（每次做一张）
 │   ├── M1-ingest.md ... M11-skills.md, M-Platform.md
 │   ├── M5b-drift-attribution.md   # 算法增强(P1)：差异归因，扩展 M5
@@ -69,7 +77,8 @@ reprolab/
 │   ├── M12-project-workspaces.md  # P1：研究项目隔离与工作区切换
 │   ├── M7b-citation-nli.md        # 算法增强(P1)：引用支持度 NLI，强化 M7
 │   └── M7c-reflexion-repair.md    # 算法增强(P1)：反思式自修复，编排闭环
-├── docker-compose.yml         # 只有一个 postgres+pgvector 容器（+可选沙箱镜像）
+├── docker-compose.yml         # app + postgres/pgvector；sandbox 由 profile 按需构建
+├── benchmarks/                # 评测样例、烟雾测试数据和基准结果
 ├── backend/
 │   ├── app/
 │   │   ├── main.py
@@ -87,10 +96,14 @@ reprolab/
 │   ├── requirements.txt
 │   ├── alembic/
 │   └── storage/               # 内容寻址本地对象存储：<sha256>
-└── frontend/
-    ├── app/                   # Next.js 页面
-    ├── components/            # shadcn/ui 封装 + 业务组件
-    └── lib/                   # api client、类型
+├── frontend/
+│   ├── app/                   # Next.js 页面
+│   ├── components/            # shadcn/ui 封装 + 业务组件
+│   └── lib/                   # api client、类型
+├── .models/                   # 本地模型缓存，不提交
+├── .downloads/                # 本地数据下载缓存，不提交
+├── .runtime/                  # 日志、报告和临时验收工作区，不提交
+└── deliverables/              # Docker 离线包与比赛提交材料；内容不提交
 ```
 
 ### 优先级图例（贯穿所有文档）

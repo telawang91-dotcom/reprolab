@@ -37,6 +37,10 @@ function Write-QualityReport {
 }
 
 try {
+    Push-Location $repoRoot
+    try { Invoke-QualityCheck "repository-hygiene" { & $Python scripts/check_repository_hygiene.py } }
+    finally { Pop-Location }
+
     Push-Location (Join-Path $repoRoot "backend")
     try { Invoke-QualityCheck "backend-unit-tests" { & $Python -m pytest -q } }
     finally { Pop-Location }
@@ -109,8 +113,9 @@ try {
             Invoke-QualityCheck "frontend-production-build" { npm.cmd run build }
             if (-not $SkipE2E) {
                 $runtimeDir = Join-Path $repoRoot ".runtime"
-                New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
-                $server = Start-Process -FilePath "node" -ArgumentList @("./node_modules/next/dist/bin/next", "start", "-H", "127.0.0.1", "-p", "3100") -WorkingDirectory (Get-Location) -RedirectStandardOutput (Join-Path $runtimeDir "e2e-next.out.log") -RedirectStandardError (Join-Path $runtimeDir "e2e-next.err.log") -WindowStyle Hidden -PassThru
+                $logDir = Join-Path $runtimeDir "logs"
+                New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+                $server = Start-Process -FilePath "node" -ArgumentList @("./node_modules/next/dist/bin/next", "start", "-H", "127.0.0.1", "-p", "3100") -WorkingDirectory (Get-Location) -RedirectStandardOutput (Join-Path $logDir "e2e-next.out.log") -RedirectStandardError (Join-Path $logDir "e2e-next.err.log") -WindowStyle Hidden -PassThru
                 try {
                     $ready = $false
                     for ($attempt = 0; $attempt -lt 60; $attempt++) {

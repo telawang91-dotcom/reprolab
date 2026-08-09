@@ -12,7 +12,7 @@ ENV NEXT_TELEMETRY_DISABLED=1 \
 COPY frontend/package.json frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
     if [ "$INSTALL_FRONTEND_DEPS" = "1" ]; then \
-        npm ci; \
+        npm ci --fetch-retries=5 --fetch-retry-mintimeout=2000 --fetch-retry-maxtimeout=30000; \
     else \
         cp -a /app/node_modules ./node_modules; \
     fi
@@ -35,8 +35,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     REPROLAB_INTERNAL_API=http://127.0.0.1:8000
 
 RUN if [ "$INSTALL_OS_PACKAGES" = "1" ]; then \
-        apt-get update \
-        && apt-get install -y --no-install-recommends ca-certificates fonts-noto-cjk libgomp1 \
+        sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+        && apt-get -o Acquire::Retries=5 update \
+        && apt-get -o Acquire::Retries=5 install -y --no-install-recommends ca-certificates fonts-noto-cjk libgomp1 \
         && rm -rf /var/lib/apt/lists/*; \
     fi
 
@@ -58,12 +59,14 @@ COPY --from=frontend-build /build/frontend/next.config.mjs /app/frontend/next.co
 COPY docker/container-entrypoint.sh /app/container-entrypoint.sh
 
 RUN useradd --create-home --uid 10001 reprolab \
-    && mkdir -p /data/storage /app/backend/.runtime \
-    && chown -R reprolab:reprolab /data /app/backend/.runtime \
+    && mkdir -p /data/storage /data/config /app/backend/.runtime \
+    && chown -R reprolab:reprolab /data /app/backend/.runtime /home/reprolab \
     && chmod +x /app/container-entrypoint.sh
+
+USER reprolab
 
 EXPOSE 3000 8000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=6 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)"
+    CMD python -c "import json,urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)); assert data == {'status':'ok','database':'online'}"
 
 CMD ["/app/container-entrypoint.sh"]

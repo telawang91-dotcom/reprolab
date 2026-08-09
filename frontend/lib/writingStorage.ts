@@ -56,13 +56,27 @@ export function rememberWritingArtifact(projectId: string, artifact: { artifact_
 }
 
 export function addArtifactToWriting(projectId: string, artifact: { artifact_id: string; title?: string | null }) {
-  const state = rememberWritingArtifact(projectId, artifact);
-  if (state.draft.includes(state.anchor)) return;
-  const line = `${artifact.title || "分析成果"} ${state.anchor}`;
-  const heading = "## 关键发现";
-  const insertion = `${heading}\n${line}`;
-  const next = state.draft.includes(heading)
-    ? state.draft.replace(heading, insertion)
-    : `${state.draft.trim()}\n\n${insertion}`;
-  localStorage.setItem(state.keys.draft, next);
+  return addArtifactsToWriting(projectId, [artifact]);
+}
+
+export function addArtifactsToWriting(projectId: string, artifacts: { artifact_id: string; title?: string | null }[]) {
+  const state = readWritingState(projectId);
+  let draft = state.draft;
+  let added = 0;
+  for (const artifact of artifacts) {
+    const code = artifact.artifact_id.slice(0, 4).toLowerCase();
+    const anchor = `⟦art_${code}⟧`;
+    state.artifacts[code] = artifact.artifact_id;
+    if (draft.includes(anchor)) continue;
+    const line = `${artifact.title || "分析成果"} ${anchor}`;
+    const heading = "## 关键发现";
+    const insertion = `${heading}\n${line}`;
+    draft = draft.includes(heading)
+      ? draft.replace(heading, insertion)
+      : `${draft.trim()}\n\n${insertion}`;
+    added += 1;
+  }
+  localStorage.setItem(state.keys.artifacts, JSON.stringify(state.artifacts));
+  localStorage.setItem(state.keys.draft, draft);
+  return { draft, added };
 }

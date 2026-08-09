@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from pydantic import Field
@@ -6,6 +7,20 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 REPO_DIR = BACKEND_DIR.parent
+RUNTIME_ENV_PATH = Path(
+    os.getenv("REPROLAB_RUNTIME_ENV_PATH", str(REPO_DIR / ".env"))
+).expanduser()
+RUNTIME_MODEL_KEYS = {
+    "LLM_BASE_URL",
+    "LLM_API_KEY",
+    "DEEPSEEK_BASE_URL",
+    "DEEPSEEK_API_KEY",
+    "HUNYUAN_BASE_URL",
+    "HUNYUAN_API_KEY",
+    "PLANNER_MODEL",
+    "EXECUTOR_MODEL",
+    "CRITIC_MODEL",
+}
 
 
 def resolve_model_reference(value: str) -> str:
@@ -80,4 +95,28 @@ class Settings(BaseSettings):
         return resolve_model_reference(self.reranker_model)
 
 
-settings = Settings()
+def _runtime_model_overrides(path: Path) -> dict[str, str]:
+    """Load only settings-page-owned values from the persistent runtime file."""
+    if not path.is_file():
+        return {}
+    values: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        normalized = name.strip().upper()
+        if normalized in RUNTIME_MODEL_KEYS:
+            values[normalized.lower()] = value.strip()
+    return values
+
+
+def _with_runtime_model_overrides(base: Settings, path: Path) -> Settings:
+    return Settings.model_validate({
+        **base.model_dump(),
+        **_runtime_model_overrides(path),
+    })
+
+
+_environment_settings = Settings()
+settings = _with_runtime_model_overrides(_environment_settings, RUNTIME_ENV_PATH)

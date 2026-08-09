@@ -110,6 +110,12 @@ def _wait_for_idle(handle: KernelHandle, message_id: str, timeout: float = 5) ->
             message = handle.client.get_iopub_msg(timeout=0.25)
         except queue.Empty:
             continue
+        # The IOPub queue can still contain a stale idle notification from
+        # kernel start-up or an earlier execution.  Treating that message as
+        # acknowledgement of this interrupt lets the next request race with
+        # the still-running cell and receive its KeyboardInterrupt instead.
+        if message.get("parent_header", {}).get("msg_id") != message_id:
+            continue
         if message["header"]["msg_type"] == "status" and message["content"].get("execution_state") == "idle":
             return
     # A kernel that cannot acknowledge an interrupt is unsafe to reuse.

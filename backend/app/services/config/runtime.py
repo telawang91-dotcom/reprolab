@@ -4,7 +4,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from app.core.config import BACKEND_DIR, settings
+from app.core.config import RUNTIME_ENV_PATH, settings
 from app.core.db import SessionLocal
 from app.schemas.settings import ModelConfigRead, ModelConfigUpdate, ModelTestResult, RuntimeComponent, RuntimeStatusRead
 from app.services.agents.model_adapter import ModelAdapterError, model_adapter
@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 
-ENV_PATH = BACKEND_DIR.parent / ".env"
+ENV_PATH = RUNTIME_ENV_PATH
 
 
 def _provider_from_route(route: str) -> str:
@@ -52,6 +52,7 @@ def get_model_config() -> ModelConfigRead:
 
 
 def _write_env(values: dict[str, str]) -> None:
+    ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
     lines = ENV_PATH.read_text(encoding="utf-8").splitlines() if ENV_PATH.exists() else []
     pending = dict(values)
     output: list[str] = []
@@ -69,6 +70,7 @@ def _write_env(values: dict[str, str]) -> None:
     output.extend(f"{name}={value}" for name, value in pending.items())
     temporary = ENV_PATH.with_suffix(".env.tmp")
     temporary.write_text("\n".join(output).rstrip() + "\n", encoding="utf-8")
+    temporary.chmod(0o600)
     os.replace(temporary, ENV_PATH)
 
 
@@ -160,6 +162,7 @@ def get_runtime_status() -> RuntimeStatusRead:
     database_ready = database_online()
     model_ready = get_model_config().api_key_configured
     sandbox_ready = settings.sandbox_backend != "docker" or docker_daemon_available()
+    isolated_sandbox = settings.sandbox_backend == "docker"
     components = [
         RuntimeComponent(
             key="database",
@@ -179,13 +182,19 @@ def get_runtime_status() -> RuntimeStatusRead:
             key="sandbox",
             title="可信运行环境",
             state="ready" if sandbox_ready else "action_required",
-            message=("Docker 沙箱可用，分析会固定环境和随机种子。" if settings.sandbox_backend == "docker" else "当前使用开发执行环境；正式复现建议切换为 Docker 沙箱。") if sandbox_ready else "Docker 沙箱暂不可连接，无法以隔离环境执行可复现分析。",
+            message=("Docker 沙箱可用，分析会固定环境和随机种子。" if isolated_sandbox else "当前使用应用内持久 Jupyter 环境，适合本机与受信任部署；不应开放给不受信任的任意代码。") if sandbox_ready else "Docker 沙箱暂不可连接，无法以隔离环境执行可复现分析。",
             action=None if sandbox_ready else "启动 Docker Desktop 后重试",
         ),
     ]
     ready = all(item.state == "ready" for item in components)
+    if ready and isolated_sandbox:
+        summary = "工作台已具备完整可信分析条件。"
+    elif ready:
+        summary = "工作台核心能力可用；当前执行环境仅面向本机与受信任使用者。"
+    else:
+        summary = "部分能力暂不可用；请按下方提示完成配置。"
     return RuntimeStatusRead(
         state="ready" if ready else "degraded",
-        summary="工作台已具备完整可信分析条件。" if ready else "部分能力暂不可用；请按下方提示完成配置。",
+        summary=summary,
         components=components,
     )

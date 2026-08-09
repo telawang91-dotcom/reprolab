@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { LoaderCircle, MessageSquareText, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { ArrowRight, LoaderCircle, MessageSquareText, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { api, type ConversationSummary } from "@/lib/api";
@@ -36,6 +36,7 @@ export function ConversationList({
   const itemIdsRef = useRef<Set<string>>(new Set());
   const loadedCollectionRef = useRef<string>();
   itemIdsRef.current = new Set(items.map((item) => item.id));
+  const visibleLimit = compact ? 5 : 20;
 
   useEffect(() => {
     if (loadedCollectionRef.current === collectionId && typeof refreshKey === "string" && refreshKey && itemIdsRef.current.has(refreshKey)) return;
@@ -102,7 +103,7 @@ export function ConversationList({
       <div className="mt-1 space-y-1">
         {loading && !items.length ? <div className="h-12 animate-pulse rounded-appleSm bg-ink/[.05]" /> : (
           <AnimatePresence initial={false}>
-            {items.slice(0, compact ? 12 : 20).map((item) => {
+            {items.slice(0, visibleLimit).map((item) => {
               const isConfirming = confirming === item.id;
               const isDeleting = deleting === item.id;
               return (
@@ -145,6 +146,7 @@ export function ConversationList({
             })}
           </AnimatePresence>
         )}
+        {compact && items.length > visibleLimit && collectionId && <Link href={`/analysis?collection=${collectionId}`} className="flex min-h-9 items-center px-3 text-[11px] font-semibold text-brand hover:underline">查看全部 {items.length} 个对话<ArrowRight size={12} className="ml-1" /></Link>}
         {!loading && !items.length && !error && <p className={`px-2 text-xs leading-5 text-muted ${compact ? "py-2" : "py-3"}`}>{compact ? "暂无对话" : "这里还没有会话。点击右上角 + 开始新的分析。"}</p>}
         {error && <div role="alert" className="flex items-start gap-2 rounded-appleSm bg-status-err/[.07] px-2.5 py-2 text-xs leading-5 text-status-err"><span className="min-w-0 flex-1">{error}</span><button type="button" onClick={() => setReloadVersion((value) => value + 1)} className="inline-flex shrink-0 items-center gap-1 font-semibold"><RotateCcw size={12} />重试</button></div>}
       </div>

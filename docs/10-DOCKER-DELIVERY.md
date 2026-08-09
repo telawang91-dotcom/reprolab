@@ -4,9 +4,9 @@ ReproLab 只构建一个自有应用镜像 `reprolab:latest`。镜像内包含 N
 
 ## 一键启动
 
-```bash
-docker compose up --build -d
-docker compose ps
+```powershell
+.\scripts\reprolab.ps1 start
+.\scripts\reprolab.ps1 status
 ```
 
 若 Docker Hub 暂时不可访问，但机器已有兼容的 Node/Python 基础镜像，可以通过
@@ -45,11 +45,13 @@ Invoke-RestMethod `
 
 停止服务：
 
-```bash
-docker compose down
+```powershell
+.\scripts\reprolab.ps1 stop
 ```
 
-数据保存在 `postgres_data` 和 `reprolab_storage` 两个命名卷中。普通更新不要附加 `-v`；只有明确需要清空全部项目数据时才使用 `docker compose down -v`。
+项目数据保存在 `postgres_data` 和 `reprolab_storage` 两个命名卷中；设置页保存的模型运行配置位于
+`reprolab_config`。普通更新不要附加 `-v`；只有明确需要清空全部项目数据与持久配置时才使用
+`docker compose down -v`。运行配置文件只允许应用用户读取，镜像构建上下文不会包含宿主机 `.env`。
 
 ## 配置模型
 
@@ -66,6 +68,15 @@ AGENT_API_TOKEN=
 Docker Socket，适合比赛演示与可信调用者部署。环境包清单仍会进入 `env_hash`，但面向
 不受信任的公网任意代码执行场景应另行使用独立的强隔离执行节点。
 
+本地开发或完整集成验收需要独立 Docker 沙箱镜像时运行：
+
+```bash
+docker compose --profile sandbox build sandbox
+```
+
+`sandbox` 使用 Compose profile，仅作为镜像构建与安全契约入口；普通
+`docker compose up` 不会启动它。容器化应用使用镜像内的 host kernel，不挂载 Docker Socket。
+
 ## 构建和离线交付镜像
 
 ```bash
@@ -79,7 +90,7 @@ PowerShell 一键导出会把应用镜像与固定版本的 pgvector 镜像放�
 .\scripts\export_docker_delivery.ps1
 ```
 
-脚本会在 `dist/` 中放入镜像归档、SHA-256、`docker-compose.yml`、
+脚本会在 `deliverables/docker/current/` 中放入镜像归档、SHA-256、`docker-compose.yml`、
 `.env.example` 和本说明文件，可直接整体交付。
 接收方无需重新构建或访问 Docker Hub：
 
